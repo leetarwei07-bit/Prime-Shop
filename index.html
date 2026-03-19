@@ -25,6 +25,7 @@
   --red:      #ef4444;
   --nav-h:    60px;
   --safe-b:   env(safe-area-inset-bottom, 0px);
+  --safe-t:   env(safe-area-inset-top, 0px);
   --easing:   cubic-bezier(.32,.72,0,1);
   --spring:   cubic-bezier(.34,1.56,.64,1);
 }
@@ -75,6 +76,10 @@ html,body {
 .page.active {
   display:flex;
   animation:pageIn .24s var(--easing) both;
+}
+/* When fullscreen - account for top notch */
+.home-top, .search-top, .wish-top, .orders-top, .admin-top {
+  padding-top:max(12px, calc(var(--safe-t) + 8px));
 }
 @keyframes pageIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
 .scroll {
@@ -733,9 +738,7 @@ html,body {
           oninput="renderHome()"
           onkeydown="if(event.key==='Enter')this.blur()"/>
       </div>
-      <button class="icon-btn" id="expand-btn" onclick="toggleExpand()" title="Развернуть">
-        <svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-      </button>
+
       <div class="cat-wrap">
         <button class="icon-btn" id="cat-btn" onclick="toggleCat()">
           <svg viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="10" y2="18"/></svg>
@@ -1495,7 +1498,7 @@ function filterWish() {
   const grid = document.getElementById('wish-grid');
   if (!list.length) {
     grid.innerHTML = wishlist.size === 0
-      ? `<div class="empty-state"><div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" fill="#333" stroke="#444" stroke-width="0.5"/><path d="M12 10l-1 2h2l-1 2" stroke="#666" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="empty-h">Избранное пусто</div><div class="empty-p">Добавляйте товары через <svg width="14" height="14" viewBox="0 0 24 24" fill="#ef4444" style="display:inline;vertical-align:middle;margin-left:2px"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div></div>`
+      ? `<div class="empty-state"><div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="#2a2a2a" stroke="#3a3a3a" stroke-width="1" xmlns="http://www.w3.org/2000/svg"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div><div class="empty-h">Избранное пусто</div><div class="empty-p">Добавляйте товары через <svg width="14" height="14" viewBox="0 0 24 24" fill="#ef4444" style="display:inline;vertical-align:middle;margin-left:2px"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div></div>`
       : `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-h">Не найдено</div></div>`;
     return;
   }
@@ -1903,14 +1906,6 @@ function updateStats() {
 /* ═══════════════════════════════════════════════
    EXPAND
 ═══════════════════════════════════════════════ */
-function toggleExpand() {
-  if (tg) {
-    // New Telegram API (8.0+)
-    if (tg.requestFullscreen) {
-      tg.requestFullscreen();
-    } else {
-      tg.expand();
-    }
   } else {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
     else document.exitFullscreen?.();
