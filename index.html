@@ -29,14 +29,18 @@
   --spring:   cubic-bezier(.34,1.56,.64,1);
 }
 * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent }
-html,body {
+html {
+  height:100%;
+  overflow:hidden;
+}
+body {
   background:var(--bg);
   color:var(--text);
   font-family:'Inter',sans-serif;
-  height:100dvh;
+  height:100%;
   overflow:hidden;
   width:100%;
-  /* Never allow body itself to scroll — prevents Telegram swipe-to-close */
+  position:fixed;
   touch-action:none;
   overscroll-behavior:none;
   -webkit-font-smoothing:antialiased;
@@ -71,7 +75,7 @@ html,body {
 ═══════════════════════════════════════════════ */
 .page {
   display:none;flex-direction:column;
-  height:calc(100dvh - var(--nav-h));
+  height:calc(100% - var(--nav-h));
   overflow:hidden;
 }
 .page.active {
@@ -84,8 +88,7 @@ html,body {
   overflow-y:auto;flex:1;
   padding-bottom:calc(var(--nav-h) + 32px + var(--safe-b));
   -webkit-overflow-scrolling:touch;
-  /* contain prevents scroll from bubbling up to Telegram */
-  overscroll-behavior-y:contain;
+  overscroll-behavior:none;
   touch-action:pan-y;
 }
 .scroll::-webkit-scrollbar { display:none }
@@ -1645,18 +1648,11 @@ const API = 'https://prime-shop-production.up.railway.app';
 const SUPER_ADMIN = 'kimtarwei';
 
 const tg = window.Telegram?.WebApp;
-if (tg) { tg.ready(); tg.expand(); }
-
-window.addEventListener("load", () => {
-  const tg = window.Telegram?.WebApp;
-  if (tg) {
-    console.log("Telegram WebApp INIT | isExpanded:", tg.isExpanded);
-    tg.ready();
-    tg.expand();
-  } else {
-    console.error("Telegram not detected on load");
-  }
-});
+if (tg) {
+  tg.ready();
+  tg.expand();
+  if (tg.disableVerticalSwipes) tg.disableVerticalSwipes();
+}
 
 
 
@@ -3649,14 +3645,7 @@ function toast(msg) {
 // navbar locked via CSS — no JS needed
 
 
-/* ═══════════════════════════════════════════════
-   PREVENT SWIPE-TO-CLOSE
-═══════════════════════════════════════════════ */
-document.body.addEventListener('touchmove', (e) => {
-  if (!e.target.closest('.scroll, #page-product, .sheet, .overlay')) {
-    e.preventDefault();
-  }
-}, { passive: false });
+/* swipe-to-close disabled via tg.disableVerticalSwipes() */
 
 /* ═══════════════════════════════════════════════
    PULL-TO-REFRESH + RUBBER BAND
