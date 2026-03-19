@@ -2507,16 +2507,16 @@ async function setOrderStatus(id, status) {
 ═══════════════════════════════════════════════ */
 function renderProfile() {
   const name = tgName(), user = tgUser(), photo = tgPhoto(), admin = isAdmin();
-  document.getElementById('profile-name').textContent = name;
-  document.getElementById('profile-user').textContent = user;
+  const pname = document.getElementById('profile-name'); if(pname) pname.textContent = name;
+  const puser = document.getElementById('profile-user'); if(puser) puser.textContent = user;
   // avatar
   const av = document.getElementById('profile-avatar');
-  av.innerHTML = photo ? `<img src="${photo}" alt="av"/>` : '🧑';
-  // fill order sheet
-  document.getElementById('rec-self-name').textContent = name;
-  document.getElementById('rec-self-user').textContent = user;
+  if(av) av.innerHTML = photo ? `<img src="${photo}" alt="av"/>` : '🧑';
+  // fill order sheet (elements may not exist)
+  const rname = document.getElementById('rec-self-name'); if(rname) rname.textContent = name;
+  const ruser = document.getElementById('rec-self-user'); if(ruser) ruser.textContent = user;
   const rav = document.getElementById('rec-self-av');
-  rav.innerHTML = photo ? `<img src="${photo}" alt="av" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>` : '🧑';
+  if(rav) rav.innerHTML = photo ? `<img src="${photo}" alt="av" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>` : '🧑';
 
   // admin badge
   let badge = document.getElementById('admin-badge');
