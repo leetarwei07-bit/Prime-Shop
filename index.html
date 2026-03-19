@@ -108,10 +108,8 @@ body {
   padding-top:4px;
   z-index:1000;
   transform:translateZ(0);
-  will-change:transform;
-  /* iOS keyboard fix — stays at window bottom always */
-  bottom:env(safe-area-inset-bottom, 0px);
-  bottom:0;
+  /* KEY: transform3d keeps nav in window coords, not visual viewport */
+  transform:translate3d(0,0,0);
 }
 .nav-btn {
   flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;
@@ -302,9 +300,9 @@ body {
   touch-action:pan-y;
 }
 #page-product.open { transform:none;pointer-events:all }
-.detail-slider { width:100%;aspect-ratio:1;position:relative;overflow:hidden;background:var(--s2);flex-shrink:0 }
+.detail-slider { width:100%;aspect-ratio:1;position:relative;overflow:hidden;background:var(--s2);flex-shrink:0;touch-action:pan-y;user-select:none }
 .slider-track { display:flex;height:100%;transition:transform .28s var(--easing);will-change:transform }
-.slider-slide { flex-shrink:0;width:100%;height:100%;background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;font-size:80px }
+.slider-slide { flex-shrink:0;width:100%;height:100%;background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;font-size:80px;pointer-events:none }
 .slider-dots { position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:5px;z-index:3 }
 .slider-dot { width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.3);transition:all .22s }
 .slider-dot.on { background:#fff;width:18px;border-radius:3px }
@@ -833,37 +831,27 @@ function previewSizes(ctx) {
 function addSizesFromRange(ctx) {
   const p = ctx === 'add' ? 'a' : 'e';
   const inp = document.getElementById(`${p}-sizes-input`);
-  if (!inp || !inp.value.trim()) return;
+  if (!inp || !inp.value.trim()) { toast('Введите диапазон размеров'); return; }
   const parsed = parseSizeRange(inp.value);
-  if (!parsed.length) { toast('Не удалось распознать размеры'); return; }
-  // Add to varState sizes (store separately from variations)
-  if (!varState[ctx].sizes) varState[ctx].sizes = [];
+  if (!parsed.length) { toast('Не удалось распознать. Пример: 30-44 или XS-XXL'); return; }
+  if (!Array.isArray(varState[ctx].sizes)) varState[ctx].sizes = [];
   parsed.forEach(s => {
     if (!varState[ctx].sizes.includes(s)) varState[ctx].sizes.push(s);
   });
   inp.value = '';
-  document.getElementById(`${p}-sizes-preview`).textContent = '';
+  const prev = document.getElementById(`${p}-sizes-preview`);
+  if (prev) prev.textContent = '';
   renderSizeChips(ctx);
-  toast(`Добавлено ${parsed.length} размеров`);
+  toast(`✅ Добавлено ${parsed.length} размеров: ${parsed.slice(0,3).join(', ')}${parsed.length>3?'...':''}`);
 }
 
 function removeSizeChip(ctx, idx) {
-  if (varState[ctx].sizes) varState[ctx].sizes.splice(idx, 1);
+  if (!Array.isArray(varState[ctx].sizes)) return;
+  varState[ctx].sizes.splice(idx, 1);
   renderSizeChips(ctx);
 }
 
-function renderSizeChips(ctx) {
-  const p = ctx === 'add' ? 'a' : 'e';
-  const el = document.getElementById(`${p}-sizes-chips`);
-  if (!el) return;
-  const sizes = varState[ctx].sizes || [];
-  el.innerHTML = sizes.map((s, i) => `
-    <div class="var-chip">
-      <span class="var-chip-label">${s}</span>
-      <button class="var-chip-del" onclick="removeSizeChip('${ctx}',${i})">×</button>
-    </div>`
-  ).join('');
-}
+
 
 // On app start — resume polling if payment was pending
 async function checkPendingOrder() {
@@ -1283,11 +1271,11 @@ async function checkPendingOrder() {
         <div class="field">
           <label>Вариации</label>
           <div class="var-type-row">
-            <button class="vtype-btn on" id="a-vt-size" onclick="setVT('add','size')">Размеры</button>
-            <button class="vtype-btn" id="a-vt-color" onclick="setVT('add','color')">Цвета</button>
+            <button class="vtype-btn on" id="a-vt-color" onclick="setVT('add','color')">Цвета</button>
             <button class="vtype-btn" id="a-vt-model" onclick="setVT('add','model')">Модели</button>
             <button class="vtype-btn" id="a-vt-none" onclick="setVT('add','none')">Нет</button>
           </div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Размеры добавляются выше отдельно</div>
           <div class="var-chips" id="a-var-chips"></div>
           <div class="var-add-row" id="a-var-add">
             <input class="var-add-input" id="a-var-input" type="text" placeholder="Добавить..."/>
@@ -1299,11 +1287,9 @@ async function checkPendingOrder() {
           <label>Ссылки на источники <span style="color:var(--orange)">🔒 Только для админов</span></label>
           <div id="a-link-chips"></div>
           <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
-            <input id="a-link-label" class="var-add-input" type="text" placeholder="Название (Taobao, 1688, Poizon...)"/>
-            <div class="var-add-row">
-              <input id="a-link-url" class="var-add-input" type="url" placeholder="https://..."/>
-              <button class="var-add-btn" onclick="addLink('add')">+</button>
-            </div>
+            <input id="a-link-label" class="var-add-input" type="text" placeholder="Название: Taobao, 1688, Poizon..."/>
+            <input id="a-link-url" class="var-add-input" type="text" placeholder="Вставьте ссылку сюда"/>
+            <button class="var-add-btn" onclick="addLink('add')" style="width:100%;padding:10px;text-align:center;background:var(--s2);border:1px solid var(--border);border-radius:9px;color:#fff;font-size:13px;font-weight:600;cursor:pointer">+ Добавить ссылку</button>
           </div>
         </div>
         <button class="form-btn" id="a-submit-btn" onclick="adminAddProduct()">Добавить товар</button>
@@ -1600,11 +1586,11 @@ async function checkPendingOrder() {
       <div class="field">
         <label>Вариации</label>
         <div class="var-type-row">
-          <button class="vtype-btn on" id="e-vt-size" onclick="setVT('edit','size')">Размеры</button>
-          <button class="vtype-btn" id="e-vt-color" onclick="setVT('edit','color')">Цвета</button>
+          <button class="vtype-btn on" id="e-vt-color" onclick="setVT('edit','color')">Цвета</button>
           <button class="vtype-btn" id="e-vt-model" onclick="setVT('edit','model')">Модели</button>
           <button class="vtype-btn" id="e-vt-none" onclick="setVT('edit','none')">Нет</button>
         </div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Размеры добавляются выше отдельно</div>
         <div class="var-chips" id="e-var-chips"></div>
         <div class="var-add-row" id="e-var-add">
           <input class="var-add-input" id="e-var-input" type="text" placeholder="Добавить..."/>
@@ -1617,10 +1603,8 @@ async function checkPendingOrder() {
         <div id="e-link-chips"></div>
         <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
           <input id="e-link-label" class="var-add-input" type="text" placeholder="Название (Taobao, 1688...)"/>
-          <div class="var-add-row">
-            <input id="e-link-url" class="var-add-input" type="url" placeholder="https://..."/>
-            <button class="var-add-btn" onclick="addLink('edit')">+</button>
-          </div>
+          <input id="e-link-url" class="var-add-input" type="url" placeholder="https://..." style="width:100%"/>
+          <button class="var-add-btn" onclick="addLink('edit')" style="width:100%;padding:10px;text-align:center">+ Добавить ссылку</button>
         </div>
       </div>
       <button class="form-btn" id="e-submit-btn" onclick="saveEdit()">Сохранить</button>
@@ -1707,7 +1691,7 @@ let cart = [];
 
 let currentProduct = null;
 let selColor = null, selSize = null, selVariation = null, detailQty = 1;
-let sliderIdx = 0, sliderPhotos = [], touchX = 0;
+let sliderIdx = 0, sliderPhotos = [], touchX = 0, touchStartX = 0, touchStartY = 0, touchStartTime = 0;
 
 let activeSort = 'popular';
 let homeCat = 'Все';
@@ -1715,8 +1699,8 @@ let recMode = 'self';
 
 // variation state for add/edit forms
 const varState = {
-  add:  { type: 'size', items: [], photos: [], links: [], sizes: [] },
-  edit: { type: 'size', items: [], photos: [], links: [], sizes: [] },
+  add:  { type: 'color', items: [], photos: [], links: [], sizes: [] },
+  edit: { type: 'color', items: [], photos: [], links: [], sizes: [] },
 };
 
 /* ═══════════════════════════════════════════════
@@ -2121,11 +2105,71 @@ function buildSlider(items) {
     ? items.map((_,i) => `<div class="slider-dot${i===0?' on':''}"></div>`).join('') : '';
   track.style.transform = 'translateX(0)';
   const hero = document.getElementById('detail-slider');
-  hero.ontouchstart = e => { touchX = e.touches[0].clientX; };
+
+  // Remove old listeners
+  const newHero = hero.cloneNode(false);
+  hero.parentNode.replaceChild(newHero, hero);
+  newHero.appendChild(track);
+  newHero.appendChild(dots);
+  newHero.appendChild(document.querySelector('.btn-back'));
+  newHero.appendChild(document.querySelector('.btn-wish'));
+
+  let startX = 0, startY = 0, dragging = false, moved = false;
+
+  newHero.addEventListener('touchstart', e => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    dragging = true; moved = false;
+    track.style.transition = 'none';
+  }, {passive:true});
+
+  newHero.addEventListener('touchmove', e => {
+    if (!dragging) return;
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    if (!moved && Math.abs(dy) > Math.abs(dx)) { dragging = false; return; }
+    moved = true;
+    const base = -sliderIdx * 100;
+    const pct = (dx / newHero.offsetWidth) * 100;
+    track.style.transform = `translateX(calc(${base}% + ${dx}px))`;
+  }, {passive:true});
+
+  newHero.addEventListener('touchend', e => {
+    if (!dragging) return; dragging = false;
+    const dx = e.changedTouches[0].clientX - startX;
+    const dt = 1;
+    track.style.transition = '';
+    if (dx < -40) goSlide(sliderIdx + 1);
+    else if (dx > 40) goSlide(sliderIdx - 1);
+    else goSlide(sliderIdx);
+  }, {passive:true});
+
+  newHero.ontouchstart = e => {
+    touchStartX = touchX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    touchStartTime = Date.now();
+    document.getElementById('slider-track').style.transition = 'none';
+  };
+  hero.ontouchmove = e => {
+    const dx = e.touches[0].clientX - touchStartX;
+    const dy = e.touches[0].clientY - touchStartY;
+    // Only handle horizontal swipe
+    if (Math.abs(dx) > Math.abs(dy)) {
+      e.stopPropagation();
+      const offset = -(sliderIdx * 100) + (dx / hero.offsetWidth * 100);
+      document.getElementById('slider-track').style.transform = `translateX(${offset}%)`;
+    }
+  };
   hero.ontouchend = e => {
-    const dx = e.changedTouches[0].clientX - touchX;
-    if (dx < -40) goSlide(sliderIdx+1);
-    else if (dx > 40) goSlide(sliderIdx-1);
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dt = Date.now() - touchStartTime;
+    const velocity = Math.abs(dx) / dt; // px/ms
+    const track = document.getElementById('slider-track');
+    track.style.transition = 'transform .28s cubic-bezier(.25,.46,.45,.94)';
+    // Trigger on short fast swipe (velocity) OR long drag (distance)
+    if (dx < -30 && (velocity > 0.3 || dx < -80)) goSlide(sliderIdx+1);
+    else if (dx > 30 && (velocity > 0.3 || dx > 80)) goSlide(sliderIdx-1);
+    else goSlide(sliderIdx); // snap back
   };
 }
 function goSlide(i) {
@@ -3567,22 +3611,23 @@ function previewSizes(ctx) {
 function addSizesFromRange(ctx) {
   const p = ctx === 'add' ? 'a' : 'e';
   const inp = document.getElementById(`${p}-sizes-input`);
-  if (!inp || !inp.value.trim()) return;
+  if (!inp || !inp.value.trim()) { toast('Введите диапазон размеров'); return; }
   const parsed = parseSizeRange(inp.value);
-  if (!parsed.length) { toast('Не удалось распознать размеры'); return; }
-  // Add to varState sizes (store separately from variations)
-  if (!varState[ctx].sizes) varState[ctx].sizes = [];
+  if (!parsed.length) { toast('Не удалось распознать. Пример: 30-44 или XS-XXL'); return; }
+  if (!Array.isArray(varState[ctx].sizes)) varState[ctx].sizes = [];
   parsed.forEach(s => {
     if (!varState[ctx].sizes.includes(s)) varState[ctx].sizes.push(s);
   });
   inp.value = '';
-  document.getElementById(`${p}-sizes-preview`).textContent = '';
+  const prev = document.getElementById(`${p}-sizes-preview`);
+  if (prev) prev.textContent = '';
   renderSizeChips(ctx);
-  toast(`Добавлено ${parsed.length} размеров`);
+  toast(`✅ Добавлено ${parsed.length} размеров: ${parsed.slice(0,3).join(', ')}${parsed.length>3?'...':''}`);
 }
 
 function removeSizeChip(ctx, idx) {
-  if (varState[ctx].sizes) varState[ctx].sizes.splice(idx, 1);
+  if (!Array.isArray(varState[ctx].sizes)) return;
+  varState[ctx].sizes.splice(idx, 1);
   renderSizeChips(ctx);
 }
 
@@ -3590,13 +3635,24 @@ function renderSizeChips(ctx) {
   const p = ctx === 'add' ? 'a' : 'e';
   const el = document.getElementById(`${p}-sizes-chips`);
   if (!el) return;
-  const sizes = varState[ctx].sizes || [];
-  el.innerHTML = sizes.map((s, i) => `
-    <div class="var-chip">
-      <span class="var-chip-label">${s}</span>
-      <button class="var-chip-del" onclick="removeSizeChip('${ctx}',${i})">×</button>
-    </div>`
-  ).join('');
+  const sizes = Array.isArray(varState[ctx].sizes) ? varState[ctx].sizes : [];
+  if (!sizes.length) {
+    el.innerHTML = '';
+    return;
+  }
+  el.innerHTML = `
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
+      ${sizes.map((s, i) => `
+        <div style="display:inline-flex;align-items:center;gap:4px;
+          padding:4px 10px;background:var(--s2);border:1px solid var(--border);
+          border-radius:20px;font-size:12px;animation:pageIn .15s ease both">
+          <span>${s}</span>
+          <button onclick="removeSizeChip('${ctx}',${i})"
+            style="background:none;border:none;color:var(--text3);cursor:pointer;
+            font-size:13px;line-height:1;padding:0 0 0 2px">×</button>
+        </div>`
+      ).join('')}
+    </div>`;
 }
 
 // On app start — resume polling if payment was pending
