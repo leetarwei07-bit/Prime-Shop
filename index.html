@@ -968,14 +968,6 @@ async function checkPendingOrder() {
           oninput="renderHome()"
           onkeydown="if(event.key==='Enter')this.blur()"/>
       </div>
-
-
-      <button class="icon-btn" id="expand-btn"
-        style="position:relative;z-index:100;pointer-events:all;cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,.1)"
-        onclick="toggleExpand()"
-        ontouchend="toggleExpand();event.preventDefault()">
-        <svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-      </button>
       <div class="cat-wrap">
         <button class="icon-btn" id="cat-btn" onclick="toggleCat()">
           <svg viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="10" y2="18"/></svg>
@@ -3626,38 +3618,27 @@ function toast(msg) {
 }
 
 /* ═══════════════════════════════════════════════
-   EXPAND
+   KEYBOARD / NAV FIX (placeholder)
 ═══════════════════════════════════════════════ */
-function toggleExpand() {
-  const tg = window.Telegram?.WebApp;
-  if (tg) {
-    tg.ready();
-    tg.expand();
-  }
-}
 
 /* ═══════════════════════════════════════════════
    KEYBOARD / NAV FIX
 ═══════════════════════════════════════════════ */
 // Keyboard open/close — keep nav pinned, just shrink page scroll area
 if (window.visualViewport) {
-  function fixNavbar() {
+  function lockNav() {
     const nav = document.querySelector('.bottom-nav');
     if (!nav) return;
-    // On iOS, when keyboard opens, visualViewport shrinks and shifts up
-    // We counteract this by positioning nav relative to the actual window bottom
-    const offsetBottom = window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop;
-    if (offsetBottom > 10) {
-      // Keyboard is open — pin nav to visual viewport bottom
-      nav.style.transform = `translateY(${-offsetBottom}px)`;
-    } else {
-      // Keyboard closed — reset
-      nav.style.transform = 'translateZ(0)';
-    }
+    const vv = window.visualViewport;
+    const bottomOffset = window.innerHeight - vv.height - vv.offsetTop;
+    nav.style.transform = bottomOffset > 0
+      ? `translateY(${-bottomOffset}px)`
+      : 'translateY(0)';
   }
-  window.visualViewport.addEventListener('resize', fixNavbar);
-  window.visualViewport.addEventListener('scroll', fixNavbar);
+  window.visualViewport.addEventListener('resize', lockNav);
+  window.visualViewport.addEventListener('scroll', lockNav);
 }
+
 
 /* ═══════════════════════════════════════════════
    INIT
