@@ -2341,13 +2341,15 @@ function updateOtherUser() {
 }
 
 // close order overlay → restore nav
-document.getElementById('order-overlay').addEventListener('click', e => {
-  if (e.target === document.getElementById('order-overlay')) {
-    document.getElementById('order-overlay').classList.remove('open');
+const _orderOverlay = document.getElementById('order-overlay');
+if (_orderOverlay) _orderOverlay.addEventListener('click', e => {
+  if (e.target === _orderOverlay) {
+    _orderOverlay.classList.remove('open');
     }
 });
-document.getElementById('checkout-overlay').addEventListener('click', e => {
-  if (e.target === document.getElementById('checkout-overlay')) {
+const _checkoutOverlay = document.getElementById('checkout-overlay');
+if (_checkoutOverlay) _checkoutOverlay.addEventListener('click', e => {
+  if (e.target === _checkoutOverlay) {
     document.getElementById('checkout-overlay').classList.remove('open');
     }
 });
@@ -2380,7 +2382,7 @@ async function placeOrder() {
       date_str: new Date().toLocaleDateString('ru',{day:'numeric',month:'long'}),
     });
     orders.unshift(order);
-    document.getElementById('order-overlay').classList.remove('open');
+    // order-overlay removed — using checkout-overlay
     cart = []; updateStats();
     // success animation
     const s = document.getElementById('order-success');
