@@ -29,17 +29,19 @@
   --spring:   cubic-bezier(.34,1.56,.64,1);
 }
 * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent }
-html, body {
+html {
   height:100%;
   overflow:hidden;
-  background:var(--bg);
 }
 body {
+  background:var(--bg);
   color:var(--text);
   font-family:'Inter',sans-serif;
+  height:100%;
+  overflow:hidden;
   width:100%;
-  /* position:fixed removed — caused height:0 on some iOS */
-  touch-action:manipulation;
+  position:fixed;
+  touch-action:none;
   overscroll-behavior:none;
   -webkit-font-smoothing:antialiased;
 }
@@ -73,19 +75,20 @@ body {
 ═══════════════════════════════════════════════ */
 .page {
   display:none;flex-direction:column;
-  height:calc(100dvh - var(--nav-h));
+  height:calc(100% - var(--nav-h));
   overflow:hidden;
 }
 .page.active {
   display:flex;
   animation:pageIn .24s var(--easing) both;
 }
+/* Sticky headers — no top padding changes on expand */
 @keyframes pageIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
 .scroll {
   overflow-y:auto;flex:1;
   padding-bottom:calc(var(--nav-h) + 32px + var(--safe-b));
   -webkit-overflow-scrolling:touch;
-  overscroll-behavior-y:contain;
+  overscroll-behavior:none;
   touch-action:pan-y;
 }
 .scroll::-webkit-scrollbar { display:none }
@@ -107,8 +110,6 @@ body {
   transform:translateZ(0);
   /* KEY: transform3d keeps nav in window coords, not visual viewport */
   transform:translate3d(0,0,0);
-  will-change:transform;
-  contain:layout style;
 }
 .nav-btn {
   flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;
@@ -299,7 +300,7 @@ body {
   touch-action:pan-y;
 }
 #page-product.open { transform:none;pointer-events:all }
-.detail-slider { width:100%;aspect-ratio:1;position:relative;overflow:hidden;background:var(--s2);flex-shrink:0;touch-action:pan-x pan-y;user-select:none }
+.detail-slider { width:100%;aspect-ratio:1;position:relative;overflow:hidden;background:var(--s2);flex-shrink:0;touch-action:pan-y;user-select:none }
 .slider-track { display:flex;height:100%;transition:transform .28s var(--easing);will-change:transform }
 .slider-slide { flex-shrink:0;width:100%;height:100%;background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;font-size:80px;pointer-events:none }
 .slider-dots { position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:5px;z-index:3 }
@@ -759,14 +760,13 @@ function calcPrice(ctx) {
 
 function applyCalcPrice(ctx) {
   const p = ctx === 'add' ? 'a' : 'e';
-  const resultEl = document.getElementById(`${p}-calc-result`);
-  if (!resultEl) return;
-  // Use dataset.total — no text parsing needed
-  const total = Number(resultEl.dataset.total);
-  if (!total || !isFinite(total)) { toast('Сначала введите данные'); return; }
+  const totalEl = document.getElementById(`${p}-cr-total`);
+  if (!totalEl) return;
+  // Parse back the number from formatted string
+  const totalText = totalEl.textContent.replace(/[^0-9]/g, '');
   const priceInput = document.getElementById(`${p}-price`);
-  if (priceInput) {
-    priceInput.value = String(total);
+  if (priceInput && totalText) {
+    priceInput.value = totalText;
     toast('Цена применена ✅');
   }
 }
@@ -786,9 +786,7 @@ function parseSizeRange(input) {
   if (numRange) {
     const from = parseInt(numRange[1]);
     const to   = parseInt(numRange[2]);
-    if (isNaN(from) || isNaN(to)) return [];
-    if (from > to) return []; // invalid range
-    if (from === to) return [String(from)]; // single size
+    if (from >= to) return [String(from), String(to)];
     const sizes = [];
     // Detect step: jeans are even (28,30,32...), shoes are integer (36,37,38...)
     const step = (from % 2 === 0 && to % 2 === 0 && (to - from) >= 4) ? 2 : 1;
@@ -803,9 +801,9 @@ function parseSizeRange(input) {
     const to   = letRange[2].toUpperCase();
     const fromIdx = SIZE_ORDER.indexOf(from);
     const toIdx   = SIZE_ORDER.indexOf(to);
-    if (fromIdx === -1 || toIdx === -1) return []; // unknown size label
-    if (fromIdx > toIdx) return [];               // inverted range e.g. XL-XS
-    return SIZE_ORDER.slice(fromIdx, toIdx + 1);
+    if (fromIdx !== -1 && toIdx !== -1 && fromIdx <= toIdx) {
+      return SIZE_ORDER.slice(fromIdx, toIdx + 1);
+    }
   }
 
   // Format: "S,M,L,XL" or "S M L XL" — manual list
@@ -983,7 +981,7 @@ async function checkPendingOrder() {
             onkeydown="if(event.key==='Enter'){renderHome();this.blur();}"/>
         </div>
         <div class="cat-wrap">
-          <button class="icon-btn" id="cat-btn">
+          <button class="icon-btn" id="cat-btn" onclick="toggleCat()">
             <svg viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="10" y2="18"/></svg>
           </button>
           <div class="cat-dropdown" id="cat-dropdown">
@@ -1033,7 +1031,7 @@ async function checkPendingOrder() {
     <button class="btn-back" onclick="closeProduct()">
       <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
     </button>
-    <button class="btn-wish" id="detail-wish">
+    <button class="btn-wish" id="detail-wish" onclick="toggleDetailWish()">
       <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
     </button>
     <div class="slider-track" id="slider-track"></div>
@@ -1293,7 +1291,7 @@ async function checkPendingOrder() {
             <button class="var-add-btn" onclick="addLink('add')" style="width:100%;padding:10px;text-align:center;background:var(--s2);border:1px solid var(--border);border-radius:9px;color:#fff;font-size:13px;font-weight:600;cursor:pointer">+ Добавить ссылку</button>
           </div>
         </div>
-        <button class="form-btn" id="a-submit-btn">Добавить товар</button>
+        <button class="form-btn" id="a-submit-btn" onclick="adminAddProduct()">Добавить товар</button>
       </div>
     </div>
     <!-- ADMINS -->
@@ -1406,7 +1404,7 @@ async function checkPendingOrder() {
       </div>
       <div class="rec-radio"></div>
     </div>
-    <button class="add-rec-btn" id="co-add-rec-btn">
+    <button class="add-rec-btn" id="co-add-rec-btn" onclick="coShowOtherRec()">
       <div class="add-icon">＋</div>Оформить на другой аккаунт
     </button>
     <div class="other-wrap" id="co-other-wrap">
@@ -1573,7 +1571,7 @@ async function checkPendingOrder() {
           <button class="var-add-btn" onclick="addLink('edit')" style="width:100%;padding:10px;text-align:center">+ Добавить ссылку</button>
         </div>
       </div>
-      <button class="form-btn" id="e-submit-btn">Сохранить</button>
+      <button class="form-btn" id="e-submit-btn" onclick="saveEdit()">Сохранить</button>
     </div>
   </div>
 </div>
@@ -1651,18 +1649,9 @@ const initData = () => tg?.initData || '';
    STATE
 ═══════════════════════════════════════════════ */
 let PRODUCTS = [];
-let orders   = [];
+let orders = [];
 let wishlist = new Set();
-let cart     = [];
-
-function guardState() {
-  if (!Array.isArray(PRODUCTS)) PRODUCTS = [];
-  if (!Array.isArray(orders))   orders   = [];
-  if (!Array.isArray(cart))     cart     = [];
-  if (!(wishlist instanceof Set)) wishlist = new Set();
-  if (!varState?.add)  varState.add  = { type:'size', items:[], photos:[], links:[], sizes:[] };
-  if (!varState?.edit) varState.edit = { type:'size', items:[], photos:[], links:[], sizes:[] };
-}
+let cart = [];
 
 let currentProduct = null;
 let selColor = null, selSize = null, selVariation = null, detailQty = 1;
@@ -1678,51 +1667,6 @@ const varState = {
   edit: { type: 'color', items: [], photos: [], links: [], sizes: [] },
 };
 
-
-/* ═══════════════════════════════════════════════
-   PERFORMANCE UTILITIES
-═══════════════════════════════════════════════ */
-function debounce(fn, ms) {
-  let timer;
-  return function(...args) {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn.apply(this, args), ms);
-  };
-}
-
-/* ═══════════════════════════════════════════════
-   DOM HELPERS
-═══════════════════════════════════════════════ */
-// Primary API
-const getEl      = (id) => document.getElementById(id);
-const $el        = getEl;
-
-function safeSetText(id, val) {
-  const el = getEl(id);
-  if (el) el.textContent = val != null ? String(val) : '';
-}
-const setText = safeSetText;
-
-function safeHTML(id, html) {
-  const el = getEl(id);
-  if (el) el.innerHTML = html != null ? html : '';
-}
-const setHTML = safeHTML;
-
-function addClass(id, cls) {
-  const el = $el(id); if (el) el.classList.add(cls);
-}
-
-function removeClass(id, cls) {
-  const el = $el(id); if (el) el.classList.remove(cls);
-}
-
-function toggleClass(id, cls, force) {
-  const el = $el(id);
-  if (!el) return;
-  force !== undefined ? el.classList.toggle(cls, force) : el.classList.toggle(cls);
-}
-
 /* ═══════════════════════════════════════════════
    API HELPERS
 ═══════════════════════════════════════════════ */
@@ -1732,18 +1676,13 @@ async function apiFetch(path, opts = {}) {
     headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(opts.body);
   }
-  try {
-    const r = await fetch(API + path, { ...opts, headers });
-    if (!r.ok) {
-      const msg = await r.text().catch(() => r.statusText);
-      throw new Error(`${r.status}: ${msg}`);
-    }
-    if (r.status === 204) return null;
-    return await r.json();
-  } catch(e) {
-    if (e.name === 'TypeError') throw new Error('Нет соединения с сервером');
-    throw e;
+  const r = await fetch(API + path, { ...opts, headers });
+  if (!r.ok) {
+    const msg = await r.text().catch(() => r.statusText);
+    throw new Error(msg);
   }
+  if (r.status === 204) return null;
+  return r.json();
 }
 const apiGet = (path) => apiFetch(path);
 const apiPost = (path, body) => apiFetch(path, { method:'POST', body });
@@ -1755,7 +1694,6 @@ const apiDel = (path) => apiFetch(path, { method:'DELETE' });
    LOAD DATA
 ═══════════════════════════════════════════════ */
 async function loadProducts() {
-  guardState();
   try {
     const [data] = await Promise.all([
       apiGet('/products'),
@@ -1763,7 +1701,7 @@ async function loadProducts() {
     ]);
     PRODUCTS.length = 0;
     data.forEach(p => PRODUCTS.push(p));
-    renderHome(); // applySearch runs lazily when user opens search page
+    renderHome(); applySearch();
     // Load recommendations after products are ready
     loadRecommendations();
   } catch(e) {
@@ -1792,30 +1730,20 @@ async function loadAllOrders() {
    NAVIGATION
 ═══════════════════════════════════════════════ */
 function navigate(id, btn) {
-  if (!id) return; // guard: no page id
   if (id === 'admin' && !isAdmin()) { toast('Доступ запрещён'); return; }
-
-  // Close product if open
-  const productPage = document.getElementById('page-product');
-  if (productPage && productPage.classList.contains('open')) closeProduct();
+  // close product if open
+  if (document.getElementById('page-product').classList.contains('open')) closeProduct();
   closeCat();
-
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-
   const pg = document.getElementById('page-' + id);
-  if (!pg) { console.warn('navigate: page not found:', id); return; } // guard
-  pg.classList.add('active');
+  if (pg) pg.classList.add('active');
   if (btn) btn.classList.add('active');
-
   if (id === 'profile') renderProfile();
-  if (id === 'orders')  loadMyOrders();
-  if (id === 'wishlist') {
-    const wi = document.getElementById('wish-input');
-    if (wi) wi.value = '';
-    filterWish();
-  }
+  if (id === 'orders') loadMyOrders();
+  if (id === 'wishlist') { document.getElementById('wish-input').value=''; filterWish(); }
   if (id === 'home') {
+    // Refresh recs + catalog when returning to home
     renderHome();
     loadRecommendations();
   }
@@ -1837,7 +1765,7 @@ function toggleCat() {
   document.getElementById('cat-btn').classList.toggle('filtered');
 }
 function closeCat() {
-  removeClass('cat-dropdown', 'open');
+  document.getElementById('cat-dropdown').classList.remove('open');
 }
 function pickCat(cat, el) {
   homeCat = cat;
@@ -1944,18 +1872,11 @@ function renderGrid(elId, list, animate = true) {
 
 function renderHome(instant = false) {
   const q = (document.getElementById('home-search-input')?.value||'').trim().toLowerCase();
-  // Build filtered list without unnecessary array copies
-  let list;
-  if (homeCat === 'Все' && !q) {
-    list = PRODUCTS; // no filter needed — pass reference directly
-  } else {
-    list = PRODUCTS.filter(p => {
-      if (homeCat !== 'Все' && p.cat !== homeCat) return false;
-      if (q && !p.name.toLowerCase().includes(q) && !p.cat.toLowerCase().includes(q)) return false;
-      return true;
-    });
-  }
+  let list = [...PRODUCTS];
+  if (homeCat !== 'Все') list = list.filter(p => p.cat === homeCat);
+  if (q) list = list.filter(p => p.name.toLowerCase().includes(q) || p.cat.toLowerCase().includes(q));
 
+  // Show/hide section label
   const allLabel = document.getElementById('home-section-label-all');
   const recSec   = document.getElementById('rec-section');
   if (allLabel) allLabel.style.display = (recSec && recSec.style.display !== 'none') ? 'block' : 'none';
@@ -1973,13 +1894,10 @@ function pickSort(el) {
   applySearch();
 }
 
-function _applySearchNow() {
+function applySearch() {
   const q = (document.getElementById('search-input')?.value||'').trim().toLowerCase();
-  // No array copy when not filtering — use PRODUCTS directly for sort
-  let list = q
-    ? PRODUCTS.filter(p =>
-        p.name.toLowerCase().includes(q) || p.cat.toLowerCase().includes(q))
-    : PRODUCTS.slice(); // slice is faster than spread for large arrays
+  let list = [...PRODUCTS];
+  if (q) list = list.filter(p => p.name.toLowerCase().includes(q) || p.cat.toLowerCase().includes(q));
   switch(activeSort) {
     case 'new':       list.sort((a,b)=>b.id-a.id); break;
     case 'price_asc': list.sort((a,b)=>a.price-b.price); break;
@@ -1991,15 +1909,11 @@ function _applySearchNow() {
   renderGrid('search-grid', list);
 }
 
-// Debounced version for oninput — 300ms delay
-const applySearch = debounce(_applySearchNow, 300);
-
 /* ═══════════════════════════════════════════════
    WISHLIST
 ═══════════════════════════════════════════════ */
 function toggleWish(e, id) {
   e.stopPropagation();
-  id = Number(id); // normalize to Number always
   const btn = e.currentTarget;
   if (wishlist.has(id)) {
     wishlist.delete(id); btn.classList.remove('liked');
@@ -2010,17 +1924,14 @@ function toggleWish(e, id) {
     trackWish(id);
   }
   updateStats();
-  const wishPage = document.getElementById('page-wishlist');
-  if (wishPage && wishPage.classList.contains('active')) filterWish();
+  if (document.getElementById('page-wishlist').classList.contains('active')) filterWish();
 }
 
 function filterWish() {
   const q = (document.getElementById('wish-input')?.value||'').trim().toLowerCase();
-  // Normalize all wishlist ids to Number for consistent comparison
-  let list = PRODUCTS.filter(p => wishlist.has(Number(p.id)));
+  let list = PRODUCTS.filter(p => wishlist.has(p.id));
   if (q) list = list.filter(p => p.name.toLowerCase().includes(q));
   const grid = document.getElementById('wish-grid');
-  if (!grid) return; // guard DOM
   if (!list.length) {
     grid.innerHTML = wishlist.size === 0
       ? `<div class="empty-state"><div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="#2a2a2a" stroke="#3a3a3a" stroke-width="1" xmlns="http://www.w3.org/2000/svg"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div><div class="empty-h">Избранное пусто</div><div class="empty-p">Добавляйте товары через <svg width="14" height="14" viewBox="0 0 24 24" fill="#ef4444" style="display:inline;vertical-align:middle;margin-left:2px"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div></div>`
@@ -2052,19 +1963,19 @@ function openProduct(id) {
     (p.isNew  ? '<span class="tag new">NEW</span>' : '') +
     (disc > 0 ? `<span class="tag sale">-${disc}%</span>` : '');
 
-  setText('d-name', p.name);
-  setText('d-price', fmt(p.price));
-  setText('d-old', p.old ? fmt(p.old) : '');
-  setText('d-disc', disc > 0 ? `-${disc}%` : '');
-  setText('qty-num', 1);
+  document.getElementById('d-name').textContent = p.name;
+  document.getElementById('d-price').textContent = fmt(p.price);
+  document.getElementById('d-old').textContent = p.old ? fmt(p.old) : '';
+  document.getElementById('d-disc').textContent = disc > 0 ? `-${disc}%` : '';
+  document.getElementById('qty-num').textContent = 1;
   document.getElementById('detail-wish').classList.toggle('liked', wishlist.has(id));
-  setText('d-desc', p.desc || '');
+  document.getElementById('d-desc').textContent = p.desc || '';
 
   // colors
   const cs = document.getElementById('color-sec');
   cs.style.display = (p.colors&&p.colors.length) ? 'block' : 'none';
   if (p.colors&&p.colors.length) {
-    setText('sel-color', '');
+    document.getElementById('sel-color').textContent = '';
     document.getElementById('color-row').innerHTML = p.colors.map(c =>
       `<div class="swatch${c===selColor?' on':''}" style="background:${c}" onclick="pickColor('${c}')"></div>`
     ).join('');
@@ -2074,7 +1985,7 @@ function openProduct(id) {
   const ss = document.getElementById('size-sec');
   ss.style.display = (p.sizes&&p.sizes.length) ? 'block' : 'none';
   if (p.sizes&&p.sizes.length) {
-    setText('sel-size', selSize||'');
+    document.getElementById('sel-size').textContent = selSize||'';
     document.getElementById('size-row').innerHTML = p.sizes.map(s =>
       `<button class="var-btn${s===selSize?' on':''}" onclick="pickSize('${s}')">${s}</button>`
     ).join('');
@@ -2085,7 +1996,7 @@ function openProduct(id) {
   const hasModels = p.variations&&p.variations.length;
   ms.style.display = hasModels ? 'block' : 'none';
   if (hasModels) {
-    setText('sel-model', selVariation||'');
+    document.getElementById('sel-model').textContent = selVariation||'';
     document.getElementById('model-row').innerHTML = p.variations.map(v => {
       const lbl = v.label||v;
       return `<button class="var-btn${lbl===selVariation?' on':''}" onclick="pickVariation('${lbl}')">${lbl}</button>`;
@@ -2098,14 +2009,14 @@ function openProduct(id) {
   showProductRecs(p);
 
   requestAnimationFrame(() => {
-    addClass('page-product', 'open');
-    addClass('detail-action', 'open');
+    document.getElementById('page-product').classList.add('open');
+    document.getElementById('detail-action').classList.add('open');
   });
 }
 
 function closeProduct() {
-  removeClass('page-product', 'open');
-  removeClass('detail-action', 'open');
+  document.getElementById('page-product').classList.remove('open');
+  document.getElementById('detail-action').classList.remove('open');
   // Refresh recommendations based on what was just viewed
   if (currentProduct) {
     loadRecommendations(currentProduct);
@@ -2115,9 +2026,8 @@ function closeProduct() {
 
 function toggleDetailWish() {
   if (!currentProduct) return;
-  const id = Number(currentProduct.id);
+  const id = currentProduct.id;
   const btn = document.getElementById('detail-wish');
-  if (!btn) return;
   if (wishlist.has(id)) { wishlist.delete(id); btn.classList.remove('liked'); }
   else { wishlist.add(id); btn.classList.add('liked'); toast('Добавлено ❤️'); }
   updateStats();
@@ -2125,22 +2035,22 @@ function toggleDetailWish() {
 
 function pickColor(c) {
   selColor = c;
-  setText('sel-color', c);
+  document.getElementById('sel-color').textContent = c;
   document.querySelectorAll('#color-row .swatch').forEach(el => el.classList.toggle('on', el.style.background===c));
 }
 function pickSize(s) {
   selSize = s;
-  setText('sel-size', s);
+  document.getElementById('sel-size').textContent = s;
   document.querySelectorAll('#size-row .var-btn').forEach(el => el.classList.toggle('on', el.textContent===s));
 }
 function pickVariation(v) {
   selVariation = v;
-  setText('sel-model', v);
+  document.getElementById('sel-model').textContent = v;
   document.querySelectorAll('#model-row .var-btn').forEach(el => el.classList.toggle('on', el.textContent===v));
 }
 function changeQty(d) {
   detailQty = Math.max(1, Math.min(99, detailQty+d));
-  setText('qty-num', detailQty);
+  document.getElementById('qty-num').textContent = detailQty;
 }
 
 /* ═══════════════════════════════════════════════
@@ -2205,14 +2115,11 @@ function goSlide(i) {
    OVERLAYS
 ═══════════════════════════════════════════════ */
 function openOverlay(id) {
-  const el = document.getElementById(id);
-  if (el) el.classList.add('open');
+  document.getElementById(id).classList.add('open');
 }
 function closeOverlay(id, e) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  if (e && e.target !== el) return;
-  el.classList.remove('open');
+  if (e && e.target !== document.getElementById(id)) return;
+  document.getElementById(id).classList.remove('open');
 }
 
 /* ═══════════════════════════════════════════════
@@ -2265,13 +2172,13 @@ function openCheckout() {
 
   // Recipient
   coRecMode = 'self';
-  addClass('co-rec-self', 'on');
-  removeClass('co-rec-other', 'on');
+  document.getElementById('co-rec-self').classList.add('on');
+  document.getElementById('co-rec-other').classList.remove('on');
   document.getElementById('co-rec-other').style.display = 'none';
-  removeClass('co-other-wrap', 'visible');
+  document.getElementById('co-other-wrap').classList.remove('visible');
   document.getElementById('co-add-rec-btn').style.display = 'flex';
-  setText('co-self-name', tgName());
-  setText('co-self-user', tgUser());
+  document.getElementById('co-self-name').textContent = tgName();
+  document.getElementById('co-self-user').textContent = tgUser();
   const av = document.getElementById('co-self-av');
   const photo2 = tgPhoto();
   av.innerHTML = photo2 ? `<img src="${photo2}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>` : '🧑';
@@ -2288,14 +2195,14 @@ function coPickRec(mode) {
 function coShowOtherRec() {
   document.getElementById('co-rec-other').style.display = 'flex';
   document.getElementById('co-add-rec-btn').style.display = 'none';
-  addClass('co-other-wrap', 'visible');
+  document.getElementById('co-other-wrap').classList.add('visible');
   coPickRec('other');
   document.getElementById('co-other-input').focus();
 }
 
 function coUpdateOtherUser() {
   const val = document.getElementById('co-other-input').value || '@username';
-  setText('co-other-user', val.startsWith('@') ? val : '@'+val);
+  document.getElementById('co-other-user').textContent = val.startsWith('@') ? val : '@'+val;
 }
 
 // Pending order data (saved before redirecting to payment)
@@ -2423,25 +2330,25 @@ function pickRec(mode) {
 function showOtherRec() {
   document.getElementById('rec-other').style.display = 'flex';
   document.getElementById('add-rec-btn').style.display = 'none';
-  addClass('other-wrap', 'visible');
+  document.getElementById('other-wrap').classList.add('visible');
   pickRec('other');
   document.getElementById('other-input').focus();
 }
 
 function updateOtherUser() {
   const val = document.getElementById('other-input').value || '@username';
-  setText('rec-other-user', val.startsWith('@') ? val : '@'+val);
+  document.getElementById('rec-other-user').textContent = val.startsWith('@') ? val : '@'+val;
 }
 
 // close order overlay → restore nav
 document.getElementById('order-overlay').addEventListener('click', e => {
   if (e.target === document.getElementById('order-overlay')) {
-    removeClass('order-overlay', 'open');
+    document.getElementById('order-overlay').classList.remove('open');
     }
 });
 document.getElementById('checkout-overlay').addEventListener('click', e => {
   if (e.target === document.getElementById('checkout-overlay')) {
-    removeClass('checkout-overlay', 'open');
+    document.getElementById('checkout-overlay').classList.remove('open');
     }
 });
 
@@ -2473,7 +2380,7 @@ async function placeOrder() {
       date_str: new Date().toLocaleDateString('ru',{day:'numeric',month:'long'}),
     });
     orders.unshift(order);
-    removeClass('order-overlay', 'open');
+    document.getElementById('order-overlay').classList.remove('open');
     cart = []; updateStats();
     // success animation
     const s = document.getElementById('order-success');
@@ -2529,9 +2436,9 @@ function openOrderDetail(id) {
   const o = orders.find(x => x.id===id);
   if (!o) return;
 
-  setText('od-num', `Заказ #${o.id}`);
-  setText('od-date', o.date||o.date_str||'');
-  setText('od-total', fmt(o.total));
+  document.getElementById('od-num').textContent = `Заказ #${o.id}`;
+  document.getElementById('od-date').textContent = o.date||o.date_str||'';
+  document.getElementById('od-total').textContent = fmt(o.total);
 
   const st = getStatus(o.status);
   document.getElementById('od-status').outerHTML =
@@ -2598,14 +2505,14 @@ async function setOrderStatus(id, status) {
 ═══════════════════════════════════════════════ */
 function renderProfile() {
   const name = tgName(), user = tgUser(), photo = tgPhoto(), admin = isAdmin();
-  setText('profile-name', name);
-  setText('profile-user', user);
+  document.getElementById('profile-name').textContent = name;
+  document.getElementById('profile-user').textContent = user;
   // avatar
   const av = document.getElementById('profile-avatar');
   av.innerHTML = photo ? `<img src="${photo}" alt="av"/>` : '🧑';
   // fill order sheet
-  setText('rec-self-name', name);
-  setText('rec-self-user', user);
+  document.getElementById('rec-self-name').textContent = name;
+  document.getElementById('rec-self-user').textContent = user;
   const rav = document.getElementById('rec-self-av');
   rav.innerHTML = photo ? `<img src="${photo}" alt="av" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>` : '🧑';
 
@@ -2666,10 +2573,10 @@ function switchTab(tab, btn) {
 function renderAdminStats() {
   const rev = orders.reduce((s,o) => s+o.total, 0);
   const act = orders.filter(o => o.status==='active').length;
-  setText('a-orders', orders.length);
-  setText('a-revenue', fmtK(rev));
-  setText('a-products', PRODUCTS.length);
-  setText('a-active', act);
+  document.getElementById('a-orders').textContent = orders.length;
+  document.getElementById('a-revenue').textContent = fmtK(rev);
+  document.getElementById('a-products').textContent = PRODUCTS.length;
+  document.getElementById('a-active').textContent = act;
 }
 
 function renderAdminOrders() {
@@ -2841,7 +2748,7 @@ async function adminAddProduct() {
       const el = document.getElementById(id); if(el) el.value='';
     });
     const cr = document.getElementById('a-calc-result'); if(cr) cr.style.display='none';
-    renderHome(); // applySearch runs lazily when user opens search page renderAdminStats();
+    renderHome(); applySearch(); renderAdminStats();
     toast('Товар добавлен ✅');
     // switch to products tab
     const tabs = document.querySelectorAll('.admin-tab');
@@ -2926,7 +2833,7 @@ async function saveEdit() {
     const idx = PRODUCTS.findIndex(p => p.id===id);
     if (idx !== -1) PRODUCTS[idx] = updated;
     closeOverlay('edit-overlay');
-    renderAdminProducts(); renderHome();
+    renderAdminProducts(); renderHome(); applySearch();
     toast('Товар обновлён ✅');
   } catch(e) {
     console.error(e); toast('Ошибка ⚠️');
@@ -2943,7 +2850,7 @@ async function adminDel(id) {
     await apiDel(`/products/${id}`);
     const idx = PRODUCTS.findIndex(p => p.id===id);
     if (idx !== -1) PRODUCTS.splice(idx, 1);
-    renderAdminProducts(); renderHome(); renderAdminStats();
+    renderAdminProducts(); renderHome(); applySearch(); renderAdminStats();
     toast('Товар удалён ✅');
   } catch(e) { toast('Ошибка удаления ⚠️') }
 }
@@ -3362,9 +3269,8 @@ function getRecommendations(currentProduct, allProducts, limit = 8) {
 
   // ── 5. Популярные ─────────────────────────────────────
   // Последний fallback — просто популярные из всего каталога
-  // pool.slice() is faster than [...pool] for copying before sort
   const popular = shuffleArr(
-    pool.slice()
+    [...pool]
       .sort((a, b) => (b.sold || 0) - (a.sold || 0))
       .slice(0, 20)
   );
@@ -3546,24 +3452,23 @@ function calcPrice(ctx) {
   const cargoPrice   = Math.round((weight / 100) * CARGO_PER_100G);
   const total        = productPrice + cargoPrice + markup + insurance;
 
-  setText(`${p}-cr-product`, fmt(productPrice));
-  setText(`${p}-cr-cargo`, fmt(cargoPrice));
-  setText(`${p}-cr-markup`, fmt(markup));
-  setText(`${p}-cr-insurance`, fmt(insurance));
-  setText(`${p}-cr-total`, fmt(total));
+  document.getElementById(`${p}-cr-product`).textContent  = fmt(productPrice);
+  document.getElementById(`${p}-cr-cargo`).textContent    = fmt(cargoPrice);
+  document.getElementById(`${p}-cr-markup`).textContent   = fmt(markup);
+  document.getElementById(`${p}-cr-insurance`).textContent= fmt(insurance);
+  document.getElementById(`${p}-cr-total`).textContent    = fmt(total);
   resultEl.style.display = 'block';
 }
 
 function applyCalcPrice(ctx) {
   const p = ctx === 'add' ? 'a' : 'e';
-  const resultEl = document.getElementById(`${p}-calc-result`);
-  if (!resultEl) return;
-  // Use dataset.total — no text parsing needed
-  const total = Number(resultEl.dataset.total);
-  if (!total || !isFinite(total)) { toast('Сначала введите данные'); return; }
+  const totalEl = document.getElementById(`${p}-cr-total`);
+  if (!totalEl) return;
+  // Parse back the number from formatted string
+  const totalText = totalEl.textContent.replace(/[^0-9]/g, '');
   const priceInput = document.getElementById(`${p}-price`);
-  if (priceInput) {
-    priceInput.value = String(total);
+  if (priceInput && totalText) {
+    priceInput.value = totalText;
     toast('Цена применена ✅');
   }
 }
@@ -3583,9 +3488,7 @@ function parseSizeRange(input) {
   if (numRange) {
     const from = parseInt(numRange[1]);
     const to   = parseInt(numRange[2]);
-    if (isNaN(from) || isNaN(to)) return [];
-    if (from > to) return []; // invalid range
-    if (from === to) return [String(from)]; // single size
+    if (from >= to) return [String(from), String(to)];
     const sizes = [];
     // Detect step: jeans are even (28,30,32...), shoes are integer (36,37,38...)
     const step = (from % 2 === 0 && to % 2 === 0 && (to - from) >= 4) ? 2 : 1;
@@ -3600,9 +3503,9 @@ function parseSizeRange(input) {
     const to   = letRange[2].toUpperCase();
     const fromIdx = SIZE_ORDER.indexOf(from);
     const toIdx   = SIZE_ORDER.indexOf(to);
-    if (fromIdx === -1 || toIdx === -1) return []; // unknown size label
-    if (fromIdx > toIdx) return [];               // inverted range e.g. XL-XS
-    return SIZE_ORDER.slice(fromIdx, toIdx + 1);
+    if (fromIdx !== -1 && toIdx !== -1 && fromIdx <= toIdx) {
+      return SIZE_ORDER.slice(fromIdx, toIdx + 1);
+    }
   }
 
   // Format: "S,M,L,XL" or "S M L XL" — manual list
@@ -3698,15 +3601,14 @@ async function checkPendingOrder() {
 ═══════════════════════════════════════════════ */
 function toast(msg) {
   const t = document.getElementById('toast');
-  if (!t) return;
-  // Clear previous timeout FIRST to avoid race condition
-  clearTimeout(t._t);
   t.textContent = msg;
-  t.style.opacity = '1';
-  t.style.transform = 'translateX(-50%) translateY(0)';
+  t.style.opacity = '0'; t.style.transform = 'translateX(-50%) translateY(12px)';
+  requestAnimationFrame(() => {
+    t.style.opacity = '1'; t.style.transform = 'translateX(-50%) translateY(0)';
+  });
+  clearTimeout(t._t);
   t._t = setTimeout(() => {
-    t.style.opacity = '0';
-    t.style.transform = 'translateX(-50%) translateY(8px)';
+    t.style.opacity = '0'; t.style.transform = 'translateX(-50%) translateY(8px)';
   }, 2500);
 }
 
@@ -3814,28 +3716,15 @@ function toast(msg) {
     }
   });
 
-  // bottom rubber band removed — overscroll-behavior handles natively
+  // Rubber band at bottom of scroll
+  let lastScrollTop = 0;
+  document.addEventListener('touchstart', (e) => {
+    const scroll = e.target.closest('.scroll');
+    if (scroll) lastScrollTop = scroll.scrollTop;
+  }, { passive: true });
 
 })();
 
-
-/* ═══════════════════════════════════════════════
-   EVENT BINDINGS
-═══════════════════════════════════════════════ */
-// Migrated from inline onclick
-(function() {
-  const bindings = [
-    ['cat-btn',        'click', toggleCat],
-    ['detail-wish',    'click', toggleDetailWish],
-    ['a-submit-btn',   'click', adminAddProduct],
-    ['co-add-rec-btn', 'click', coShowOtherRec],
-    ['e-submit-btn',   'click', saveEdit],
-  ];
-  bindings.forEach(([id, evt, fn]) => {
-    const el = getEl(id);
-    if (el) el.addEventListener(evt, fn);
-  });
-})();
 /* ═══════════════════════════════════════════════
    INIT
 ═══════════════════════════════════════════════ */
