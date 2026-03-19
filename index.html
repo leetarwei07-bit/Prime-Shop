@@ -3729,7 +3729,15 @@ function toast(msg) {
 /* ═══════════════════════════════════════════════
    INIT
 ═══════════════════════════════════════════════ */
-// navbar position handled by CSS only
+// Hide navbar when keyboard opens, show when closes
+if (window.visualViewport) {
+  const nav = document.querySelector('.bottom-nav');
+  window.visualViewport.addEventListener('resize', () => {
+    if (!nav) return;
+    const keyboardOpen = window.visualViewport.height < window.innerHeight * 0.75;
+    nav.style.display = keyboardOpen ? 'none' : '';
+  }, {passive:true});
+}
 
 renderProfile();
 loadProducts();
