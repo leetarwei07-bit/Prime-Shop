@@ -3613,7 +3613,21 @@ function toast(msg) {
    EXPAND
 ═══════════════════════════════════════════════ */
 function toggleExpand() {
-  if (tg) tg.expand();
+  if (tg && tg.requestFullscreen) {
+    // Telegram 8.0+ native fullscreen
+    tg.requestFullscreen();
+  } else if (tg) {
+    tg.expand();
+  }
+  // Fallback for browser
+  if (!tg) {
+    const el = document.documentElement;
+    if (!document.fullscreenElement) {
+      el.requestFullscreen?.() || el.webkitRequestFullscreen?.();
+    } else {
+      document.exitFullscreen?.() || document.webkitExitFullscreen?.();
+    }
+  }
 }
 
 /* ═══════════════════════════════════════════════
@@ -3621,9 +3635,22 @@ function toggleExpand() {
 ═══════════════════════════════════════════════ */
 // Keyboard open/close — keep nav pinned, just shrink page scroll area
 if (window.visualViewport) {
-  window.visualViewport.addEventListener('resize', () => {
-    // Do nothing — nav stays fixed via CSS, no JS movement
-  });
+  function fixNavbar() {
+    const nav = document.querySelector('.bottom-nav');
+    if (!nav) return;
+    // On iOS, when keyboard opens, visualViewport shrinks and shifts up
+    // We counteract this by positioning nav relative to the actual window bottom
+    const offsetBottom = window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop;
+    if (offsetBottom > 10) {
+      // Keyboard is open — pin nav to visual viewport bottom
+      nav.style.transform = `translateY(${-offsetBottom}px)`;
+    } else {
+      // Keyboard closed — reset
+      nav.style.transform = 'translateZ(0)';
+    }
+  }
+  window.visualViewport.addEventListener('resize', fixNavbar);
+  window.visualViewport.addEventListener('scroll', fixNavbar);
 }
 
 /* ═══════════════════════════════════════════════
