@@ -864,6 +864,23 @@ def create_order(body: OrderCreate, x_init_data: Optional[str] = Header(None)):
     notify_new_order(order)
     return order
 
+@app.get("/orders/{oid}/payment-status")
+def get_payment_status(oid: int, x_init_data: Optional[str] = Header(None)):
+    user = get_user(x_init_data)
+    if not user:
+        raise HTTPException(401, "Auth required")
+    conn = get_db()
+    order = conn.execute("SELECT * FROM orders WHERE id=?", (oid,)).fetchone()
+    conn.close()
+    if not order:
+        raise HTTPException(404, "Not found")
+    is_owner = str(order["user_id"]) == str(user.get("id",""))
+    is_adm   = check_admin(x_init_data) is not None
+    if not is_owner and not is_adm:
+        raise HTTPException(403, "Forbidden")
+    paid = order["payment_status"] == "paid"
+    return {"paid": paid, "order": row_to_order(order)}
+
 @app.patch("/orders/{oid}/status")
 def update_order_status(oid: int, body: OrderStatusUpdate, x_init_data: Optional[str] = Header(None)):
     user = require_admin(x_init_data, "orders")
@@ -881,6 +898,16 @@ def update_order_status(oid: int, body: OrderStatusUpdate, x_init_data: Optional
 # ═══════════════════════════════════════════════
 # ROUTES — ADMIN MANAGEMENT
 # ═══════════════════════════════════════════════
+@app.get("/admins/me")
+def my_role(x_init_data: Optional[str] = Header(None)):
+    """Any authenticated user can check their own admin role."""
+    user = get_user(x_init_data)
+    if not user:
+        raise HTTPException(401, "Auth required")
+    uname = (user.get("username") or "").lower()
+    role = get_admin_role(uname)
+    return {"username": uname, "role": role, "is_admin": role is not None}
+
 @app.get("/admins")
 def list_admins(x_init_data: Optional[str] = Header(None)):
     require_admin(x_init_data, "admins")
