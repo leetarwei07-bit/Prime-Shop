@@ -3729,22 +3729,7 @@ function toast(msg) {
 /* ═══════════════════════════════════════════════
    INIT
 ═══════════════════════════════════════════════ */
-// Keep navbar fixed when keyboard opens (iOS Telegram WebView fix)
-if (window.visualViewport) {
-  const nav = document.querySelector('.bottom-nav');
-  let ticking = false;
-  function keepNavAtBottom() {
-    if (!nav || ticking) return;
-    ticking = true;
-    requestAnimationFrame(() => {
-      const diff = window.innerHeight - window.visualViewport.offsetTop - window.visualViewport.height;
-      nav.style.bottom = diff > 0 ? diff + 'px' : '0px';
-      ticking = false;
-    });
-  }
-  window.visualViewport.addEventListener('resize', keepNavAtBottom, {passive:true});
-  window.visualViewport.addEventListener('scroll', keepNavAtBottom, {passive:true});
-}
+// navbar position handled by CSS only
 
 renderProfile();
 loadProducts();
