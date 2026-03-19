@@ -107,9 +107,8 @@ body {
   display:flex;align-items:flex-start;
   padding-top:4px;
   z-index:1000;
-  transform:translateZ(0);
-  /* KEY: transform3d keeps nav in window coords, not visual viewport */
   transform:translate3d(0,0,0);
+  will-change:transform;
 }
 .nav-btn {
   flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;
@@ -3730,6 +3729,24 @@ function toast(msg) {
 /* ═══════════════════════════════════════════════
    INIT
 ═══════════════════════════════════════════════ */
+// Fix navbar jumping when keyboard opens on iOS
+// visualViewport gives us the ACTUAL visible area excluding keyboard
+if (window.visualViewport) {
+  const nav = document.querySelector('.bottom-nav');
+  function keepNavAtBottom() {
+    if (!nav) return;
+    const offsetFromBottom = window.innerHeight
+      - window.visualViewport.height
+      - window.visualViewport.offsetTop;
+    // Push nav up by exactly how much keyboard pushed it
+    nav.style.transform = offsetFromBottom > 0
+      ? `translate3d(0, ${-offsetFromBottom}px, 0)`
+      : 'translate3d(0,0,0)';
+  }
+  window.visualViewport.addEventListener('resize', keepNavAtBottom);
+  window.visualViewport.addEventListener('scroll', keepNavAtBottom);
+}
+
 renderProfile();
 loadProducts();
 loadAdmins();
