@@ -1662,8 +1662,8 @@ let recMode = 'self';
 
 // variation state for add/edit forms
 const varState = {
-  add:  { type: 'color', items: [], photos: [], links: [], sizes: [] },
-  edit: { type: 'color', items: [], photos: [], links: [], sizes: [] },
+  add:  { type: 'size', items: [], photos: [], links: [], sizes: [] },
+  edit: { type: 'size', items: [], photos: [], links: [], sizes: [] },
 };
 
 /* ═══════════════════════════════════════════════
@@ -3729,22 +3729,21 @@ function toast(msg) {
 /* ═══════════════════════════════════════════════
    INIT
 ═══════════════════════════════════════════════ */
-// Fix navbar jumping when keyboard opens on iOS
-// visualViewport gives us the ACTUAL visible area excluding keyboard
+// Keep navbar fixed when keyboard opens (iOS Telegram WebView fix)
 if (window.visualViewport) {
   const nav = document.querySelector('.bottom-nav');
+  let ticking = false;
   function keepNavAtBottom() {
-    if (!nav) return;
-    const offsetFromBottom = window.innerHeight
-      - window.visualViewport.height
-      - window.visualViewport.offsetTop;
-    // Push nav up by exactly how much keyboard pushed it
-    nav.style.transform = offsetFromBottom > 0
-      ? `translate3d(0, ${-offsetFromBottom}px, 0)`
-      : 'translate3d(0,0,0)';
+    if (!nav || ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => {
+      const diff = window.innerHeight - window.visualViewport.offsetTop - window.visualViewport.height;
+      nav.style.bottom = diff > 0 ? diff + 'px' : '0px';
+      ticking = false;
+    });
   }
-  window.visualViewport.addEventListener('resize', keepNavAtBottom);
-  window.visualViewport.addEventListener('scroll', keepNavAtBottom);
+  window.visualViewport.addEventListener('resize', keepNavAtBottom, {passive:true});
+  window.visualViewport.addEventListener('scroll', keepNavAtBottom, {passive:true});
 }
 
 renderProfile();
