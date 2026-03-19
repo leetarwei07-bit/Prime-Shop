@@ -36,7 +36,9 @@ html,body {
   height:100dvh;
   overflow:hidden;
   width:100%;
-  touch-action:pan-y;
+  /* Never allow body itself to scroll — prevents Telegram swipe-to-close */
+  touch-action:none;
+  overscroll-behavior:none;
   -webkit-font-smoothing:antialiased;
 }
 
@@ -82,7 +84,9 @@ html,body {
   overflow-y:auto;flex:1;
   padding-bottom:calc(var(--nav-h) + 32px + var(--safe-b));
   -webkit-overflow-scrolling:touch;
-  overscroll-behavior:contain;
+  /* contain prevents scroll from bubbling up to Telegram */
+  overscroll-behavior-y:contain;
+  touch-action:pan-y;
 }
 .scroll::-webkit-scrollbar { display:none }
 
@@ -100,11 +104,11 @@ html,body {
   display:flex;align-items:flex-start;
   padding-top:4px;
   z-index:1000;
-  /* Never move with keyboard or scroll */
   transform:translateZ(0);
   will-change:transform;
-  /* Prevent any JS from moving it */
-  bottom:0 !important;
+  /* iOS keyboard fix — stays at window bottom always */
+  bottom:env(safe-area-inset-bottom, 0px);
+  bottom:0;
 }
 .nav-btn {
   flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;
@@ -291,6 +295,8 @@ html,body {
   display:flex!important;flex-direction:column;
   pointer-events:none;overflow-y:auto;
   -webkit-overflow-scrolling:touch;
+  overscroll-behavior-y:contain;
+  touch-action:pan-y;
 }
 #page-product.open { transform:none;pointer-events:all }
 .detail-slider { width:100%;aspect-ratio:1;position:relative;overflow:hidden;background:var(--s2);flex-shrink:0 }
@@ -3625,20 +3631,20 @@ function toast(msg) {
    KEYBOARD / NAV FIX
 ═══════════════════════════════════════════════ */
 // Keyboard open/close — keep nav pinned, just shrink page scroll area
-if (window.visualViewport) {
-  function lockNav() {
-    const nav = document.querySelector('.bottom-nav');
-    if (!nav) return;
-    const vv = window.visualViewport;
-    const bottomOffset = window.innerHeight - vv.height - vv.offsetTop;
-    nav.style.transform = bottomOffset > 0
-      ? `translateY(${-bottomOffset}px)`
-      : 'translateY(0)';
-  }
-  window.visualViewport.addEventListener('resize', lockNav);
-  window.visualViewport.addEventListener('scroll', lockNav);
-}
+// navbar locked via CSS — no JS needed
 
+
+/* ═══════════════════════════════════════════════
+   PREVENT SWIPE-TO-CLOSE
+═══════════════════════════════════════════════ */
+// Block touchmove on body to prevent Telegram from swiping the app closed
+// Scrollable .scroll elements handle their own touch events
+document.body.addEventListener('touchmove', (e) => {
+  // Allow touchmove only inside .scroll containers
+  if (!e.target.closest('.scroll, #page-product, .sheet, .overlay')) {
+    e.preventDefault();
+  }
+}, { passive: false });
 
 /* ═══════════════════════════════════════════════
    INIT
