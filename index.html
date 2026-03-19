@@ -1631,6 +1631,15 @@ const SUPER_ADMIN = 'kimtarwei';
 const tg = window.Telegram?.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
 
+// Auto-expand on load
+window.addEventListener("load", () => {
+  const tg = window.Telegram?.WebApp;
+  if (tg) {
+    tg.ready();
+    tg.expand();
+  }
+});
+
 const TG_USER = tg?.initDataUnsafe?.user || null;
 // Admin list loaded from backend DB — persists across restarts
 let adminList = new Set([SUPER_ADMIN]);
@@ -3613,15 +3622,14 @@ function toast(msg) {
    EXPAND
 ═══════════════════════════════════════════════ */
 function toggleExpand() {
-  if (tg) {
+  const tg = window.Telegram?.WebApp;
+  if (!tg) {
+    console.warn("Telegram WebApp API not available");
+    return;
+  }
+  tg.ready();
+  if (!tg.isExpanded) {
     tg.expand();
-    // Force layout recalc after expand so pages fill new height
-    setTimeout(() => {
-      document.querySelectorAll('.page.active').forEach(p => {
-        p.style.height = '';
-        p.style.height = `calc(${window.innerHeight}px - var(--nav-h))`;
-      });
-    }, 100);
   }
 }
 
