@@ -25,7 +25,6 @@
   --red:      #ef4444;
   --nav-h:    60px;
   --safe-b:   env(safe-area-inset-bottom, 0px);
-  --safe-t:   env(safe-area-inset-top, 0px);
   --easing:   cubic-bezier(.32,.72,0,1);
   --spring:   cubic-bezier(.34,1.56,.64,1);
 }
@@ -77,10 +76,7 @@ html,body {
   display:flex;
   animation:pageIn .24s var(--easing) both;
 }
-/* When fullscreen - account for top notch */
-.home-top, .search-top, .wish-top, .orders-top, .admin-top {
-  padding-top:max(12px, calc(var(--safe-t, 0px) + 8px));
-}
+/* Sticky headers */
 @keyframes pageIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
 .scroll {
   overflow-y:auto;flex:1;
@@ -669,8 +665,185 @@ html,body {
 @keyframes spulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.3;transform:scale(.6)} }
 
 /* ═══════════════════════════════════════════════
+   PRICE CALCULATOR
+═══════════════════════════════════════════════ */
+// CNY → UZS exchange rate (update manually or later via API)
+const CNY_RATE = 1950; // 1 CNY ≈ 1950 UZS (approximate)
+const CARGO_PER_100G = 13000; // 13,000 UZS per 100g
+
+function calcPrice(ctx) {
+  const p = ctx === 'add' ? 'a' : 'e';
+  const cny      = parseFloat(document.getElementById(`${p}-cny`)?.value)     || 0;
+  const weight   = parseFloat(document.getElementById(`${p}-weight`)?.value)  || 0;
+  const markup   = parseFloat(document.getElementById(`${p}-markup`)?.value)  || 0;
+  const insurance= parseFloat(document.getElementById(`${p}-insurance`)?.value)|| 0;
+  const resultEl = document.getElementById(`${p}-calc-result`);
+  if (!resultEl) return;
+
+  if (!cny && !weight) { resultEl.style.display = 'none'; return; }
+
+  const productPrice = Math.round(cny * CNY_RATE);
+  const cargoPrice   = Math.round((weight / 100) * CARGO_PER_100G);
+  const total        = productPrice + cargoPrice + markup + insurance;
+
+  document.getElementById(`${p}-cr-product`).textContent  = fmt(productPrice);
+  document.getElementById(`${p}-cr-cargo`).textContent    = fmt(cargoPrice);
+  document.getElementById(`${p}-cr-markup`).textContent   = fmt(markup);
+  document.getElementById(`${p}-cr-insurance`).textContent= fmt(insurance);
+  document.getElementById(`${p}-cr-total`).textContent    = fmt(total);
+  resultEl.style.display = 'block';
+}
+
+function applyCalcPrice(ctx) {
+  const p = ctx === 'add' ? 'a' : 'e';
+  const totalEl = document.getElementById(`${p}-cr-total`);
+  if (!totalEl) return;
+  // Parse back the number from formatted string
+  const totalText = totalEl.textContent.replace(/[^0-9]/g, '');
+  const priceInput = document.getElementById(`${p}-price`);
+  if (priceInput && totalText) {
+    priceInput.value = totalText;
+    toast('Цена применена ✅');
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   SIZE RANGE PARSER
+═══════════════════════════════════════════════ */
+// Maps letter sizes to numeric order for range generation
+const SIZE_ORDER = ['XXS','XS','S','M','L','XL','XXL','XXXL','3XL','4XL'];
+
+function parseSizeRange(input) {
+  input = input.trim();
+  if (!input) return [];
+
+  // Format: "30-44" or "36-42" — numeric range
+  const numRange = input.match(/^(\d+)\s*[-–]\s*(\d+)$/);
+  if (numRange) {
+    const from = parseInt(numRange[1]);
+    const to   = parseInt(numRange[2]);
+    if (from >= to) return [String(from), String(to)];
+    const sizes = [];
+    // Detect step: jeans are even (28,30,32...), shoes are integer (36,37,38...)
+    const step = (from % 2 === 0 && to % 2 === 0 && (to - from) >= 4) ? 2 : 1;
+    for (let i = from; i <= to; i += step) sizes.push(String(i));
+    return sizes;
+  }
+
+  // Format: "XS-XXL" — letter range
+  const letRange = input.match(/^([A-Z]+)\s*[-–]\s*([A-Z]+)$/i);
+  if (letRange) {
+    const from = letRange[1].toUpperCase();
+    const to   = letRange[2].toUpperCase();
+    const fromIdx = SIZE_ORDER.indexOf(from);
+    const toIdx   = SIZE_ORDER.indexOf(to);
+    if (fromIdx !== -1 && toIdx !== -1 && fromIdx <= toIdx) {
+      return SIZE_ORDER.slice(fromIdx, toIdx + 1);
+    }
+  }
+
+  // Format: "S,M,L,XL" or "S M L XL" — manual list
+  if (input.includes(',') || /\s/.test(input)) {
+    return input.split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
+  }
+
+  // Single value
+  return [input];
+}
+
+function previewSizes(ctx) {
+  const p = ctx === 'add' ? 'a' : 'e';
+  const inp = document.getElementById(`${p}-sizes-input`);
+  const prev = document.getElementById(`${p}-sizes-preview`);
+  if (!inp || !prev) return;
+  const parsed = parseSizeRange(inp.value);
+  if (parsed.length > 0) {
+    prev.textContent = `→ ${parsed.join(', ')} (${parsed.length} шт.)`;
+  } else {
+    prev.textContent = '';
+  }
+}
+
+function addSizesFromRange(ctx) {
+  const p = ctx === 'add' ? 'a' : 'e';
+  const inp = document.getElementById(`${p}-sizes-input`);
+  if (!inp || !inp.value.trim()) return;
+  const parsed = parseSizeRange(inp.value);
+  if (!parsed.length) { toast('Не удалось распознать размеры'); return; }
+  // Add to varState sizes (store separately from variations)
+  if (!varState[ctx].sizes) varState[ctx].sizes = [];
+  parsed.forEach(s => {
+    if (!varState[ctx].sizes.includes(s)) varState[ctx].sizes.push(s);
+  });
+  inp.value = '';
+  document.getElementById(`${p}-sizes-preview`).textContent = '';
+  renderSizeChips(ctx);
+  toast(`Добавлено ${parsed.length} размеров`);
+}
+
+function removeSizeChip(ctx, idx) {
+  if (varState[ctx].sizes) varState[ctx].sizes.splice(idx, 1);
+  renderSizeChips(ctx);
+}
+
+function renderSizeChips(ctx) {
+  const p = ctx === 'add' ? 'a' : 'e';
+  const el = document.getElementById(`${p}-sizes-chips`);
+  if (!el) return;
+  const sizes = varState[ctx].sizes || [];
+  el.innerHTML = sizes.map((s, i) => `
+    <div class="var-chip">
+      <span class="var-chip-label">${s}</span>
+      <button class="var-chip-del" onclick="removeSizeChip('${ctx}',${i})">×</button>
+    </div>`
+  ).join('');
+}
+
+// On app start — resume polling if payment was pending
+async function checkPendingOrder() {
+  const id = localStorage.getItem('pendingOrderId');
+  if (!id) return;
+  try {
+    const data = await apiFetch(`/orders/${id}/payment-status`);
+    if (data?.paid) {
+      const existing = orders.findIndex(o => o.id === Number(id));
+      if (existing === -1) orders.unshift(data.order);
+      else orders[existing] = data.order;
+      updateStats();
+      localStorage.removeItem('pendingOrderId');
+      toast('Заказ #' + id + ' оплачен ✅');
+    }
+  } catch(e) {
+    localStorage.removeItem('pendingOrderId');
+  }
+}
+
+/* ═══════════════════════════════════════════════
    TOAST
 ═══════════════════════════════════════════════ */
+/* ── PRICE CALCULATOR ── */
+.calc-box {
+  background:var(--s2);border:1px solid var(--border);border-radius:12px;padding:14px;
+}
+.calc-row {
+  display:flex;align-items:center;justify-content:space-between;
+  font-size:12px;padding:4px 0;color:var(--text2);
+}
+.calc-row.total {
+  font-family:'Unbounded',sans-serif;font-size:13px;font-weight:700;
+  color:#fff;border-top:1px solid var(--border);margin-top:8px;padding-top:10px;
+}
+.calc-result {
+  font-size:11px;color:var(--orange);margin-top:6px;text-align:center;
+}
+.calc-apply {
+  width:100%;margin-top:10px;padding:10px;background:rgba(245,158,11,.12);
+  border:1px solid rgba(245,158,11,.25);border-radius:9px;
+  color:var(--orange);font-family:'Inter',sans-serif;font-size:12px;font-weight:600;
+  cursor:pointer;transition:background .15s;
+}
+.calc-apply:active { background:rgba(245,158,11,.2) }
+
 /* ── SOURCE LINKS (admin only) ── */
 .source-links-panel {
   margin-top:16px;
@@ -739,9 +912,7 @@ html,body {
           onkeydown="if(event.key==='Enter')this.blur()"/>
       </div>
 
-      <button class="icon-btn" id="expand-btn" onclick="toggleExpand()">
-        <svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-      </button>
+
       <div class="cat-wrap">
         <button class="icon-btn" id="cat-btn" onclick="toggleCat()">
           <svg viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="10" y2="18"/></svg>
@@ -981,6 +1152,54 @@ html,body {
           <div class="field"><label>Старая цена</label><input id="a-old-price" type="number" placeholder="—"/></div>
         </div>
         <div class="field"><label>Описание</label><textarea id="a-desc" placeholder="Описание товара..."></textarea></div>
+
+        <!-- PRICE CALCULATOR -->
+        <div class="field">
+          <label>Калькулятор цены <span style="color:var(--text3);font-weight:400;text-transform:none">— необязательно</span></label>
+          <div class="calc-box">
+            <div class="field-row" style="gap:8px;margin-bottom:8px">
+              <div class="field" style="margin:0">
+                <label style="margin-bottom:4px">Юани (CNY)</label>
+                <input id="a-cny" type="number" placeholder="0" oninput="calcPrice('add')" style="padding:8px 10px;font-size:13px"/>
+              </div>
+              <div class="field" style="margin:0">
+                <label style="margin-bottom:4px">Вес (граммы)</label>
+                <input id="a-weight" type="number" placeholder="500" oninput="calcPrice('add')" style="padding:8px 10px;font-size:13px"/>
+              </div>
+            </div>
+            <div class="field-row" style="gap:8px;margin-bottom:8px">
+              <div class="field" style="margin:0">
+                <label style="margin-bottom:4px">Наценка (сум)</label>
+                <input id="a-markup" type="number" placeholder="75000" oninput="calcPrice('add')" style="padding:8px 10px;font-size:13px"/>
+              </div>
+              <div class="field" style="margin:0">
+                <label style="margin-bottom:4px">Страховка (сум)</label>
+                <input id="a-insurance" type="number" placeholder="15000" oninput="calcPrice('add')" style="padding:8px 10px;font-size:13px"/>
+              </div>
+            </div>
+            <div id="a-calc-result" style="display:none">
+              <div class="calc-row"><span>Цена товара (CNY→сум)</span><span id="a-cr-product">—</span></div>
+              <div class="calc-row"><span>Карго (13 000 / 100г)</span><span id="a-cr-cargo">—</span></div>
+              <div class="calc-row"><span>Наценка</span><span id="a-cr-markup">—</span></div>
+              <div class="calc-row"><span>Страховка</span><span id="a-cr-insurance">—</span></div>
+              <div class="calc-row total"><span>Итоговая цена</span><span id="a-cr-total">—</span></div>
+              <button class="calc-apply" onclick="applyCalcPrice('add')">✓ Применить цену</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- SIZES -->
+        <div class="field">
+          <label>Размеры <span style="color:var(--text3);font-weight:400;text-transform:none">— диапазон: 30-44 или XS-XXL</span></label>
+          <div style="display:flex;gap:8px">
+            <input id="a-sizes-input" type="text" placeholder="30-44 или XS-XXL или S,M,L,XL"
+              style="flex:1" oninput="previewSizes('add')"/>
+            <button class="var-add-btn" onclick="addSizesFromRange('add')">+</button>
+          </div>
+          <div id="a-sizes-preview" style="font-size:11px;color:var(--text3);margin-top:4px"></div>
+          <div class="var-chips" id="a-sizes-chips" style="margin-top:6px"></div>
+        </div>
+
         <div class="field">
           <label>Вариации</label>
           <div class="var-type-row">
@@ -1014,14 +1233,19 @@ html,body {
     <div class="admin-panel" id="panel-admins">
       <div style="margin-bottom:16px">
         <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Добавить администратора</div>
-        <div style="display:flex;gap:8px">
+        <div style="display:flex;gap:8px;margin-bottom:8px">
           <input id="a-new-admin" type="text" placeholder="@username"
             style="flex:1;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-family:'Inter',sans-serif;font-size:14px;color:#fff;outline:none"/>
-          <button onclick="adminAddAdmin()"
-            style="padding:11px 18px;background:var(--orange);color:#000;border:none;border-radius:10px;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">
-            Добавить
-          </button>
+          <select id="a-new-role"
+            style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:11px 10px;font-family:'Inter',sans-serif;font-size:13px;color:#fff;outline:none">
+            <option value="manager">Менеджер</option>
+            <option value="moderator">Модератор</option>
+          </select>
         </div>
+        <button onclick="adminAddAdmin()"
+          style="width:100%;padding:11px;background:var(--orange);color:#000;border:none;border-radius:10px;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;cursor:pointer">
+          Добавить администратора
+        </button>
       </div>
       <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Команда</div>
       <div id="admin-list"></div>
@@ -1080,6 +1304,64 @@ html,body {
     <span>Профиль</span>
   </button>
 </nav>
+
+<!-- CHECKOUT CONFIRMATION -->
+<div class="overlay" id="checkout-overlay" onclick="closeOverlay('checkout-overlay',event)">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <div class="sheet-title">Оформление заказа</div>
+      <button class="sheet-close" onclick="closeOverlay('checkout-overlay')">×</button>
+    </div>
+    <!-- product summary -->
+    <div id="checkout-product" style="display:flex;align-items:center;gap:12px;padding:14px;background:var(--s2);border-radius:14px;margin-bottom:16px"></div>
+    <!-- selected options -->
+    <div id="checkout-options" style="margin-bottom:16px"></div>
+    <!-- price breakdown -->
+    <div style="background:var(--s2);border-radius:12px;padding:14px;margin-bottom:16px">
+      <div id="checkout-price-rows"></div>
+    </div>
+    <!-- recipient -->
+    <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Получатель</div>
+    <div class="rec-row on" id="co-rec-self" onclick="coPickRec('self')">
+      <div class="rec-avatar" id="co-self-av">🧑</div>
+      <div class="rec-info">
+        <div class="rec-name" id="co-self-name">Вы</div>
+        <div class="rec-user" id="co-self-user">@username</div>
+      </div>
+      <div class="rec-radio"></div>
+    </div>
+    <div class="rec-row" id="co-rec-other" onclick="coPickRec('other')" style="display:none">
+      <div class="rec-avatar">👤</div>
+      <div class="rec-info">
+        <div class="rec-name">Другой получатель</div>
+        <div class="rec-user" id="co-other-user">@username</div>
+      </div>
+      <div class="rec-radio"></div>
+    </div>
+    <button class="add-rec-btn" id="co-add-rec-btn" onclick="coShowOtherRec()">
+      <div class="add-icon">＋</div>Оформить на другой аккаунт
+    </button>
+    <div class="other-wrap" id="co-other-wrap">
+      <input type="text" id="co-other-input" placeholder="@username получателя" oninput="coUpdateOtherUser()"/>
+    </div>
+    <div id="co-payment-section" style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
+      <button class="submit-btn" id="co-payme-btn" onclick="checkoutPay('payme')"
+        style="background:#1ABC9C;display:flex;align-items:center;justify-content:center;gap:8px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+        Оплатить через Payme
+      </button>
+      <button class="submit-btn" id="co-click-btn" onclick="checkoutPay('click')"
+        style="background:#0069FF;display:flex;align-items:center;justify-content:center;gap:8px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+        Оплатить через Click
+      </button>
+      <div style="text-align:center;font-size:11px;color:var(--text3);padding:4px 0">
+        Заказ создаётся только после оплаты
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- ORDER SHEET -->
 <div class="overlay" id="order-overlay" onclick="closeOverlay('order-overlay',event)">
@@ -1187,6 +1469,54 @@ html,body {
         <div class="field"><label>Старая цена</label><input id="e-old-price" type="number" placeholder="—"/></div>
       </div>
       <div class="field"><label>Описание</label><textarea id="e-desc"></textarea></div>
+
+      <!-- PRICE CALCULATOR (edit) -->
+      <div class="field">
+        <label>Калькулятор цены <span style="color:var(--text3);font-weight:400;text-transform:none">— необязательно</span></label>
+        <div class="calc-box">
+          <div class="field-row" style="gap:8px;margin-bottom:8px">
+            <div class="field" style="margin:0">
+              <label style="margin-bottom:4px">Юани (CNY)</label>
+              <input id="e-cny" type="number" placeholder="0" oninput="calcPrice('edit')" style="padding:8px 10px;font-size:13px"/>
+            </div>
+            <div class="field" style="margin:0">
+              <label style="margin-bottom:4px">Вес (граммы)</label>
+              <input id="e-weight" type="number" placeholder="500" oninput="calcPrice('edit')" style="padding:8px 10px;font-size:13px"/>
+            </div>
+          </div>
+          <div class="field-row" style="gap:8px;margin-bottom:8px">
+            <div class="field" style="margin:0">
+              <label style="margin-bottom:4px">Наценка (сум)</label>
+              <input id="e-markup" type="number" placeholder="75000" oninput="calcPrice('edit')" style="padding:8px 10px;font-size:13px"/>
+            </div>
+            <div class="field" style="margin:0">
+              <label style="margin-bottom:4px">Страховка (сум)</label>
+              <input id="e-insurance" type="number" placeholder="15000" oninput="calcPrice('edit')" style="padding:8px 10px;font-size:13px"/>
+            </div>
+          </div>
+          <div id="e-calc-result" style="display:none">
+            <div class="calc-row"><span>Цена товара (CNY→сум)</span><span id="e-cr-product">—</span></div>
+            <div class="calc-row"><span>Карго (13 000 / 100г)</span><span id="e-cr-cargo">—</span></div>
+            <div class="calc-row"><span>Наценка</span><span id="e-cr-markup">—</span></div>
+            <div class="calc-row"><span>Страховка</span><span id="e-cr-insurance">—</span></div>
+            <div class="calc-row total"><span>Итоговая цена</span><span id="e-cr-total">—</span></div>
+            <button class="calc-apply" onclick="applyCalcPrice('edit')">✓ Применить цену</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SIZES (edit) -->
+      <div class="field">
+        <label>Размеры <span style="color:var(--text3);font-weight:400;text-transform:none">— диапазон: 30-44 или XS-XXL</span></label>
+        <div style="display:flex;gap:8px">
+          <input id="e-sizes-input" type="text" placeholder="30-44 или XS-XXL или S,M,L,XL"
+            style="flex:1" oninput="previewSizes('edit')"/>
+          <button class="var-add-btn" onclick="addSizesFromRange('edit')">+</button>
+        </div>
+        <div id="e-sizes-preview" style="font-size:11px;color:var(--text3);margin-top:4px"></div>
+        <div class="var-chips" id="e-sizes-chips" style="margin-top:6px"></div>
+      </div>
+
       <div class="field">
         <label>Вариации</label>
         <div class="var-type-row">
@@ -1241,10 +1571,40 @@ const tg = window.Telegram?.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
 
 const TG_USER = tg?.initDataUnsafe?.user || null;
-const adminList = new Set([SUPER_ADMIN]);
+// Admin list loaded from backend DB — persists across restarts
+let adminList = new Set([SUPER_ADMIN]);
+let adminRoles = {}; // {username: role}
 
 const isAdmin = () => TG_USER && adminList.has((TG_USER.username||'').toLowerCase());
 const isSuperAdmin = () => TG_USER && (TG_USER.username||'').toLowerCase() === SUPER_ADMIN;
+const getRole = () => adminRoles[(TG_USER?.username||'').toLowerCase()] || null;
+
+// Load admins from backend
+// Superadmin loads full list, others check only their own role
+async function loadAdmins() {
+  try {
+    // Step 1: check own role (works for everyone)
+    const me = await apiFetch('/admins/me');
+    if (me.is_admin) {
+      adminList.add(me.username.toLowerCase());
+      adminRoles[me.username.toLowerCase()] = me.role;
+    }
+    adminList.add(SUPER_ADMIN); // always keep superadmin
+
+    // Step 2: if superadmin — load full list for admin panel
+    if (isSuperAdmin()) {
+      const data = await apiFetch('/admins');
+      adminList = new Set(data.map(a => a.username.toLowerCase()));
+      adminRoles = {};
+      data.forEach(a => { adminRoles[a.username.toLowerCase()] = a.role; });
+      adminList.add(SUPER_ADMIN);
+    }
+    renderProfile(); // refresh badge/menu
+  } catch(e) {
+    console.error('loadAdmins:', e);
+    adminList.add(SUPER_ADMIN); // fallback
+  }
+}
 const tgName = () => TG_USER ? [TG_USER.first_name, TG_USER.last_name].filter(Boolean).join(' ') || 'Пользователь' : 'Гость';
 const tgUser = () => TG_USER ? (TG_USER.username ? '@'+TG_USER.username : '#'+TG_USER.id) : '@guest';
 const tgPhoto = () => TG_USER?.photo_url || null;
@@ -1269,8 +1629,8 @@ let recMode = 'self';
 
 // variation state for add/edit forms
 const varState = {
-  add:  { type: 'size', items: [], photos: [], links: [] },
-  edit: { type: 'size', items: [], photos: [], links: [] },
+  add:  { type: 'size', items: [], photos: [], links: [], sizes: [] },
+  edit: { type: 'size', items: [], photos: [], links: [], sizes: [] },
 };
 
 /* ═══════════════════════════════════════════════
@@ -1661,11 +2021,199 @@ function closeOverlay(id, e) {
 ═══════════════════════════════════════════════ */
 function buyNow() {
   if (!currentProduct) return;
-  const existing = cart.find(i => i.product.id===currentProduct.id && i.color===selColor && i.size===selSize && i.variation===selVariation);
-  if (existing) existing.qty += detailQty;
-  else cart.push({ product:currentProduct, color:selColor, size:selSize, variation:selVariation, qty:detailQty });
-  closeProduct();
-  setTimeout(() => openOrderSheet(), 380);
+  openCheckout();
+}
+
+let coRecMode = 'self';
+
+function openCheckout() {
+  const p = currentProduct;
+  // Product summary
+  const photo = p.photos&&p.photos.length ? p.photos[0] : null;
+  document.getElementById('checkout-product').innerHTML = `
+    <div style="width:60px;height:60px;border-radius:10px;background:var(--s1);flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:28px">
+      ${photo ? `<img src="${photo}" style="width:100%;height:100%;object-fit:cover"/>` : p.emoji}
+    </div>
+    <div style="flex:1;min-width:0">
+      ${p.brand ? `<div style="font-size:10px;color:var(--text3);margin-bottom:2px">${p.brand}</div>` : ''}
+      <div style="font-size:14px;font-weight:600;line-height:1.3">${p.name}</div>
+      <div style="font-family:'Unbounded',sans-serif;font-size:13px;font-weight:700;margin-top:4px">${fmt(p.price)}</div>
+    </div>`;
+
+  // Selected options
+  const opts = [
+    selColor    ? `Цвет: ${selColor}`       : '',
+    selSize     ? `Размер: ${selSize}`      : '',
+    selVariation? `Модель: ${selVariation}` : '',
+    detailQty > 1 ? `× ${detailQty} шт.`   : '',
+  ].filter(Boolean);
+  document.getElementById('checkout-options').innerHTML = opts.length
+    ? `<div style="display:flex;flex-wrap:wrap;gap:6px">${opts.map(o=>`<span style="font-size:12px;padding:4px 10px;background:var(--s2);border-radius:20px;color:var(--text2)">${o}</span>`).join('')}</div>`
+    : '';
+
+  // Price breakdown
+  const total = p.price * detailQty;
+  document.getElementById('checkout-price-rows').innerHTML = `
+    <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text2);margin-bottom:8px">
+      <span>Цена товара${detailQty>1?' × '+detailQty:''}</span><span>${fmt(total)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text2);margin-bottom:8px">
+      <span>Карго</span><span style="color:var(--green)">Бесплатно</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-family:'Unbounded',sans-serif;font-size:14px;font-weight:700;padding-top:10px;border-top:1px solid var(--border)">
+      <span>Итого</span><span>${fmt(total)}</span>
+    </div>`;
+
+  // Recipient
+  coRecMode = 'self';
+  document.getElementById('co-rec-self').classList.add('on');
+  document.getElementById('co-rec-other').classList.remove('on');
+  document.getElementById('co-rec-other').style.display = 'none';
+  document.getElementById('co-other-wrap').classList.remove('visible');
+  document.getElementById('co-add-rec-btn').style.display = 'flex';
+  document.getElementById('co-self-name').textContent = tgName();
+  document.getElementById('co-self-user').textContent = tgUser();
+  const av = document.getElementById('co-self-av');
+  const photo2 = tgPhoto();
+  av.innerHTML = photo2 ? `<img src="${photo2}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>` : '🧑';
+
+  document.querySelector('.bottom-nav').style.display = 'none';
+  openOverlay('checkout-overlay');
+}
+
+function coPickRec(mode) {
+  coRecMode = mode;
+  document.getElementById('co-rec-self').classList.toggle('on', mode==='self');
+  document.getElementById('co-rec-other').classList.toggle('on', mode==='other');
+}
+
+function coShowOtherRec() {
+  document.getElementById('co-rec-other').style.display = 'flex';
+  document.getElementById('co-add-rec-btn').style.display = 'none';
+  document.getElementById('co-other-wrap').classList.add('visible');
+  coPickRec('other');
+  document.getElementById('co-other-input').focus();
+}
+
+function coUpdateOtherUser() {
+  const val = document.getElementById('co-other-input').value || '@username';
+  document.getElementById('co-other-user').textContent = val.startsWith('@') ? val : '@'+val;
+}
+
+// Pending order data (saved before redirecting to payment)
+let pendingOrderData = null;
+
+async function checkoutPay(provider) {
+  if (!currentProduct) return;
+  const p = currentProduct;
+  const total = p.price * detailQty;
+  const selfUser = tgUser();
+  const isOther = coRecMode === 'other';
+  const otherVal = (document.getElementById('co-other-input').value||'').trim();
+  const recipient = isOther
+    ? (otherVal.startsWith('@')?otherVal:'@'+otherVal)||'@unknown'
+    : selfUser;
+
+  const btnP = document.getElementById('co-payme-btn');
+  const btnC = document.getElementById('co-click-btn');
+  [btnP, btnC].forEach(b => { if(b) { b.disabled = true; b.style.opacity = '.6'; } });
+
+  try {
+    // 1. Create order on backend with status "pending_payment"
+    const order = await apiPost('/orders', {
+      recipient, is_self: !isOther, self_username: selfUser,
+      items: [{
+        product_id:     p.id,
+        product_name:   p.name,
+        product_emoji:  p.emoji,
+        product_photos: p.photos||[],
+        price:          p.price,
+        color:          selColor||null,
+        size:           selSize||null,
+        variation:      selVariation||null,
+        qty:            detailQty,
+      }],
+      total,
+      date_str: new Date().toLocaleDateString('ru',{day:'numeric',month:'long'}),
+      payment_method: provider,
+    });
+
+    pendingOrderData = order;
+    localStorage.setItem('pendingOrderId', String(order.id));
+
+    // 2. Get payment URL from backend
+    const payData = await apiFetch(`/payments/${provider}/url/${order.id}`);
+
+    // 3. Open payment page in Telegram browser
+    if (payData.url) {
+      if (tg) {
+        tg.openLink(payData.url);
+      } else {
+        window.open(payData.url, '_blank');
+      }
+      // 4. Show waiting state
+      closeOverlay('checkout-overlay');
+      closeProduct();
+      document.querySelector('.bottom-nav').style.display = '';
+      showPaymentWaiting(order, provider);
+    } else {
+      throw new Error('No payment URL');
+    }
+  } catch(e) {
+    console.error(e);
+    toast('Ошибка создания заказа ⚠️');
+  } finally {
+    [btnP, btnC].forEach(b => { if(b) { b.disabled = false; b.style.opacity = '1'; } });
+  }
+}
+
+// Show "waiting for payment" toast with option to check status
+function showPaymentWaiting(order, provider) {
+  const t = document.getElementById('toast');
+  t.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:4px 0">
+      <div>Ожидаем оплату заказа #${order.id}</div>
+      <button onclick="checkPaymentStatus(${order.id})"
+        style="background:rgba(255,255,255,.15);border:none;border-radius:20px;
+        padding:4px 12px;color:#fff;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">
+        Проверить оплату
+      </button>
+    </div>`;
+  t.style.opacity = '1';
+  t.style.transform = 'translateX(-50%) translateY(0)';
+  t.style.whiteSpace = 'normal';
+  t.style.textAlign = 'center';
+  t.style.width = '260px';
+  clearTimeout(t._t);
+  // Auto-check after 5 seconds
+  t._t = setTimeout(() => checkPaymentStatus(order.id), 5000);
+}
+
+async function checkPaymentStatus(orderId) {
+  try {
+    const data = await apiFetch(`/orders/${orderId}/payment-status`);
+    if (data.paid) {
+      // Payment confirmed — add to orders list and show success
+      const existing = orders.findIndex(o => o.id === orderId);
+      if (existing === -1) orders.unshift(data.order);
+      else orders[existing] = data.order;
+      updateStats();
+      // Reset toast
+      const t = document.getElementById('toast');
+      t.innerHTML = '';
+      t.style.width = '';
+      t.style.whiteSpace = 'nowrap';
+      t.style.opacity = '0';
+      // Show success
+      const s = document.getElementById('order-success');
+      s.classList.add('show');
+      setTimeout(() => s.classList.remove('show'), 3400);
+    } else {
+      toast('Оплата ещё не подтверждена. Попробуйте позже.');
+    }
+  } catch(e) {
+    toast('Не удалось проверить статус оплаты');
+  }
 }
 
 function openOrderSheet() {
@@ -1704,6 +2252,12 @@ function updateOtherUser() {
 document.getElementById('order-overlay').addEventListener('click', e => {
   if (e.target === document.getElementById('order-overlay')) {
     document.getElementById('order-overlay').classList.remove('open');
+    document.querySelector('.bottom-nav').style.display = '';
+  }
+});
+document.getElementById('checkout-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('checkout-overlay')) {
+    document.getElementById('checkout-overlay').classList.remove('open');
     document.querySelector('.bottom-nav').style.display = '';
   }
 });
@@ -2082,11 +2636,15 @@ async function adminAddProduct() {
   try {
     const brand = document.getElementById('a-brand')?.value || '';
     const style = document.getElementById('a-style')?.value || '';
+    // Merge explicit sizes with variation sizes
+    const explicitSizes = varState.add.sizes || [];
+    const varDataFinal = getVarData('add');
+    if (explicitSizes.length) varDataFinal.sizes = [...new Set([...explicitSizes, ...varDataFinal.sizes])];
     const product = await apiPost('/products', {
       name, cat, brand, style, emoji,
       photos: varState.add.photos,
       price, old_price: oldP,
-      ...varData, desc, is_new: true,
+      ...varDataFinal, desc, is_new: true,
       source_links: varState.add.links,
     });
     PRODUCTS.unshift(product);
@@ -2094,8 +2652,13 @@ async function adminAddProduct() {
     ['a-name','a-price','a-old-price','a-desc','a-emoji'].forEach(id => {
       const el = document.getElementById(id); if(el) el.value='';
     });
-    varState.add = { type:'size', items:[], photos:[], links:[] };
-    renderPhotoPreviews('add'); renderVarChips('add'); renderLinkChips('add'); setVT('add','size');
+    varState.add = { type:'size', items:[], photos:[], links:[], sizes:[] };
+    renderPhotoPreviews('add'); renderVarChips('add'); renderLinkChips('add'); renderSizeChips('add'); setVT('add','size');
+    // Clear calculator
+    ['a-cny','a-weight','a-markup','a-insurance','a-sizes-input'].forEach(id => {
+      const el = document.getElementById(id); if(el) el.value='';
+    });
+    const cr = document.getElementById('a-calc-result'); if(cr) cr.style.display='none';
     renderHome(); applySearch(); renderAdminStats();
     toast('Товар добавлен ✅');
     // switch to products tab
@@ -2128,8 +2691,13 @@ function openEdit(id) {
 
   varState.edit.photos = [...(p.photos||[])];
   varState.edit.links  = [...(p.source_links||[])];
+  varState.edit.sizes  = [...(p.sizes||[])];
   renderPhotoPreviews('edit');
   renderLinkChips('edit');
+  renderSizeChips('edit');
+  // Pre-fill sizes input preview
+  const sinp = document.getElementById('e-sizes-input');
+  if (sinp) sinp.value = '';
 
   // figure out variation type
   varState.edit.items = [];
@@ -2163,11 +2731,14 @@ async function saveEdit() {
   try {
     const brand = document.getElementById('e-brand')?.value || '';
     const style = document.getElementById('e-style')?.value || '';
+    const explicitSizesE = varState.edit.sizes || [];
+    const varDataE = getVarData('edit');
+    if (explicitSizesE.length) varDataE.sizes = [...new Set([...explicitSizesE, ...varDataE.sizes])];
     const updated = await apiPut(`/products/${id}`, {
       name, cat, brand, style, emoji,
       photos: varState.edit.photos,
       price, old_price: oldP,
-      ...varData, desc, is_new: false,
+      ...varDataE, desc, is_new: false,
       source_links: varState.edit.links,
     });
     const idx = PRODUCTS.findIndex(p => p.id===id);
@@ -2198,35 +2769,61 @@ async function adminDel(id) {
 /* ═══════════════════════════════════════════════
    ADMIN - LIST
 ═══════════════════════════════════════════════ */
-function renderAdminList() {
+async function renderAdminList() {
   const el = document.getElementById('admin-list');
   if (!el) return;
-  el.innerHTML = [...adminList].map(u =>
-    `<div class="admin-list-item">
-      <div class="admin-list-avatar">${u===SUPER_ADMIN?'👑':'⚡'}</div>
-      <div style="flex:1">
-        <div style="font-weight:600;font-size:14px">@${u}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">${u===SUPER_ADMIN?'Суперадмин':'Администратор'}</div>
-      </div>
-      ${u!==SUPER_ADMIN?`<button onclick="removeAdmin('${u}')" style="width:28px;height:28px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;color:var(--red)">✕</button>`:''}
-    </div>`
-  ).join('');
+  el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text3);font-size:13px">Загрузка...</div>';
+  try {
+    const data = await apiFetch('/admins');
+    adminList = new Set(data.map(a => a.username.toLowerCase()));
+    adminRoles = {};
+    data.forEach(a => { adminRoles[a.username.toLowerCase()] = a.role; });
+    adminList.add(SUPER_ADMIN);
+    const roleLabel = { superadmin:'👑 Суперадмин', manager:'🛠 Менеджер', moderator:'👁 Модератор' };
+    el.innerHTML = data.length ? data.map(a =>
+      `<div class="admin-list-item">
+        <div class="admin-list-avatar">${a.role==='superadmin'?'👑':'⚡'}</div>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:14px">@${a.username}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">${roleLabel[a.role]||a.role}</div>
+        </div>
+        ${a.username!==SUPER_ADMIN
+          ? `<button onclick="removeAdmin('${a.username}')" style="width:28px;height:28px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;color:var(--red)">✕</button>`
+          : ''}
+      </div>`
+    ).join('') : '<div style="text-align:center;padding:20px;color:var(--text3);font-size:13px">Только суперадмин</div>';
+  } catch(e) {
+    el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--red);font-size:13px">Ошибка загрузки</div>';
+  }
 }
 
-function adminAddAdmin() {
+async function adminAddAdmin() {
   if (!isSuperAdmin()) { toast('Только суперадмин'); return; }
   const inp = document.getElementById('a-new-admin');
-  const val = (inp.value||'').trim().replace(/^@/,'').toLowerCase();
+  const roleEl = document.getElementById('a-new-role');
+  const val  = (inp.value||'').trim().replace(/^@/,'').toLowerCase();
+  const role = roleEl?.value || 'moderator';
   if (!val) { toast('Введите @username'); return; }
   if (adminList.has(val)) { toast('Уже является админом'); return; }
-  adminList.add(val); inp.value='';
-  renderAdminList(); toast(`@${val} добавлен ✅`);
+  try {
+    await apiPost('/admins', { username: val, role });
+    adminList.add(val);
+    adminRoles[val] = role;
+    inp.value = '';
+    renderAdminList();
+    toast(`@${val} добавлен как ${role} ✅`);
+  } catch(e) { toast('Ошибка добавления ⚠️'); }
 }
 
-function removeAdmin(u) {
+async function removeAdmin(u) {
   if (!isSuperAdmin()) { toast('Только суперадмин'); return; }
-  adminList.delete(u); renderAdminList();
-  toast(`@${u} удалён`);
+  try {
+    await apiDel('/admins/' + u);
+    adminList.delete(u);
+    delete adminRoles[u];
+    renderAdminList();
+    toast(`@${u} удалён`);
+  } catch(e) { toast('Ошибка удаления ⚠️'); }
 }
 
 /* ═══════════════════════════════════════════════
@@ -2735,6 +3332,160 @@ async function loadAdminLog() {
 }
 
 /* ═══════════════════════════════════════════════
+   PRICE CALCULATOR
+═══════════════════════════════════════════════ */
+// CNY → UZS exchange rate (update manually or later via API)
+const CNY_RATE = 1950; // 1 CNY ≈ 1950 UZS (approximate)
+const CARGO_PER_100G = 13000; // 13,000 UZS per 100g
+
+function calcPrice(ctx) {
+  const p = ctx === 'add' ? 'a' : 'e';
+  const cny      = parseFloat(document.getElementById(`${p}-cny`)?.value)     || 0;
+  const weight   = parseFloat(document.getElementById(`${p}-weight`)?.value)  || 0;
+  const markup   = parseFloat(document.getElementById(`${p}-markup`)?.value)  || 0;
+  const insurance= parseFloat(document.getElementById(`${p}-insurance`)?.value)|| 0;
+  const resultEl = document.getElementById(`${p}-calc-result`);
+  if (!resultEl) return;
+
+  if (!cny && !weight) { resultEl.style.display = 'none'; return; }
+
+  const productPrice = Math.round(cny * CNY_RATE);
+  const cargoPrice   = Math.round((weight / 100) * CARGO_PER_100G);
+  const total        = productPrice + cargoPrice + markup + insurance;
+
+  document.getElementById(`${p}-cr-product`).textContent  = fmt(productPrice);
+  document.getElementById(`${p}-cr-cargo`).textContent    = fmt(cargoPrice);
+  document.getElementById(`${p}-cr-markup`).textContent   = fmt(markup);
+  document.getElementById(`${p}-cr-insurance`).textContent= fmt(insurance);
+  document.getElementById(`${p}-cr-total`).textContent    = fmt(total);
+  resultEl.style.display = 'block';
+}
+
+function applyCalcPrice(ctx) {
+  const p = ctx === 'add' ? 'a' : 'e';
+  const totalEl = document.getElementById(`${p}-cr-total`);
+  if (!totalEl) return;
+  // Parse back the number from formatted string
+  const totalText = totalEl.textContent.replace(/[^0-9]/g, '');
+  const priceInput = document.getElementById(`${p}-price`);
+  if (priceInput && totalText) {
+    priceInput.value = totalText;
+    toast('Цена применена ✅');
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   SIZE RANGE PARSER
+═══════════════════════════════════════════════ */
+// Maps letter sizes to numeric order for range generation
+const SIZE_ORDER = ['XXS','XS','S','M','L','XL','XXL','XXXL','3XL','4XL'];
+
+function parseSizeRange(input) {
+  input = input.trim();
+  if (!input) return [];
+
+  // Format: "30-44" or "36-42" — numeric range
+  const numRange = input.match(/^(\d+)\s*[-–]\s*(\d+)$/);
+  if (numRange) {
+    const from = parseInt(numRange[1]);
+    const to   = parseInt(numRange[2]);
+    if (from >= to) return [String(from), String(to)];
+    const sizes = [];
+    // Detect step: jeans are even (28,30,32...), shoes are integer (36,37,38...)
+    const step = (from % 2 === 0 && to % 2 === 0 && (to - from) >= 4) ? 2 : 1;
+    for (let i = from; i <= to; i += step) sizes.push(String(i));
+    return sizes;
+  }
+
+  // Format: "XS-XXL" — letter range
+  const letRange = input.match(/^([A-Z]+)\s*[-–]\s*([A-Z]+)$/i);
+  if (letRange) {
+    const from = letRange[1].toUpperCase();
+    const to   = letRange[2].toUpperCase();
+    const fromIdx = SIZE_ORDER.indexOf(from);
+    const toIdx   = SIZE_ORDER.indexOf(to);
+    if (fromIdx !== -1 && toIdx !== -1 && fromIdx <= toIdx) {
+      return SIZE_ORDER.slice(fromIdx, toIdx + 1);
+    }
+  }
+
+  // Format: "S,M,L,XL" or "S M L XL" — manual list
+  if (input.includes(',') || /\s/.test(input)) {
+    return input.split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
+  }
+
+  // Single value
+  return [input];
+}
+
+function previewSizes(ctx) {
+  const p = ctx === 'add' ? 'a' : 'e';
+  const inp = document.getElementById(`${p}-sizes-input`);
+  const prev = document.getElementById(`${p}-sizes-preview`);
+  if (!inp || !prev) return;
+  const parsed = parseSizeRange(inp.value);
+  if (parsed.length > 0) {
+    prev.textContent = `→ ${parsed.join(', ')} (${parsed.length} шт.)`;
+  } else {
+    prev.textContent = '';
+  }
+}
+
+function addSizesFromRange(ctx) {
+  const p = ctx === 'add' ? 'a' : 'e';
+  const inp = document.getElementById(`${p}-sizes-input`);
+  if (!inp || !inp.value.trim()) return;
+  const parsed = parseSizeRange(inp.value);
+  if (!parsed.length) { toast('Не удалось распознать размеры'); return; }
+  // Add to varState sizes (store separately from variations)
+  if (!varState[ctx].sizes) varState[ctx].sizes = [];
+  parsed.forEach(s => {
+    if (!varState[ctx].sizes.includes(s)) varState[ctx].sizes.push(s);
+  });
+  inp.value = '';
+  document.getElementById(`${p}-sizes-preview`).textContent = '';
+  renderSizeChips(ctx);
+  toast(`Добавлено ${parsed.length} размеров`);
+}
+
+function removeSizeChip(ctx, idx) {
+  if (varState[ctx].sizes) varState[ctx].sizes.splice(idx, 1);
+  renderSizeChips(ctx);
+}
+
+function renderSizeChips(ctx) {
+  const p = ctx === 'add' ? 'a' : 'e';
+  const el = document.getElementById(`${p}-sizes-chips`);
+  if (!el) return;
+  const sizes = varState[ctx].sizes || [];
+  el.innerHTML = sizes.map((s, i) => `
+    <div class="var-chip">
+      <span class="var-chip-label">${s}</span>
+      <button class="var-chip-del" onclick="removeSizeChip('${ctx}',${i})">×</button>
+    </div>`
+  ).join('');
+}
+
+// On app start — resume polling if payment was pending
+async function checkPendingOrder() {
+  const id = localStorage.getItem('pendingOrderId');
+  if (!id) return;
+  try {
+    const data = await apiFetch(`/orders/${id}/payment-status`);
+    if (data?.paid) {
+      const existing = orders.findIndex(o => o.id === Number(id));
+      if (existing === -1) orders.unshift(data.order);
+      else orders[existing] = data.order;
+      updateStats();
+      localStorage.removeItem('pendingOrderId');
+      toast('Заказ #' + id + ' оплачен ✅');
+    }
+  } catch(e) {
+    localStorage.removeItem('pendingOrderId');
+  }
+}
+
+/* ═══════════════════════════════════════════════
    TOAST
 ═══════════════════════════════════════════════ */
 function toast(msg) {
@@ -2751,31 +3502,12 @@ function toast(msg) {
 }
 
 /* ═══════════════════════════════════════════════
-   EXPAND / FULLSCREEN
+   EXPAND
 ═══════════════════════════════════════════════ */
 function toggleExpand() {
-  if (tg) {
-    if (tg.requestFullscreen) {
-      tg.requestFullscreen();
-    } else {
-      tg.expand();
-    }
-  }
-}
-
-// Fix layout when Telegram enters/exits fullscreen
-// Updates --safe-t so elements don't go under status bar
-function updateSafeArea() {
-  const st = tg?.isFullscreen
-    ? (tg?.safeAreaInsets?.top || 44)
-    : 0;
-  document.documentElement.style.setProperty('--safe-t', st + 'px');
-}
-
-if (tg) {
-  tg.onEvent('fullscreenChanged', updateSafeArea);
-  tg.onEvent('safeAreaChanged', updateSafeArea);
-  updateSafeArea();
+  // tg.expand() opens app to max height WITHOUT going fullscreen
+  // This matches how Sotish and other mini apps work
+  if (tg) tg.expand();
 }
 
 /* ═══════════════════════════════════════════════
@@ -2795,6 +3527,8 @@ if (window.visualViewport) {
 ═══════════════════════════════════════════════ */
 renderProfile();
 loadProducts();
+loadAdmins();
+checkPendingOrder();
 
 setTimeout(() => {
   const s = document.getElementById('splash');
