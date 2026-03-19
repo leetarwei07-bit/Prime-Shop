@@ -970,7 +970,9 @@ async function checkPendingOrder() {
       </div>
 
 
-      <button class="icon-btn" id="expand-btn" onclick="toggleExpand()">
+      <button class="icon-btn" id="expand-btn"
+        style="position:relative;z-index:100;pointer-events:all;cursor:pointer"
+        onclick="toggleExpand()">
         <svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
       </button>
       <div class="cat-wrap">
@@ -1631,14 +1633,18 @@ const SUPER_ADMIN = 'kimtarwei';
 const tg = window.Telegram?.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
 
-// Auto-expand on load
 window.addEventListener("load", () => {
   const tg = window.Telegram?.WebApp;
   if (tg) {
+    console.log("Telegram WebApp INIT | isExpanded:", tg.isExpanded);
     tg.ready();
     tg.expand();
+  } else {
+    console.error("Telegram not detected on load");
   }
 });
+
+
 
 const TG_USER = tg?.initDataUnsafe?.user || null;
 // Admin list loaded from backend DB — persists across restarts
@@ -3622,14 +3628,21 @@ function toast(msg) {
    EXPAND
 ═══════════════════════════════════════════════ */
 function toggleExpand() {
+  console.log("CLICK");
   const tg = window.Telegram?.WebApp;
   if (!tg) {
-    console.warn("Telegram WebApp API not available");
+    console.error("Telegram WebApp NOT FOUND");
+    alert("No Telegram WebApp");
     return;
   }
-  tg.ready();
-  if (!tg.isExpanded) {
+  console.log("isExpanded:", tg.isExpanded, "| version:", tg.version);
+  try {
+    tg.ready();
     tg.expand();
+    console.log("EXPAND CALLED");
+  } catch(e) {
+    console.error("EXPAND ERROR:", e);
+    alert("Expand error: " + e.message);
   }
 }
 
