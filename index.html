@@ -971,8 +971,9 @@ async function checkPendingOrder() {
 
 
       <button class="icon-btn" id="expand-btn"
-        style="position:relative;z-index:100;pointer-events:all;cursor:pointer"
-        onclick="toggleExpand()">
+        style="position:relative;z-index:100;pointer-events:all;cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,.1)"
+        onclick="toggleExpand()"
+        ontouchend="toggleExpand();event.preventDefault()">
         <svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
       </button>
       <div class="cat-wrap">
@@ -3628,21 +3629,10 @@ function toast(msg) {
    EXPAND
 ═══════════════════════════════════════════════ */
 function toggleExpand() {
-  console.log("CLICK");
   const tg = window.Telegram?.WebApp;
-  if (!tg) {
-    console.error("Telegram WebApp NOT FOUND");
-    alert("No Telegram WebApp");
-    return;
-  }
-  console.log("isExpanded:", tg.isExpanded, "| version:", tg.version);
-  try {
+  if (tg) {
     tg.ready();
     tg.expand();
-    console.log("EXPAND CALLED");
-  } catch(e) {
-    console.error("EXPAND ERROR:", e);
-    alert("Expand error: " + e.message);
   }
 }
 
