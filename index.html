@@ -29,18 +29,16 @@
   --spring:   cubic-bezier(.34,1.56,.64,1);
 }
 * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent }
-html {
+html, body {
   height:100%;
   overflow:hidden;
+  background:var(--bg);
 }
 body {
-  background:var(--bg);
   color:var(--text);
   font-family:'Inter',sans-serif;
-  height:100%;
-  overflow:hidden;
   width:100%;
-  position:fixed;
+  /* position:fixed removed — caused height:0 on some iOS */
   touch-action:manipulation;
   overscroll-behavior:none;
   -webkit-font-smoothing:antialiased;
@@ -75,7 +73,7 @@ body {
 ═══════════════════════════════════════════════ */
 .page {
   display:none;flex-direction:column;
-  height:calc(100% - var(--nav-h));
+  height:calc(100dvh - var(--nav-h));
   overflow:hidden;
 }
 .page.active {
