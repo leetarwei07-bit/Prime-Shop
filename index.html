@@ -1228,7 +1228,7 @@ html,body {
 /* ═══════════════════════════════════════════════
    CONFIG & TELEGRAM
 ═══════════════════════════════════════════════ */
-const API = 'https://prime-shop-production.up.railway.app';
+const API = 'https://backendprime-production-1bea.up.railway.app';
 const SUPER_ADMIN = 'kimtarwei';
 
 const tg = window.Telegram?.WebApp;
@@ -1904,11 +1904,17 @@ function updateStats() {
    EXPAND
 ═══════════════════════════════════════════════ */
 function toggleExpand() {
-  if (tg) { tg.expand(); }
-  try {
+  if (tg) {
+    // New Telegram API (8.0+)
+    if (tg.requestFullscreen) {
+      tg.requestFullscreen();
+    } else {
+      tg.expand();
+    }
+  } else {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
     else document.exitFullscreen?.();
-  } catch(e) {}
+  }
   toast('↕');
 }
 
