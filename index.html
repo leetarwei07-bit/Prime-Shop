@@ -76,7 +76,7 @@ html,body {
   display:flex;
   animation:pageIn .24s var(--easing) both;
 }
-/* Sticky headers */
+/* Sticky headers — no top padding changes on expand */
 @keyframes pageIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
 .scroll {
   overflow-y:auto;flex:1;
@@ -90,16 +90,21 @@ html,body {
    BOTTOM NAV
 ═══════════════════════════════════════════════ */
 .bottom-nav {
-  position:fixed;bottom:0;left:0;right:0;
+  position:fixed;
+  bottom:0;left:0;right:0;
   height:calc(var(--nav-h) + var(--safe-b));
-  background:rgba(8,8,8,.95);
+  background:rgba(8,8,8,.98);
   backdrop-filter:blur(24px);
   -webkit-backdrop-filter:blur(24px);
   border-top:1px solid var(--border);
   display:flex;align-items:flex-start;
   padding-top:4px;
-  z-index:600;
+  z-index:1000;
+  /* Never move with keyboard or scroll */
   transform:translateZ(0);
+  will-change:transform;
+  /* Prevent any JS from moving it */
+  bottom:0 !important;
 }
 .nav-btn {
   flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;
@@ -174,6 +179,58 @@ html,body {
    PRODUCT GRID
 ═══════════════════════════════════════════════ */
 .prod-grid { display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px 12px 0 }
+
+/* ── SKELETON LOADER ── */
+.skeleton-grid {
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px 12px 0;
+}
+.skeleton-card {
+  background:var(--s1);border:1px solid var(--border);border-radius:20px;
+  overflow:hidden;
+  animation:skeletonFadeIn .3s ease both;
+}
+@keyframes skeletonFadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+.skeleton-img {
+  width:100%;aspect-ratio:1;
+  background:var(--s2);
+  position:relative;overflow:hidden;
+}
+.skeleton-body { padding:10px 11px 14px;display:flex;flex-direction:column;gap:7px }
+.skeleton-line {
+  height:10px;border-radius:6px;background:var(--s2);
+  position:relative;overflow:hidden;
+}
+.skeleton-line.wide  { width:85% }
+.skeleton-line.mid   { width:60% }
+.skeleton-line.short { width:40% }
+/* shimmer sweep */
+.skeleton-img::after,
+.skeleton-line::after {
+  content:'';
+  position:absolute;inset:0;
+  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.05) 50%,transparent 100%);
+  animation:shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer {
+  0%   { transform:translateX(-100%) }
+  100% { transform:translateX(100%) }
+}
+/* stagger skeleton cards */
+.skeleton-card:nth-child(1) { animation-delay:.0s }
+.skeleton-card:nth-child(2) { animation-delay:.05s }
+.skeleton-card:nth-child(3) { animation-delay:.1s }
+.skeleton-card:nth-child(4) { animation-delay:.15s }
+.skeleton-card:nth-child(5) { animation-delay:.2s }
+.skeleton-card:nth-child(6) { animation-delay:.25s }
+
+/* ── SECTION LABEL ── */
+.home-section-label {
+  padding:16px 16px 8px;
+  font-size:10px;font-weight:600;color:var(--text3);
+  text-transform:uppercase;letter-spacing:1px;
+  animation:pageIn .3s ease both;
+}
+
 .prod-card {
   background:var(--s1);border:1px solid var(--border);border-radius:20px;
   overflow:hidden;cursor:pointer;
@@ -930,10 +987,11 @@ async function checkPendingOrder() {
     </div>
   </div>
   <div class="scroll">
-    <div id="rec-section" style="display:none;padding:12px 12px 0">
-      <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Рекомендуем для вас</div>
-      <div id="rec-grid" class="prod-grid" style="padding:0 0 16px"></div>
+    <div id="rec-section" style="display:none">
+      <div class="home-section-label">Рекомендуем для вас</div>
+      <div id="rec-grid" class="prod-grid" style="padding:0 12px 16px"></div>
     </div>
+    <div id="home-section-label-all" class="home-section-label" style="display:none">Все товары</div>
     <div id="home-grid" class="prod-grid" style="padding-bottom:8px"></div>
   </div>
 </div>
@@ -1711,9 +1769,13 @@ function navigate(id, btn) {
   if (id === 'profile') renderProfile();
   if (id === 'orders') loadMyOrders();
   if (id === 'wishlist') { document.getElementById('wish-input').value=''; filterWish(); }
+  if (id === 'home') {
+    // Refresh recs + catalog when returning to home
+    renderHome();
+    loadRecommendations();
+  }
   if (id === 'admin') {
     pg.setAttribute('data-ok','1');
-    // Show superadmin-only tabs
     ['tab-admins','tab-log'].forEach(tabId => {
       const t = document.getElementById(tabId);
       if (t) t.style.display = isSuperAdmin() ? '' : 'none';
@@ -1769,10 +1831,11 @@ function statusPill(s) {
 /* ═══════════════════════════════════════════════
    PRODUCT CARDS
 ═══════════════════════════════════════════════ */
-function cardHTML(p) {
+function cardHTML(p, idx = 0) {
   const disc = p.old ? Math.round((1 - p.price/p.old)*100) : 0;
   const photo = p.photos && p.photos.length ? p.photos[0] : null;
-  return `<div class="prod-card" onclick="openProduct(${p.id})" style="animation-delay:${Math.random()*0.15}s">
+  const delay = Math.min(idx * 0.04, 0.32); // stagger up to 320ms
+  return `<div class="prod-card" onclick="openProduct(${p.id})" style="animation-delay:${delay}s">
     <div class="prod-img">
       ${photo ? `<img src="${photo}" loading="lazy" alt="${p.name}"/>` : `<span>${p.emoji||'📦'}</span>`}
       <button class="prod-heart ${wishlist.has(p.id)?'liked':''}" onclick="toggleWish(event,${p.id})">
@@ -1796,22 +1859,56 @@ function cardHTML(p) {
   </div>`;
 }
 
-function renderGrid(elId, list) {
+function skeletonHTML(count = 6) {
+  return Array.from({length: count}, (_,i) => `
+    <div class="skeleton-card" style="animation-delay:${i*0.05}s">
+      <div class="skeleton-img"></div>
+      <div class="skeleton-body">
+        <div class="skeleton-line wide"></div>
+        <div class="skeleton-line mid"></div>
+        <div class="skeleton-line short"></div>
+      </div>
+    </div>`
+  ).join('');
+}
+
+function renderGrid(elId, list, animate = true) {
   const el = document.getElementById(elId);
   if (!el) return;
   if (!list || !list.length) {
     el.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-h">Ничего не найдено</div><div class="empty-p">Попробуйте другой запрос</div></div>`;
     return;
   }
-  el.innerHTML = list.map(p => cardHTML(p)).join('');
+  if (!animate) {
+    el.innerHTML = list.map(p => cardHTML(p)).join('');
+    return;
+  }
+  // Show skeleton first then swap in real cards
+  el.innerHTML = skeletonHTML(list.length);
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      if (!el.closest('.page.active') && elId === 'home-grid') {
+        // Page not visible yet — just set content silently
+        el.innerHTML = list.map((p,i) => cardHTML(p, i)).join('');
+        return;
+      }
+      el.innerHTML = list.map((p,i) => cardHTML(p, i)).join('');
+    }, 320); // skeleton visible for 320ms minimum
+  });
 }
 
-function renderHome() {
+function renderHome(instant = false) {
   const q = (document.getElementById('home-search-input')?.value||'').trim().toLowerCase();
   let list = [...PRODUCTS];
   if (homeCat !== 'Все') list = list.filter(p => p.cat === homeCat);
   if (q) list = list.filter(p => p.name.toLowerCase().includes(q) || p.cat.toLowerCase().includes(q));
-  renderGrid('home-grid', list);
+
+  // Show/hide section label
+  const allLabel = document.getElementById('home-section-label-all');
+  const recSec   = document.getElementById('rec-section');
+  if (allLabel) allLabel.style.display = (recSec && recSec.style.display !== 'none') ? 'block' : 'none';
+
+  renderGrid('home-grid', list, !instant);
 }
 
 /* ═══════════════════════════════════════════════
@@ -1947,6 +2044,10 @@ function openProduct(id) {
 function closeProduct() {
   document.getElementById('page-product').classList.remove('open');
   document.getElementById('detail-action').classList.remove('open');
+  // Refresh recommendations based on what was just viewed
+  if (currentProduct) {
+    loadRecommendations(currentProduct);
+  }
   currentProduct = null;
 }
 
@@ -2080,7 +2181,6 @@ function openCheckout() {
   const photo2 = tgPhoto();
   av.innerHTML = photo2 ? `<img src="${photo2}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>` : '🧑';
 
-  document.querySelector('.bottom-nav').style.display = 'none';
   openOverlay('checkout-overlay');
 }
 
@@ -2157,7 +2257,6 @@ async function checkoutPay(provider) {
       // 4. Show waiting state
       closeOverlay('checkout-overlay');
       closeProduct();
-      document.querySelector('.bottom-nav').style.display = '';
       showPaymentWaiting(order, provider);
     } else {
       throw new Error('No payment URL');
@@ -2228,7 +2327,6 @@ function openOrderSheet() {
   document.getElementById('rec-other').style.display = 'none';
   document.getElementById('other-wrap').classList.remove('visible');
   document.getElementById('add-rec-btn').style.display = 'flex';
-  document.querySelector('.bottom-nav').style.display = 'none';
   openOverlay('order-overlay');
 }
 
@@ -2255,14 +2353,12 @@ function updateOtherUser() {
 document.getElementById('order-overlay').addEventListener('click', e => {
   if (e.target === document.getElementById('order-overlay')) {
     document.getElementById('order-overlay').classList.remove('open');
-    document.querySelector('.bottom-nav').style.display = '';
-  }
+    }
 });
 document.getElementById('checkout-overlay').addEventListener('click', e => {
   if (e.target === document.getElementById('checkout-overlay')) {
     document.getElementById('checkout-overlay').classList.remove('open');
-    document.querySelector('.bottom-nav').style.display = '';
-  }
+    }
 });
 
 async function placeOrder() {
@@ -2294,7 +2390,6 @@ async function placeOrder() {
     });
     orders.unshift(order);
     document.getElementById('order-overlay').classList.remove('open');
-    document.querySelector('.bottom-nav').style.display = '';
     cart = []; updateStats();
     // success animation
     const s = document.getElementById('order-success');
@@ -3217,19 +3312,29 @@ function getRecommendations(currentProduct, allProducts, limit = 8) {
 }
 
 // Показывает блок рекомендаций на главной странице
-// Вызывается после загрузки товаров
-function loadRecommendations() {
+// lastViewed — последний просмотренный товар (передаётся из closeProduct)
+function loadRecommendations(lastViewed = null) {
   const sec  = document.getElementById('rec-section');
   const grid = document.getElementById('rec-grid');
   if (!sec || !grid || !PRODUCTS.length) return;
-  // Показываем только если есть хотя бы 3 товара помимо каталога
   if (PRODUCTS.length < 4) return;
-  // Берём самый популярный товар как "якорь" для рекомендаций на главной
-  const anchor = [...PRODUCTS].sort((a, b) => (b.sold || 0) - (a.sold || 0))[0];
+
+  // Anchor: last viewed product > most popular
+  const anchor = lastViewed
+    || [...PRODUCTS].sort((a, b) => (b.sold || 0) - (a.sold || 0))[0];
+
   const recs = getRecommendations(anchor, PRODUCTS, 6);
-  if (!recs.length) return;
-  grid.innerHTML = recs.map(p => cardHTML(p)).join('');
+  if (!recs.length) { sec.style.display = 'none'; return; }
+
+  // Show skeleton in rec grid then swap
   sec.style.display = 'block';
+  const allLabel = document.getElementById('home-section-label-all');
+  if (allLabel) allLabel.style.display = 'block';
+
+  grid.innerHTML = skeletonHTML(6);
+  setTimeout(() => {
+    grid.innerHTML = recs.map((p,i) => cardHTML(p,i)).join('');
+  }, 300);
 }
 
 // Показывает рекомендации на странице товара
@@ -3508,20 +3613,16 @@ function toast(msg) {
    EXPAND
 ═══════════════════════════════════════════════ */
 function toggleExpand() {
-  // tg.expand() opens app to max height WITHOUT going fullscreen
-  // This matches how Sotish and other mini apps work
   if (tg) tg.expand();
 }
 
 /* ═══════════════════════════════════════════════
    KEYBOARD / NAV FIX
 ═══════════════════════════════════════════════ */
+// Keyboard open/close — keep nav pinned, just shrink page scroll area
 if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', () => {
-    const nav = document.querySelector('.bottom-nav');
-    if (!nav) return;
-    const offset = Math.max(0, window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop);
-    nav.style.bottom = offset ? offset + 'px' : '';
+    // Do nothing — nav stays fixed via CSS, no JS movement
   });
 }
 
