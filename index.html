@@ -79,7 +79,7 @@ html,body {
 }
 /* When fullscreen - account for top notch */
 .home-top, .search-top, .wish-top, .orders-top, .admin-top {
-  padding-top:max(12px, calc(var(--safe-t) + 8px));
+  padding-top:max(12px, calc(var(--safe-t, 0px) + 8px));
 }
 @keyframes pageIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
 .scroll {
@@ -739,6 +739,9 @@ html,body {
           onkeydown="if(event.key==='Enter')this.blur()"/>
       </div>
 
+      <button class="icon-btn" id="expand-btn" onclick="toggleExpand()">
+        <svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+      </button>
       <div class="cat-wrap">
         <button class="icon-btn" id="cat-btn" onclick="toggleCat()">
           <svg viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="10" y2="18"/></svg>
@@ -1231,7 +1234,7 @@ html,body {
 /* ═══════════════════════════════════════════════
    CONFIG & TELEGRAM
 ═══════════════════════════════════════════════ */
-const API = 'https://backendprime-production-1bea.up.railway.app';
+const API = 'https://prime-shop-production.up.railway.app';
 const SUPER_ADMIN = 'kimtarwei';
 
 const tg = window.Telegram?.WebApp;
@@ -2751,6 +2754,34 @@ function toast(msg) {
   t._t = setTimeout(() => {
     t.style.opacity = '0'; t.style.transform = 'translateX(-50%) translateY(8px)';
   }, 2500);
+}
+
+/* ═══════════════════════════════════════════════
+   EXPAND / FULLSCREEN
+═══════════════════════════════════════════════ */
+function toggleExpand() {
+  if (tg) {
+    if (tg.requestFullscreen) {
+      tg.requestFullscreen();
+    } else {
+      tg.expand();
+    }
+  }
+}
+
+// Fix layout when Telegram enters/exits fullscreen
+// Updates --safe-t so elements don't go under status bar
+function updateSafeArea() {
+  const st = tg?.isFullscreen
+    ? (tg?.safeAreaInsets?.top || 44)
+    : 0;
+  document.documentElement.style.setProperty('--safe-t', st + 'px');
+}
+
+if (tg) {
+  tg.onEvent('fullscreenChanged', updateSafeArea);
+  tg.onEvent('safeAreaChanged', updateSafeArea);
+  updateSafeArea();
 }
 
 /* ═══════════════════════════════════════════════
