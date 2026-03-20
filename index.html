@@ -200,14 +200,7 @@ body {
    PRODUCT GRID
 ═══════════════════════════════════════════════ */
 .prod-grid { display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px 12px 0;transition:grid-template-columns .25s var(--easing) }
-.prod-grid.expanded { grid-template-columns:1fr !important;gap:10px }
-.prod-grid.expanded .prod-card { display:flex !important;flex-direction:row !important;border-radius:16px }
-.prod-grid.expanded .prod-img { width:110px !important;min-width:110px;height:110px !important;flex-shrink:0 !important;aspect-ratio:unset !important;border-radius:16px 0 0 16px !important;align-self:stretch }
-.prod-grid.expanded .prod-img img { position:relative !important;border-radius:0 }
-.prod-grid.expanded .prod-info { flex:1;padding:14px !important;display:flex;flex-direction:column;justify-content:center }
-.prod-grid.expanded .prod-name { font-size:13px;-webkit-line-clamp:3 }
-.prod-grid.expanded .prod-price { font-size:13px }
-.prod-grid.expanded .prod-heart { top:6px !important;right:6px !important }
+
 
 /* ── SKELETON LOADER ── */
 .skeleton-grid {
@@ -1034,7 +1027,7 @@ async function checkPendingOrder() {
           <input id="home-search-input" type="text" placeholder="Поиск товаров..."
             onkeydown="if(event.key==='Enter'){renderHome();this.blur();}"/>
         </div>
-        <button class="icon-btn" id="expand-btn" onclick="toggleExpand()" title="Развернуть">
+        <button class="icon-btn" id="expand-btn" onclick="toggleFullscreen()" title="Полный экран">
           <svg id="expand-icon" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
         </button>
         <div class="cat-wrap">
@@ -1872,7 +1865,7 @@ function statusPill(s) {
 function cardHTML(p, idx = 0) {
   const disc = p.old ? Math.round((1 - p.price/p.old)*100) : 0;
   const photo = p.photos && p.photos.length ? p.photos[0] : null;
-  const delay = Math.min(idx * 0.04, 0.32); // stagger up to 320ms
+  const delay = Math.min(idx * 0.04, 0.32);
   return `<div class="prod-card" onclick="openProduct(${p.id})" style="animation-delay:${delay}s">
     <div class="prod-img">
       ${photo ? `<img src="${photo}" loading="lazy" alt="${p.name}"/>` : `<span>${p.emoji||'📦'}</span>`}
@@ -1913,54 +1906,65 @@ function skeletonHTML(count = 6) {
 function renderGrid(elId, list, animate = true) {
   const el = document.getElementById(elId);
   if (!el) return;
-  // Preserve expanded state across re-renders
-  const wasExpanded = gridExpanded && el.classList.contains('prod-grid');
   if (!list || !list.length) {
     el.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-h">Ничего не найдено</div><div class="empty-p">Попробуйте другой запрос</div></div>`;
-    if (wasExpanded) el.classList.add('expanded');
     return;
   }
   if (!animate) {
     el.innerHTML = list.map(p => cardHTML(p)).join('');
-    if (wasExpanded) el.classList.add('expanded');
     return;
   }
-  // Show skeleton first then swap in real cards
   el.innerHTML = skeletonHTML(list.length);
-  if (wasExpanded) el.classList.add('expanded');
   requestAnimationFrame(() => {
     setTimeout(() => {
-      if (!el.closest('.page.active') && elId === 'home-grid') {
-        el.innerHTML = list.map((p,i) => cardHTML(p, i)).join('');
-      } else {
-        el.innerHTML = list.map((p,i) => cardHTML(p, i)).join('');
-      }
-      if (wasExpanded) el.classList.add('expanded');
+      el.innerHTML = list.map((p,i) => cardHTML(p, i)).join('');
     }, 320);
   });
 }
 
-let gridExpanded = false;
 let lastViewedProduct = null; // запоминаем последний просмотренный товар
 
-function toggleExpand() {
-  gridExpanded = !gridExpanded;
-  const grids = document.querySelectorAll('.prod-grid');
-  grids.forEach(g => g.classList.toggle('expanded', gridExpanded));
+function toggleFullscreen() {
   const icon = document.getElementById('expand-icon');
-  const btn = document.getElementById('expand-btn');
-  if (gridExpanded) {
-    // collapse icon
-    icon.innerHTML = '<path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>';
-    btn.classList.add('filtered');
+  const btn  = document.getElementById('expand-btn');
+
+  if (tg) {
+    // Telegram Mini App fullscreen API
+    if (tg.isFullscreen) {
+      tg.exitFullscreen();
+    } else {
+      tg.requestFullscreen();
+    }
+    // Обновляем иконку по событию от Telegram
   } else {
-    // expand icon
-    icon.innerHTML = '<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>';
-    btn.classList.remove('filtered');
+    // Фоллбек для браузера
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen();
+    }
   }
-  if (window.Telegram?.WebApp?.HapticFeedback) {
-    window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
-  }
+
+  if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+}
+
+// Слушаем события fullscreen от Telegram
+if (tg) {
+  tg.onEvent('fullscreenChanged', () => {
+    const icon = document.getElementById('expand-icon');
+    const btn  = document.getElementById('expand-btn');
+    if (!icon || !btn) return;
+    if (tg.isFullscreen) {
+      icon.innerHTML = '<path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>';
+      btn.classList.add('filtered');
+    } else {
+      icon.innerHTML = '<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>';
+      btn.classList.remove('filtered');
+    }
+  });
+  tg.onEvent('fullscreenFailed', () => {
+    toast('Полный экран недоступен в этой версии Telegram');
+  });
 }
 
 function renderHome(instant = false) {
@@ -3436,10 +3440,8 @@ function loadRecommendations(lastViewed = null) {
   if (allLabel) allLabel.style.display = 'block';
 
   grid.innerHTML = skeletonHTML(6);
-  if (gridExpanded) grid.classList.add('expanded');
   setTimeout(() => {
     grid.innerHTML = recs.map((p,i) => cardHTML(p,i)).join('');
-    if (gridExpanded) grid.classList.add('expanded');
   }, 300);
 }
 
