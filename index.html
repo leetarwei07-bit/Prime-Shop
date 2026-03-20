@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover,interactive-widget=resizes-content"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover,interactive-widget=overlays-content"/>
 <title>PRIME</title>
 <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -110,6 +110,9 @@ body {
   z-index:1000;
   transform:translate3d(0,0,0);
   will-change:transform;
+  /* Keyboard-proof: ignore visual viewport resize */
+  bottom: env(safe-area-inset-bottom, 0px);
+  bottom: 0;
 }
 .nav-btn {
   flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;
@@ -127,14 +130,29 @@ body {
 /* ═══════════════════════════════════════════════
    HOME
 ═══════════════════════════════════════════════ */
-.home-top {
-  display:flex;flex-direction:column;gap:10px;
-  padding:14px 16px 12px;
-  padding-top:calc(14px + env(safe-area-inset-top, 0px));
-  background:var(--bg);
+
+/* ── LOGO HEADER (fixed ceiling) ── */
+.home-logo-bar {
+  position:fixed;
+  top:0;left:0;right:0;
+  z-index:500;
+  background:rgba(8,8,8,.98);
+  backdrop-filter:blur(24px);
+  -webkit-backdrop-filter:blur(24px);
+  padding-top:env(safe-area-inset-top, 0px);
   border-bottom:1px solid var(--border);
+  display:flex;align-items:center;
+  padding-left:16px;padding-right:16px;
+  height:calc(44px + env(safe-area-inset-top, 0px));
 }
 .home-logo { font-family:'Unbounded',sans-serif;font-size:13px;font-weight:700;letter-spacing:6px }
+
+/* ── SEARCH BAR (inside scroll, sits below logo bar) ── */
+.home-top {
+  display:flex;flex-direction:column;gap:10px;
+  padding:12px 16px 12px;
+  background:var(--bg);
+}
 .home-row { display:flex;align-items:center;gap:8px }
 .home-search {
   flex:1;display:flex;align-items:center;gap:8px;
@@ -964,6 +982,11 @@ async function checkPendingOrder() {
   <div class="splash-bar"><div class="splash-bar-fill"></div></div>
 </div>
 
+<!-- HOME LOGO BAR (fixed ceiling) -->
+<div class="home-logo-bar" id="home-logo-bar">
+  <div class="home-logo">PRIME</div>
+</div>
+
 <!-- HOME -->
 <div class="page active" id="page-home">
   <!-- Pull-to-refresh indicator -->
@@ -980,10 +1003,9 @@ async function checkPendingOrder() {
       transition:opacity .2s;
     "></div>
   </div>
-  <div class="scroll" id="home-scroll">
-    <!-- Header scrolls with content -->
+  <div class="scroll" id="home-scroll" style="padding-top:calc(44px + env(safe-area-inset-top, 0px))">
+    <!-- Search bar sits just below fixed logo bar -->
     <div class="home-top" id="home-top-inner">
-      <div class="home-logo">PRIME</div>
       <div class="home-row">
         <div class="home-search">
           <svg viewBox="0 0 24 24" style="cursor:pointer" onclick="renderHome()"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
@@ -1748,6 +1770,9 @@ function navigate(id, btn) {
   const pg = document.getElementById('page-' + id);
   if (pg) pg.classList.add('active');
   if (btn) btn.classList.add('active');
+  // Show logo bar only on home page
+  const logoBar = document.getElementById('home-logo-bar');
+  if (logoBar) logoBar.style.display = (id === 'home') ? '' : 'none';
   if (id === 'profile') renderProfile();
   if (id === 'orders') loadMyOrders();
   if (id === 'wishlist') { document.getElementById('wish-input').value=''; filterWish(); }
@@ -3740,15 +3765,7 @@ function toast(msg) {
 /* ═══════════════════════════════════════════════
    INIT
 ═══════════════════════════════════════════════ */
-// Hide navbar when keyboard opens, show when closes
-if (window.visualViewport) {
-  const nav = document.querySelector('.bottom-nav');
-  window.visualViewport.addEventListener('resize', () => {
-    if (!nav) return;
-    const keyboardOpen = window.visualViewport.height < window.innerHeight * 0.75;
-    nav.style.display = keyboardOpen ? 'none' : '';
-  }, {passive:true});
-}
+// Navbar is locked via CSS position:fixed — no JS keyboard handler needed
 
 renderProfile();
 loadProducts();
