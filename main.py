@@ -27,7 +27,6 @@ PAYME_KEY         = os.environ.get("PAYME_KEY", "")         # Payme merchant key
 PAYME_ID          = os.environ.get("PAYME_ID", "")          # Payme merchant ID
 CLICK_SECRET      = os.environ.get("CLICK_SECRET", "")      # Click secret key
 CLICK_SERVICE_ID  = os.environ.get("CLICK_SERVICE_ID", "")  # Click service ID
-CLICK_MERCHANT_ID = os.environ.get("CLICK_MERCHANT_ID", CLICK_SERVICE_ID)  # Click merchant ID (часто совпадает)
 NOTIFY_CHAT_ID    = os.environ.get("NOTIFY_CHAT_ID", "")    # Telegram chat ID for notifications
 
 # Admin roles
@@ -692,9 +691,7 @@ def update_product(pid: int, body: ProductUpdate, x_init_data: Optional[str] = H
     if body.emoji        is not None: add("emoji", body.emoji)
     if body.photos       is not None: add("photos", json.dumps(body.photos, ensure_ascii=False))
     if body.price        is not None: add("price", body.price)
-    if body.old_price    is not None:
-        add("old_price", body.old_price if body.old_price else None)
-        add("is_sale", 1 if body.old_price else 0)
+    if body.old_price    is not None: add("old_price", body.old_price); add("is_sale", 1)
     if body.sizes        is not None: add("sizes", json.dumps(body.sizes, ensure_ascii=False))
     if body.colors       is not None: add("colors", json.dumps(body.colors, ensure_ascii=False))
     if body.variations   is not None: add("variations", json.dumps(body.variations, ensure_ascii=False))
@@ -827,19 +824,10 @@ def my_orders(x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data)
     if not user: return []
     uid = str(user.get("id",""))
-    uname = (user.get("username") or "").lower()
-    is_super = uname == SUPER_ADMIN
     conn = get_db()
-    if is_super:
-        # Суперадмин видит все свои заказы
-        rows = conn.execute(
-            "SELECT * FROM orders WHERE user_id=? ORDER BY created_at DESC", (uid,)
-        ).fetchall()
-    else:
-        # Обычные пользователи видят только оплаченные
-        rows = conn.execute(
-            "SELECT * FROM orders WHERE user_id=? AND payment_status='paid' ORDER BY created_at DESC", (uid,)
-        ).fetchall()
+    rows = conn.execute(
+        "SELECT * FROM orders WHERE user_id=? ORDER BY created_at DESC", (uid,)
+    ).fetchall()
     conn.close()
     return [row_to_order(r) for r in rows]
 
@@ -907,23 +895,6 @@ def update_order_status(oid: int, body: OrderStatusUpdate, x_init_data: Optional
     log_action(user["username"], "order_status", str(oid), body.status)
     return row_to_order(row)
 
-@app.delete("/orders/{oid}", status_code=204)
-def delete_order(oid: int, x_init_data: Optional[str] = Header(None)):
-    """Delete an order. Only superadmin can do this."""
-    user = require_admin(x_init_data, "orders")
-    if user.get("role") != "superadmin":
-        raise HTTPException(403, "Only superadmin can delete orders")
-    conn = get_db()
-    row = conn.execute("SELECT id FROM orders WHERE id=?", (oid,)).fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(404, "Order not found")
-    conn.execute("DELETE FROM orders WHERE id=?", (oid,))
-    conn.execute("DELETE FROM payments WHERE order_id=?", (oid,))
-    conn.commit()
-    conn.close()
-    log_action(user["username"], "order_delete", str(oid))
-
 # ═══════════════════════════════════════════════
 # ROUTES — ADMIN MANAGEMENT
 # ═══════════════════════════════════════════════
@@ -990,9 +961,9 @@ def admin_log(x_init_data: Optional[str] = Header(None), limit: int = 50):
 def admin_stats(x_init_data: Optional[str] = Header(None)):
     require_admin(x_init_data, "orders")
     conn = get_db()
-    total_orders  = conn.execute("SELECT COUNT(*) FROM orders WHERE payment_status='paid'").fetchone()[0]
-    total_revenue = conn.execute("SELECT COALESCE(SUM(total),0) FROM orders WHERE payment_status='paid'").fetchone()[0]
-    active_orders = conn.execute("SELECT COUNT(*) FROM orders WHERE status='active' AND payment_status='paid'").fetchone()[0]
+    total_orders  = conn.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
+    total_revenue = conn.execute("SELECT COALESCE(SUM(total),0) FROM orders").fetchone()[0]
+    active_orders = conn.execute("SELECT COUNT(*) FROM orders WHERE status='active'").fetchone()[0]
     total_products= conn.execute("SELECT COUNT(*) FROM products").fetchone()[0]
     paid_orders   = conn.execute("SELECT COUNT(*) FROM orders WHERE payment_status='paid'").fetchone()[0]
     conn.close()
@@ -1086,11 +1057,9 @@ async def payme_webhook(request: Request):
         conn.close()
         if not pay: return err(-31003, "Transaction not found")
         state_map = {"pending":1,"paid":2,"cancelled":-1}
-        perform_time = pay["created_at"]*1000 if pay["status"] == "paid" else 0
-        cancel_time  = pay["created_at"]*1000 if pay["status"] == "cancelled" else 0
         return ok({"create_time": pay["created_at"]*1000,
-                   "perform_time": perform_time,
-                   "cancel_time": cancel_time,
+                   "perform_time": pay["created_at"]*1000,
+                   "cancel_time": 0,
                    "transaction": trans_id,
                    "state": state_map.get(pay["status"],1),
                    "reason": None})
@@ -1181,7 +1150,7 @@ def click_payment_url(order_id: int, x_init_data: Optional[str] = Header(None)):
     url = (
         f"https://my.click.uz/services/pay"
         f"?service_id={CLICK_SERVICE_ID}"
-        f"&merchant_id={CLICK_MERCHANT_ID}"
+        f"&merchant_id={CLICK_SERVICE_ID}"
         f"&amount={order['total']}"
         f"&transaction_param={order_id}"
         f"&return_url=https://t.me/"
