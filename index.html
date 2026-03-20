@@ -3443,11 +3443,30 @@ function buildBrandMap() {
   return map;
 }
 
-// Главная функция рекомендаций
+// Возвращает все товары с оценкой релевантности (0-100)
+// Используется для сортировки основной ленты
+function scoreProducts(anchor, allProducts) {
+  const pool = allProducts.filter(p => p.id !== anchor.id);
+  const brandMap = buildBrandMap();
+  const relatedBrands = brandMap[anchor.brand] || [];
+
+  return pool.map(p => {
+    let score = 0;
+    if (p.brand && p.brand === anchor.brand)           score += 40; // тот же бренд
+    if (p.brand && relatedBrands.includes(p.brand))    score += 25; // связанный бренд
+    if (p.style && p.style === anchor.style)           score += 20; // тот же стиль
+    if (p.cat === anchor.cat)                          score += 10; // та же категория
+    if (p.sold > 0)                                    score += Math.min(5, p.sold / 10); // популярность
+    return { product: p, score };
+  }).sort((a, b) => b.score - a.score);
+}
+
+// Главная функция рекомендаций — только высокорелевантные товары
 // currentProduct — товар который сейчас смотрит пользователь
 // allProducts    — весь каталог
 // limit          — сколько товаров вернуть
-function getRecommendations(currentProduct, allProducts, limit = 8) {
+// minScore       — минимальный порог релевантности (0 = все, 20 = только близкие)
+function getRecommendations(currentProduct, allProducts, limit = 8, minScore = 0) {
   const pool = allProducts.filter(p => p.id !== currentProduct.id);
   const brandMap = buildBrandMap();
 
@@ -3534,19 +3553,40 @@ function loadRecommendations(lastViewed = null) {
   if (!sec || !grid || !PRODUCTS.length) return;
   if (PRODUCTS.length < 4) return;
 
-  // Anchor: last viewed product > most popular
   const anchor = lastViewed
     || [...PRODUCTS].sort((a, b) => (b.sold || 0) - (a.sold || 0))[0];
 
-  const recs = getRecommendations(anchor, PRODUCTS, 6);
+  // «Для вас» — топ 8 самых подходящих по score
+  const scored = scoreProducts(anchor, PRODUCTS);
+  const recs = scored.slice(0, 8);
+
   if (!recs.length) { sec.style.display = 'none'; return; }
 
-  // Show skeleton in rec grid then swap
   sec.style.display = 'block';
   const allLabel = document.getElementById('home-section-label-all');
   if (allLabel) allLabel.style.display = 'block';
 
-  grid.innerHTML = recs.map((p,i) => cardHTML(p,i)).join('');
+  grid.innerHTML = recs.map((x, i) => cardHTML(x.product, i)).join('');
+
+  // Основная лента — все товары кроме тех что в «Для вас», от наиболее до менее подходящих
+  renderHomeSorted(anchor, scored);
+}
+
+function renderHomeSorted(anchor, scored) {
+  const q = (document.getElementById('home-search-input')?.value||'').trim().toLowerCase();
+  let list = [...PRODUCTS];
+  if (homeCat !== 'Все') list = list.filter(p => p.cat === homeCat);
+  if (q) list = list.filter(p => p.name.toLowerCase().includes(q) || p.cat.toLowerCase().includes(q));
+
+  // Исключаем топ-8 из «Для вас» чтобы не дублировать
+  const inRecs = new Set(scored.slice(0, 8).map(x => x.product.id));
+  list = list.filter(p => !inRecs.has(p.id));
+
+  // Сортируем оставшиеся по релевантности — самые подходящие сверху
+  const scoreMap = new Map(scored.map(x => [x.product.id, x.score]));
+  list.sort((a, b) => (scoreMap.get(b.id) || 0) - (scoreMap.get(a.id) || 0));
+
+  renderGrid('home-grid', list, true);
 }
 
 // Показывает рекомендации на странице товара
