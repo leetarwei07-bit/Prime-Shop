@@ -446,7 +446,7 @@ body {
   -webkit-backdrop-filter:blur(24px);
   padding-top:env(safe-area-inset-top, 0px);
   border-bottom:1px solid var(--border);
-  display:flex;align-items:center;justify-content:center;
+  align-items:center;justify-content:center;
   height:calc(44px + env(safe-area-inset-top, 0px));
 }
 .wish-top {
@@ -1128,7 +1128,7 @@ async function checkPendingOrder() {
 
 <!-- WISHLIST -->
 <!-- WISHLIST ROOF (fixed ceiling) -->
-<div class="wish-roof" id="wish-roof-bar">
+<div class="wish-roof" id="wish-roof-bar" style="display:none">
   <div class="wish-title">Избранное</div>
 </div>
 
@@ -1794,9 +1794,9 @@ function navigate(id, btn) {
   if (btn) btn.classList.add('active');
   // Show roof bars per page
   const logoBar = document.getElementById('home-logo-bar');
-  if (logoBar) logoBar.style.display = (id === 'home') ? '' : 'none';
+  if (logoBar) logoBar.style.display = (id === 'home') ? 'flex' : 'none';
   const wishRoof = document.getElementById('wish-roof-bar');
-  if (wishRoof) wishRoof.style.display = (id === 'wishlist') ? '' : 'none';
+  if (wishRoof) wishRoof.style.display = (id === 'wishlist') ? 'flex' : 'none';
   if (id === 'profile') renderProfile();
   if (id === 'orders') loadMyOrders();
   if (id === 'wishlist') { document.getElementById('wish-input').value=''; filterWish(); }
@@ -1925,27 +1925,20 @@ function renderGrid(elId, list, animate = true) {
 let lastViewedProduct = null; // запоминаем последний просмотренный товар
 
 function toggleFullscreen() {
-  const icon = document.getElementById('expand-icon');
-  const btn  = document.getElementById('expand-btn');
-
-  if (tg) {
-    // Telegram Mini App fullscreen API
+  if (!tg) { toast('Доступно только в Telegram'); return; }
+  // requestFullscreen доступен с Telegram 8.0+
+  if (typeof tg.requestFullscreen === 'function') {
     if (tg.isFullscreen) {
       tg.exitFullscreen();
     } else {
       tg.requestFullscreen();
     }
-    // Обновляем иконку по событию от Telegram
+    if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
   } else {
-    // Фоллбек для браузера
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    } else {
-      document.exitFullscreen();
-    }
+    // Старые версии Telegram — expand как минимум
+    tg.expand();
+    toast('Обновите Telegram для полного экрана');
   }
-
-  if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
 }
 
 // Слушаем события fullscreen от Telegram
@@ -2228,10 +2221,13 @@ function closeOverlay(id, e) {
   if (id === 'checkout-overlay') {
     const nav = document.querySelector('.bottom-nav');
     if (nav) nav.style.display = '';
-    // Restore logo bar only if on home page
     const logoBar = document.getElementById('home-logo-bar');
     if (logoBar && document.getElementById('page-home').classList.contains('active')) {
-      logoBar.style.display = '';
+      logoBar.style.display = 'flex';
+    }
+    const wishRoof = document.getElementById('wish-roof-bar');
+    if (wishRoof && document.getElementById('page-wishlist').classList.contains('active')) {
+      wishRoof.style.display = 'flex';
     }
   }
 }
