@@ -1546,6 +1546,9 @@ body {
    CONFIG & TELEGRAM
 ═══════════════════════════════════════════════ */
 const API = 'https://prime-shop-production.up.railway.app';
+const CLOUDINARY_CLOUD = 'dvbjwzbjw';
+const CLOUDINARY_PRESET = 'PrimeUz';
+const CLOUDINARY_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`;
 const SUPER_ADMIN = 'kimtarwei';
 
 const tg = window.Telegram?.WebApp;
@@ -2763,15 +2766,55 @@ function renderAdminProducts() {
 /* ═══════════════════════════════════════════════
    ADMIN - PHOTOS
 ═══════════════════════════════════════════════ */
-function handlePhotos(e, ctx) {
+async function uploadToCloudinary(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('upload_preset', CLOUDINARY_PRESET);
+  fd.append('folder', 'PrimeUz');
+  const res = await fetch(CLOUDINARY_URL, { method: 'POST', body: fd });
+  if (!res.ok) throw new Error('Upload failed');
+  const data = await res.json();
+  return data.secure_url;
+}
+
+async function handlePhotos(e, ctx) {
   const state = varState[ctx];
   const files = Array.from(e.target.files).slice(0, 8 - state.photos.length);
-  files.forEach(file => {
-    const r = new FileReader();
-    r.onload = ev => { state.photos.push(ev.target.result); renderPhotoPreviews(ctx); };
-    r.readAsDataURL(file);
-  });
   e.target.value = '';
+  if (!files.length) return;
+
+  // Показываем индикатор загрузки
+  const prefix = ctx === 'add' ? 'a' : 'e';
+  const zone = document.getElementById(`${prefix}-photo-zone`);
+  if (zone) {
+    const loader = document.createElement('div');
+    loader.id = `${prefix}-upload-loader`;
+    loader.style.cssText = 'text-align:center;padding:12px;font-size:12px;color:var(--text3)';
+    loader.textContent = `⏳ Загрузка ${files.length} фото...`;
+    zone.appendChild(loader);
+  }
+
+  let uploaded = 0;
+  for (const file of files) {
+    try {
+      const url = await uploadToCloudinary(file);
+      state.photos.push(url);
+      uploaded++;
+      // Обновляем счётчик
+      const loader = document.getElementById(`${prefix}-upload-loader`);
+      if (loader) loader.textContent = `⏳ Загружено ${uploaded}/${files.length}...`;
+      renderPhotoPreviews(ctx);
+    } catch(err) {
+      toast('Ошибка загрузки фото ⚠️');
+      console.error(err);
+    }
+  }
+
+  // Убираем лоадер
+  const loader = document.getElementById(`${prefix}-upload-loader`);
+  if (loader) loader.remove();
+
+  if (uploaded > 0) toast(`✅ Загружено ${uploaded} фото`);
 }
 
 function removePhoto(ctx, idx) {
