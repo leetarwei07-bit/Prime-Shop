@@ -130,7 +130,7 @@ body {
 .home-top {
   display:flex;flex-direction:column;gap:10px;
   padding:14px 16px 12px;
-  padding-top:max(80px, calc(env(safe-area-inset-top) + 24px));
+  padding-top:calc(14px + env(safe-area-inset-top, 0px));
   background:var(--bg);
   border-bottom:1px solid var(--border);
 }
@@ -385,8 +385,9 @@ body {
 ═══════════════════════════════════════════════ */
 #page-search { padding:0 }
 .search-top {
-  padding:10px 16px;display:flex;align-items:center;gap:10px;
-  padding-top:max(80px, calc(env(safe-area-inset-top) + 24px));
+  padding:10px 16px;
+  padding-top:calc(10px + env(safe-area-inset-top, 0px));
+  display:flex;align-items:center;gap:10px;
   position:sticky;top:0;
   background:rgba(8,8,8,.95);backdrop-filter:blur(20px);
   border-bottom:1px solid var(--border);z-index:10;
@@ -413,8 +414,9 @@ body {
 ═══════════════════════════════════════════════ */
 #page-wishlist { padding:0 }
 .wish-top {
-  padding:12px 16px;display:flex;align-items:center;gap:10px;
-  padding-top:max(80px, calc(env(safe-area-inset-top) + 24px));
+  padding:12px 16px;
+  padding-top:calc(12px + env(safe-area-inset-top, 0px));
+  display:flex;align-items:center;gap:10px;
   position:sticky;top:0;
   background:rgba(8,8,8,.95);backdrop-filter:blur(20px);
   border-bottom:1px solid var(--border);z-index:10;
@@ -434,7 +436,7 @@ body {
 #page-profile { padding:0 }
 .profile-scroll { overflow-y:auto;flex:1;padding-bottom:calc(var(--nav-h) + var(--safe-b) + 40px);-webkit-overflow-scrolling:touch }
 .profile-card {
-  margin-top:max(80px, calc(env(safe-area-inset-top) + 24px));
+  margin-top:12px;
   margin:0 16px 0;
   background:var(--s1);border:1px solid var(--border);border-radius:24px;
   padding:24px 20px;
@@ -498,7 +500,7 @@ body {
    ORDERS PAGE
 ═══════════════════════════════════════════════ */
 #page-orders { padding:0 }
-.orders-top { display:flex;align-items:center;gap:12px;padding:12px 16px;padding-top:max(80px, calc(env(safe-area-inset-top) + 24px));border-bottom:1px solid var(--border) }
+.orders-top { display:flex;align-items:center;gap:12px;padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top, 0px));border-bottom:1px solid var(--border) }
 .back-btn { width:34px;height:34px;background:none;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0 }
 .back-btn svg { width:22px;height:22px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round }
 .page-title { font-family:'Unbounded',sans-serif;font-size:15px;font-weight:700 }
@@ -625,7 +627,7 @@ body {
 ═══════════════════════════════════════════════ */
 #page-admin { padding:0 }
 #page-admin:not([data-ok]) { display:none!important }
-.admin-top { padding:14px 16px;padding-top:max(80px, calc(env(safe-area-inset-top) + 24px));display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border) }
+.admin-top { padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top, 0px));display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border) }
 .admin-tabs { display:flex;padding:0 16px;border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none }
 .admin-tabs::-webkit-scrollbar { display:none }
 .admin-tab { flex-shrink:0;padding:12px 16px;font-size:12px;font-weight:500;color:var(--text3);border-bottom:2px solid transparent;cursor:pointer;transition:all .15s;background:none;border-left:none;border-right:none;border-top:none;font-family:'Inter',sans-serif }
@@ -986,9 +988,7 @@ async function checkPendingOrder() {
         <div class="home-search">
           <svg viewBox="0 0 24 24" style="cursor:pointer" onclick="renderHome()"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
           <input id="home-search-input" type="text" placeholder="Поиск товаров..."
-            readonly
-            onclick="navigate('search', document.querySelector('[data-pg=search]'))"
-            style="cursor:pointer"/>
+            onkeydown="if(event.key==='Enter'){renderHome();this.blur();}"/>
         </div>
         <div class="cat-wrap">
           <button class="icon-btn" id="cat-btn" onclick="toggleCat()">
@@ -1090,6 +1090,12 @@ async function checkPendingOrder() {
 <div class="page" id="page-wishlist">
   <div class="wish-top">
     <div class="wish-title">Избранное</div>
+    <div class="wish-search">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      <input id="wish-input" type="text" placeholder="Поиск..."
+        oninput="filterWish()"
+        onkeydown="if(event.key==='Enter')this.blur()"/>
+    </div>
   </div>
   <div class="scroll"><div id="wish-grid" class="prod-grid" style="padding:12px 12px 8px"></div></div>
 </div>
@@ -1744,9 +1750,6 @@ function navigate(id, btn) {
   if (btn) btn.classList.add('active');
   if (id === 'profile') renderProfile();
   if (id === 'orders') loadMyOrders();
-  if (id === 'search') {
-    setTimeout(() => { const si = document.getElementById('search-input'); if (si) si.focus(); }, 150);
-  }
   if (id === 'wishlist') { document.getElementById('wish-input').value=''; filterWish(); }
   if (id === 'home') {
     // Refresh recs + catalog when returning to home
