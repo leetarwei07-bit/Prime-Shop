@@ -200,12 +200,14 @@ body {
    PRODUCT GRID
 ═══════════════════════════════════════════════ */
 .prod-grid { display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px 12px 0;transition:grid-template-columns .25s var(--easing) }
-.prod-grid.expanded { grid-template-columns:1fr;gap:10px }
-.prod-grid.expanded .prod-card { display:flex;flex-direction:row;border-radius:16px }
-.prod-grid.expanded .prod-img { width:110px;height:110px;flex-shrink:0;aspect-ratio:unset;border-radius:16px 0 0 16px }
-.prod-grid.expanded .prod-info { flex:1;padding:14px 14px 14px;display:flex;flex-direction:column;justify-content:center }
+.prod-grid.expanded { grid-template-columns:1fr !important;gap:10px }
+.prod-grid.expanded .prod-card { display:flex !important;flex-direction:row !important;border-radius:16px }
+.prod-grid.expanded .prod-img { width:110px !important;min-width:110px;height:110px !important;flex-shrink:0 !important;aspect-ratio:unset !important;border-radius:16px 0 0 16px !important;align-self:stretch }
+.prod-grid.expanded .prod-img img { position:relative !important;border-radius:0 }
+.prod-grid.expanded .prod-info { flex:1;padding:14px !important;display:flex;flex-direction:column;justify-content:center }
 .prod-grid.expanded .prod-name { font-size:13px;-webkit-line-clamp:3 }
 .prod-grid.expanded .prod-price { font-size:13px }
+.prod-grid.expanded .prod-heart { top:6px !important;right:6px !important }
 
 /* ── SKELETON LOADER ── */
 .skeleton-grid {
@@ -1755,14 +1757,12 @@ const apiDel = (path) => apiFetch(path, { method:'DELETE' });
 ═══════════════════════════════════════════════ */
 async function loadProducts() {
   try {
-    const [data] = await Promise.all([
-      apiGet('/products'),
-      loadBrands(),
-    ]);
+    const data = await apiGet('/products');
     PRODUCTS.length = 0;
     data.forEach(p => PRODUCTS.push(p));
     renderHome(); applySearch();
-    // Load recommendations after products are ready
+    // Load recommendations and brands in parallel after products
+    loadBrands();
     loadRecommendations();
   } catch(e) {
     console.error(e);
@@ -1808,9 +1808,9 @@ function navigate(id, btn) {
   if (id === 'orders') loadMyOrders();
   if (id === 'wishlist') { document.getElementById('wish-input').value=''; filterWish(); }
   if (id === 'home') {
-    // Refresh recs + catalog when returning to home
+    // Refresh recs using last viewed product as anchor
     renderHome();
-    loadRecommendations();
+    loadRecommendations(lastViewedProduct);
   }
   if (id === 'admin') {
     pg.setAttribute('data-ok','1');
@@ -1913,29 +1913,35 @@ function skeletonHTML(count = 6) {
 function renderGrid(elId, list, animate = true) {
   const el = document.getElementById(elId);
   if (!el) return;
+  // Preserve expanded state across re-renders
+  const wasExpanded = gridExpanded && el.classList.contains('prod-grid');
   if (!list || !list.length) {
     el.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-h">Ничего не найдено</div><div class="empty-p">Попробуйте другой запрос</div></div>`;
+    if (wasExpanded) el.classList.add('expanded');
     return;
   }
   if (!animate) {
     el.innerHTML = list.map(p => cardHTML(p)).join('');
+    if (wasExpanded) el.classList.add('expanded');
     return;
   }
   // Show skeleton first then swap in real cards
   el.innerHTML = skeletonHTML(list.length);
+  if (wasExpanded) el.classList.add('expanded');
   requestAnimationFrame(() => {
     setTimeout(() => {
       if (!el.closest('.page.active') && elId === 'home-grid') {
-        // Page not visible yet — just set content silently
         el.innerHTML = list.map((p,i) => cardHTML(p, i)).join('');
-        return;
+      } else {
+        el.innerHTML = list.map((p,i) => cardHTML(p, i)).join('');
       }
-      el.innerHTML = list.map((p,i) => cardHTML(p, i)).join('');
-    }, 320); // skeleton visible for 320ms minimum
+      if (wasExpanded) el.classList.add('expanded');
+    }, 320);
   });
 }
 
 let gridExpanded = false;
+let lastViewedProduct = null; // запоминаем последний просмотренный товар
 
 function toggleExpand() {
   gridExpanded = !gridExpanded;
@@ -2105,10 +2111,12 @@ function closeProduct() {
   document.getElementById('page-product').classList.remove('open');
   document.getElementById('detail-action').classList.remove('open');
   // Refresh recommendations based on what was just viewed
-  if (currentProduct) {
-    loadRecommendations(currentProduct);
-  }
+  const viewed = currentProduct; // сохраняем до обнуления
   currentProduct = null;
+  if (viewed) {
+    lastViewedProduct = viewed;
+    loadRecommendations(viewed);
+  }
 }
 
 function toggleDetailWish() {
@@ -3428,8 +3436,10 @@ function loadRecommendations(lastViewed = null) {
   if (allLabel) allLabel.style.display = 'block';
 
   grid.innerHTML = skeletonHTML(6);
+  if (gridExpanded) grid.classList.add('expanded');
   setTimeout(() => {
     grid.innerHTML = recs.map((p,i) => cardHTML(p,i)).join('');
+    if (gridExpanded) grid.classList.add('expanded');
   }, 300);
 }
 
@@ -3457,6 +3467,9 @@ function showProductRecs(product) {
 }
 
 function trackView(productId) {
+  // Сохраняем последний просмотренный товар для рекомендаций
+  const p = PRODUCTS.find(x => x.id === productId);
+  if (p) lastViewedProduct = p;
   if (!TG_USER) return;
   apiFetch('/events', {
     method: 'POST',
