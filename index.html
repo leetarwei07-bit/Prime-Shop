@@ -329,14 +329,18 @@ body {
 .slider-dot { width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.3);transition:all .22s }
 .slider-dot.on { background:#fff;width:18px;border-radius:3px }
 .btn-back {
-  position:absolute;top:14px;left:14px;width:36px;height:36px;border-radius:50%;
+  position:absolute;
+  top:calc(14px + env(safe-area-inset-top, 0px));
+  left:14px;width:36px;height:36px;border-radius:50%;
   background:rgba(0,0,0,.6);backdrop-filter:blur(10px);
   border:none;cursor:pointer;
   display:flex;align-items:center;justify-content:center;z-index:10;
 }
 .btn-back svg { width:20px;height:20px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round }
 .btn-wish {
-  position:absolute;top:14px;right:14px;width:36px;height:36px;border-radius:50%;
+  position:absolute;
+  top:calc(14px + env(safe-area-inset-top, 0px));
+  right:14px;width:36px;height:36px;border-radius:50%;
   background:rgba(40,40,40,.8);backdrop-filter:blur(8px);
   border:none;cursor:pointer;
   display:flex;align-items:center;justify-content:center;z-index:10;
@@ -404,7 +408,7 @@ body {
 #page-search { padding:0 }
 .search-top {
   padding:10px 16px;
-  padding-top:calc(10px + env(safe-area-inset-top, 0px));
+  padding-top:calc(16px + env(safe-area-inset-top, 0px));
   display:flex;align-items:center;gap:10px;
   position:sticky;top:0;
   background:rgba(8,8,8,.95);backdrop-filter:blur(20px);
@@ -433,7 +437,7 @@ body {
 #page-wishlist { padding:0 }
 .wish-top {
   padding:12px 16px;
-  padding-top:calc(12px + env(safe-area-inset-top, 0px));
+  padding-top:calc(16px + env(safe-area-inset-top, 0px));
   display:flex;align-items:center;gap:10px;
   position:sticky;top:0;
   background:rgba(8,8,8,.95);backdrop-filter:blur(20px);
@@ -452,7 +456,7 @@ body {
    PROFILE
 ═══════════════════════════════════════════════ */
 #page-profile { padding:0 }
-.profile-scroll { overflow-y:auto;flex:1;padding-bottom:calc(var(--nav-h) + var(--safe-b) + 40px);-webkit-overflow-scrolling:touch }
+.profile-scroll { overflow-y:auto;flex:1;padding-top:calc(env(safe-area-inset-top, 0px) + 12px);padding-bottom:calc(var(--nav-h) + var(--safe-b) + 40px);-webkit-overflow-scrolling:touch }
 .profile-card {
   margin-top:12px;
   margin:0 16px 0;
@@ -518,7 +522,7 @@ body {
    ORDERS PAGE
 ═══════════════════════════════════════════════ */
 #page-orders { padding:0 }
-.orders-top { display:flex;align-items:center;gap:12px;padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top, 0px));border-bottom:1px solid var(--border) }
+.orders-top { display:flex;align-items:center;gap:12px;padding:12px 16px;padding-top:calc(16px + env(safe-area-inset-top, 0px));border-bottom:1px solid var(--border) }
 .back-btn { width:34px;height:34px;background:none;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0 }
 .back-btn svg { width:22px;height:22px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round }
 .page-title { font-family:'Unbounded',sans-serif;font-size:15px;font-weight:700 }
@@ -2150,10 +2154,25 @@ function goSlide(i) {
 ═══════════════════════════════════════════════ */
 function openOverlay(id) {
   document.getElementById(id).classList.add('open');
+  if (id === 'checkout-overlay') {
+    const nav = document.querySelector('.bottom-nav');
+    const logoBar = document.getElementById('home-logo-bar');
+    if (nav) nav.style.display = 'none';
+    if (logoBar) logoBar.style.display = 'none';
+  }
 }
 function closeOverlay(id, e) {
   if (e && e.target !== document.getElementById(id)) return;
   document.getElementById(id).classList.remove('open');
+  if (id === 'checkout-overlay') {
+    const nav = document.querySelector('.bottom-nav');
+    if (nav) nav.style.display = '';
+    // Restore logo bar only if on home page
+    const logoBar = document.getElementById('home-logo-bar');
+    if (logoBar && document.getElementById('page-home').classList.contains('active')) {
+      logoBar.style.display = '';
+    }
+  }
 }
 
 /* ═══════════════════════════════════════════════
