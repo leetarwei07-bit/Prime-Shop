@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,interactive-widget=resizes-content"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover,interactive-widget=resizes-content"/>
 <title>PRIME</title>
 <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -12,6 +12,7 @@
 ═══════════════════════════════════════════════ */
 :root {
   --bg:       #080808;
+  --safe-t:   env(safe-area-inset-top, 0px);
   --s1:       #111;
   --s2:       #181818;
   --s3:       #222;
@@ -129,7 +130,7 @@ body {
 .home-top {
   display:flex;flex-direction:column;gap:10px;
   padding:14px 16px 12px;
-  /* Not sticky — scrolls with content like Sotish */
+  padding-top:max(14px, calc(env(safe-area-inset-top) + 8px));
   background:var(--bg);
   border-bottom:1px solid var(--border);
 }
@@ -288,17 +289,20 @@ body {
    PRODUCT DETAIL
 ═══════════════════════════════════════════════ */
 #page-product {
-  position:fixed;inset:0;bottom:var(--nav-h);z-index:200;
+  position:fixed;
+  top:0;left:0;right:0;bottom:var(--nav-h);
+  z-index:200;
   background:var(--bg);
   transform:translateY(100%);
-  transition:transform .38s var(--easing);
+  transition:transform .38s var(--easing), visibility 0s .38s;
   display:flex!important;flex-direction:column;
   pointer-events:none;overflow-y:auto;
   -webkit-overflow-scrolling:touch;
   overscroll-behavior-y:contain;
   touch-action:pan-y;
+  visibility:hidden;
 }
-#page-product.open { transform:none;pointer-events:all }
+#page-product.open { transform:none;pointer-events:all;visibility:visible;transition:transform .38s var(--easing), visibility 0s 0s; }
 .detail-slider { width:100%;aspect-ratio:1;position:relative;overflow:hidden;background:var(--s2);flex-shrink:0;touch-action:pan-y;user-select:none }
 .slider-track { display:flex;height:100%;transition:transform .28s var(--easing);will-change:transform }
 .slider-slide { flex-shrink:0;width:100%;height:100%;background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;font-size:80px;pointer-events:none }
@@ -380,6 +384,7 @@ body {
 ═══════════════════════════════════════════════ */
 #page-search { padding:0 }
 .search-top {
+  padding-top:max(10px, calc(env(safe-area-inset-top) + 6px));
   padding:10px 16px;display:flex;align-items:center;gap:10px;
   position:sticky;top:0;
   background:rgba(8,8,8,.95);backdrop-filter:blur(20px);
@@ -407,6 +412,7 @@ body {
 ═══════════════════════════════════════════════ */
 #page-wishlist { padding:0 }
 .wish-top {
+  padding-top:max(10px, calc(env(safe-area-inset-top) + 6px));
   padding:12px 16px;display:flex;align-items:center;gap:10px;
   position:sticky;top:0;
   background:rgba(8,8,8,.95);backdrop-filter:blur(20px);
@@ -977,7 +983,9 @@ async function checkPendingOrder() {
         <div class="home-search">
           <svg viewBox="0 0 24 24" style="cursor:pointer" onclick="renderHome()"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
           <input id="home-search-input" type="text" placeholder="Поиск товаров..."
-            onkeydown="if(event.key==='Enter'){renderHome();this.blur();}"/>
+            readonly
+            onclick="navigate('search', document.querySelector('[data-pg=search]'))"
+            style="cursor:pointer"/>
         </div>
         <div class="cat-wrap">
           <button class="icon-btn" id="cat-btn" onclick="toggleCat()">
@@ -1010,8 +1018,7 @@ async function checkPendingOrder() {
     <div class="search-box">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
       <input id="search-input" type="text" placeholder="Поиск..."
-        oninput="applySearch()"
-        onkeydown="if(event.key==='Enter')this.blur()"/>
+        onkeydown="if(event.key==='Enter'){applySearch();this.blur();}"/>
     </div>
   </div>
   <div class="sort-row">
@@ -1740,6 +1747,9 @@ function navigate(id, btn) {
   if (btn) btn.classList.add('active');
   if (id === 'profile') renderProfile();
   if (id === 'orders') loadMyOrders();
+  if (id === 'search') {
+    setTimeout(() => { const si = document.getElementById('search-input'); if (si) si.focus(); }, 150);
+  }
   if (id === 'wishlist') { document.getElementById('wish-input').value=''; filterWish(); }
   if (id === 'home') {
     // Refresh recs + catalog when returning to home
@@ -2322,21 +2332,22 @@ async function checkPaymentStatus(orderId) {
 
 function pickRec(mode) {
   recMode = mode;
-  document.getElementById('rec-self').classList.toggle('on', mode==='self');
-  document.getElementById('rec-other').classList.toggle('on', mode==='other');
+  const rs = document.getElementById('rec-self'); if(rs) rs.classList.toggle('on', mode==='self');
+  const ro = document.getElementById('rec-other'); if(ro) ro.classList.toggle('on', mode==='other');
 }
 
 function showOtherRec() {
-  document.getElementById('rec-other').style.display = 'flex';
-  document.getElementById('add-rec-btn').style.display = 'none';
-  document.getElementById('other-wrap').classList.add('visible');
+  const ro = document.getElementById('rec-other'); if(ro) ro.style.display = 'flex';
+  const ab = document.getElementById('add-rec-btn'); if(ab) ab.style.display = 'none';
+  const ow = document.getElementById('other-wrap'); if(ow) ow.classList.add('visible');
   pickRec('other');
-  document.getElementById('other-input').focus();
+  const oi = document.getElementById('other-input'); if(oi) oi.focus();
 }
 
 function updateOtherUser() {
-  const val = document.getElementById('other-input').value || '@username';
-  document.getElementById('rec-other-user').textContent = val.startsWith('@') ? val : '@'+val;
+  const inp = document.getElementById('other-input');
+  const val = inp ? inp.value || '@username' : '@username';
+  const el = document.getElementById('rec-other-user'); if(el) el.textContent = val.startsWith('@') ? val : '@'+val;
 }
 
 // close order overlay → restore nav
