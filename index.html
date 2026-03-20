@@ -25,7 +25,7 @@
   --orange:   #f59e0b;
   --red:      #ef4444;
   --nav-h:    60px;
-  --safe-b:   var(--safe-b);
+  --safe-b:   env(safe-area-inset-bottom, 0px);
   --easing:   cubic-bezier(.32,.72,0,1);
   --spring:   cubic-bezier(.34,1.56,.64,1);
 }
@@ -76,7 +76,7 @@ body {
 ═══════════════════════════════════════════════ */
 .page {
   display:none;flex-direction:column;
-  height:calc(100% - var(--nav-h));
+  height:calc(100% - var(--nav-h) - var(--safe-b));
   overflow:hidden;
 }
 .page.active {
@@ -107,12 +107,10 @@ body {
   border-top:1px solid var(--border);
   display:flex;align-items:flex-start;
   padding-top:4px;
+  padding-bottom:var(--safe-b);
   z-index:1000;
   transform:translate3d(0,0,0);
   will-change:transform;
-  /* Keyboard-proof: ignore visual viewport resize */
-  bottom: var(--safe-b);
-  bottom: 0;
 }
 .nav-btn {
   flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;
@@ -308,7 +306,7 @@ body {
 ═══════════════════════════════════════════════ */
 #page-product {
   position:fixed;
-  top:0;left:0;right:0;bottom:var(--nav-h);
+  top:0;left:0;right:0;bottom:calc(var(--nav-h) + var(--safe-b));
   z-index:200;
   background:var(--bg);
   transform:translateY(100%);
@@ -319,6 +317,7 @@ body {
   overscroll-behavior-y:contain;
   touch-action:pan-y;
   visibility:hidden;
+  padding-top:var(--safe-t);
   padding-bottom:calc(var(--safe-b) + 16px);
 }
 #page-product.open { transform:none;pointer-events:all;visibility:visible;transition:transform .38s var(--easing), visibility 0s 0s; }
@@ -330,7 +329,7 @@ body {
 .slider-dot.on { background:#fff;width:18px;border-radius:3px }
 .btn-back {
   position:absolute;
-  top:calc(14px + var(--safe-t));
+  top:14px;
   left:14px;width:36px;height:36px;border-radius:50%;
   background:rgba(0,0,0,.6);backdrop-filter:blur(10px);
   border:none;cursor:pointer;
@@ -339,7 +338,7 @@ body {
 .btn-back svg { width:20px;height:20px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round }
 .btn-wish {
   position:absolute;
-  top:calc(14px + var(--safe-t));
+  top:14px;
   right:14px;width:36px;height:36px;border-radius:50%;
   background:rgba(40,40,40,.8);backdrop-filter:blur(8px);
   border:none;cursor:pointer;
@@ -382,16 +381,20 @@ body {
 .qty-btn:active { background:var(--s3) }
 .qty-num { width:36px;text-align:center;font-weight:700;font-size:15px }
 .detail-action {
-  position:fixed;bottom:var(--nav-h);left:0;right:0;
+  position:fixed;bottom:calc(var(--nav-h) + var(--safe-b));left:0;right:0;
   padding:12px 16px 14px;
   background:rgba(8,8,8,.97);backdrop-filter:blur(20px);
   border-top:1px solid var(--border);
   display:flex;z-index:205;
-  transform:translateY(calc(100% + var(--nav-h)));
-  transition:transform .35s var(--easing) .04s;
+  opacity:0;visibility:hidden;
+  transform:translateY(16px);
+  transition:opacity .28s var(--easing), transform .28s var(--easing), visibility 0s .28s;
   pointer-events:none;
 }
-.detail-action.open { transform:none;pointer-events:all }
+.detail-action.open {
+  opacity:1;visibility:visible;transform:none;pointer-events:all;
+  transition:opacity .28s var(--easing), transform .28s var(--easing), visibility 0s 0s;
+}
 .btn-buy {
   flex:1;padding:15px;
   background:#fff;color:#000;border:none;border-radius:10px;
@@ -772,150 +775,6 @@ body {
 @keyframes spulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.3;transform:scale(.6)} }
 
 /* ═══════════════════════════════════════════════
-   PRICE CALCULATOR
-═══════════════════════════════════════════════ */
-// CNY → UZS exchange rate (update manually or later via API)
-const CNY_RATE = 1950; // 1 CNY ≈ 1950 UZS (approximate)
-const CARGO_PER_100G = 13000; // 13,000 UZS per 100g
-
-function calcPrice(ctx) {
-  const p = ctx === 'add' ? 'a' : 'e';
-  const cny      = parseFloat(document.getElementById(`${p}-cny`)?.value)     || 0;
-  const weight   = parseFloat(document.getElementById(`${p}-weight`)?.value)  || 0;
-  const markup   = parseFloat(document.getElementById(`${p}-markup`)?.value)  || 0;
-  const insurance= parseFloat(document.getElementById(`${p}-insurance`)?.value)|| 0;
-  const resultEl = document.getElementById(`${p}-calc-result`);
-  if (!resultEl) return;
-
-  if (!cny && !weight) { resultEl.style.display = 'none'; return; }
-
-  const productPrice = Math.round(cny * CNY_RATE);
-  const cargoPrice   = Math.round((weight / 100) * CARGO_PER_100G);
-  const total        = productPrice + cargoPrice + markup + insurance;
-
-  document.getElementById(`${p}-cr-product`).textContent  = fmt(productPrice);
-  document.getElementById(`${p}-cr-cargo`).textContent    = fmt(cargoPrice);
-  document.getElementById(`${p}-cr-markup`).textContent   = fmt(markup);
-  document.getElementById(`${p}-cr-insurance`).textContent= fmt(insurance);
-  document.getElementById(`${p}-cr-total`).textContent    = fmt(total);
-  resultEl.style.display = 'block';
-}
-
-function applyCalcPrice(ctx) {
-  const p = ctx === 'add' ? 'a' : 'e';
-  const totalEl = document.getElementById(`${p}-cr-total`);
-  if (!totalEl) return;
-  // Parse back the number from formatted string
-  const totalText = totalEl.textContent.replace(/[^0-9]/g, '');
-  const priceInput = document.getElementById(`${p}-price`);
-  if (priceInput && totalText) {
-    priceInput.value = totalText;
-    toast('Цена применена ✅');
-  }
-}
-
-/* ═══════════════════════════════════════════════
-   SIZE RANGE PARSER
-═══════════════════════════════════════════════ */
-// Maps letter sizes to numeric order for range generation
-const SIZE_ORDER = ['XXS','XS','S','M','L','XL','XXL','XXXL','3XL','4XL'];
-
-function parseSizeRange(input) {
-  input = input.trim();
-  if (!input) return [];
-
-  // Format: "30-44" or "36-42" — numeric range
-  const numRange = input.match(/^(\d+)\s*[-–]\s*(\d+)$/);
-  if (numRange) {
-    const from = parseInt(numRange[1]);
-    const to   = parseInt(numRange[2]);
-    if (from >= to) return [String(from), String(to)];
-    const sizes = [];
-    // Detect step: jeans are even (28,30,32...), shoes are integer (36,37,38...)
-    const step = (from % 2 === 0 && to % 2 === 0 && (to - from) >= 4) ? 2 : 1;
-    for (let i = from; i <= to; i += step) sizes.push(String(i));
-    return sizes;
-  }
-
-  // Format: "XS-XXL" — letter range
-  const letRange = input.match(/^([A-Z]+)\s*[-–]\s*([A-Z]+)$/i);
-  if (letRange) {
-    const from = letRange[1].toUpperCase();
-    const to   = letRange[2].toUpperCase();
-    const fromIdx = SIZE_ORDER.indexOf(from);
-    const toIdx   = SIZE_ORDER.indexOf(to);
-    if (fromIdx !== -1 && toIdx !== -1 && fromIdx <= toIdx) {
-      return SIZE_ORDER.slice(fromIdx, toIdx + 1);
-    }
-  }
-
-  // Format: "S,M,L,XL" or "S M L XL" — manual list
-  if (input.includes(',') || /\s/.test(input)) {
-    return input.split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
-  }
-
-  // Single value
-  return [input];
-}
-
-function previewSizes(ctx) {
-  const p = ctx === 'add' ? 'a' : 'e';
-  const inp = document.getElementById(`${p}-sizes-input`);
-  const prev = document.getElementById(`${p}-sizes-preview`);
-  if (!inp || !prev) return;
-  const parsed = parseSizeRange(inp.value);
-  if (parsed.length > 0) {
-    prev.textContent = `→ ${parsed.join(', ')} (${parsed.length} шт.)`;
-  } else {
-    prev.textContent = '';
-  }
-}
-
-function addSizesFromRange(ctx) {
-  const p = ctx === 'add' ? 'a' : 'e';
-  const inp = document.getElementById(`${p}-sizes-input`);
-  if (!inp || !inp.value.trim()) { toast('Введите диапазон размеров'); return; }
-  const parsed = parseSizeRange(inp.value);
-  if (!parsed.length) { toast('Не удалось распознать. Пример: 30-44 или XS-XXL'); return; }
-  if (!Array.isArray(varState[ctx].sizes)) varState[ctx].sizes = [];
-  parsed.forEach(s => {
-    if (!varState[ctx].sizes.includes(s)) varState[ctx].sizes.push(s);
-  });
-  inp.value = '';
-  const prev = document.getElementById(`${p}-sizes-preview`);
-  if (prev) prev.textContent = '';
-  renderSizeChips(ctx);
-  toast(`✅ Добавлено ${parsed.length} размеров: ${parsed.slice(0,3).join(', ')}${parsed.length>3?'...':''}`);
-}
-
-function removeSizeChip(ctx, idx) {
-  if (!Array.isArray(varState[ctx].sizes)) return;
-  varState[ctx].sizes.splice(idx, 1);
-  renderSizeChips(ctx);
-}
-
-
-
-// On app start — resume polling if payment was pending
-async function checkPendingOrder() {
-  const id = localStorage.getItem('pendingOrderId');
-  if (!id) return;
-  try {
-    const data = await apiFetch(`/orders/${id}/payment-status`);
-    if (data?.paid) {
-      const existing = orders.findIndex(o => o.id === Number(id));
-      if (existing === -1) orders.unshift(data.order);
-      else orders[existing] = data.order;
-      updateStats();
-      localStorage.removeItem('pendingOrderId');
-      toast('Заказ #' + id + ' оплачен ✅');
-    }
-  } catch(e) {
-    localStorage.removeItem('pendingOrderId');
-  }
-}
-
-/* ═══════════════════════════════════════════════
    TOAST
 ═══════════════════════════════════════════════ */
 /* ── PRICE CALCULATOR ── */
@@ -1048,7 +907,13 @@ async function checkPendingOrder() {
       <div id="rec-grid" class="prod-grid" style="padding:0 12px 16px"></div>
     </div>
     <div id="home-section-label-all" class="home-section-label" style="display:none">Все товары</div>
-    <div id="home-grid" class="prod-grid" style="padding-bottom:8px"></div>
+    <div id="home-grid" class="prod-grid" style="padding-bottom:8px">
+      <!-- Skeleton виден пока грузятся товары -->
+      <div class="skeleton-card"><div class="skeleton-img"></div><div class="skeleton-body"><div class="skeleton-line wide"></div><div class="skeleton-line mid"></div><div class="skeleton-line short"></div></div></div>
+      <div class="skeleton-card" style="animation-delay:.05s"><div class="skeleton-img"></div><div class="skeleton-body"><div class="skeleton-line wide"></div><div class="skeleton-line mid"></div><div class="skeleton-line short"></div></div></div>
+      <div class="skeleton-card" style="animation-delay:.1s"><div class="skeleton-img"></div><div class="skeleton-body"><div class="skeleton-line wide"></div><div class="skeleton-line mid"></div><div class="skeleton-line short"></div></div></div>
+      <div class="skeleton-card" style="animation-delay:.15s"><div class="skeleton-img"></div><div class="skeleton-body"><div class="skeleton-line wide"></div><div class="skeleton-line mid"></div><div class="skeleton-line short"></div></div></div>
+    </div>
   </div>
 </div>
 
@@ -1131,17 +996,25 @@ async function checkPendingOrder() {
 <div class="wish-roof" id="wish-roof-bar" style="display:none">
   <div class="wish-title">Избранное</div>
 </div>
+<!-- WISHLIST SEARCH BAR (fixed, below roof) -->
+<div id="wish-search-bar" style="
+  display:none;position:fixed;
+  top:calc(44px + var(--safe-t));left:0;right:0;
+  padding:10px 16px;
+  background:rgba(8,8,8,.98);backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border);
+  z-index:499;
+">
+  <div class="wish-search">
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+    <input id="wish-input" type="text" placeholder="Поиск..."
+      oninput="filterWish()"
+      onkeydown="if(event.key==='Enter')this.blur()"/>
+  </div>
+</div>
 
 <div class="page" id="page-wishlist">
-  <div class="scroll" style="padding-top:calc(44px + var(--safe-t))">
-    <div class="wish-top">
-      <div class="wish-search">
-        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-        <input id="wish-input" type="text" placeholder="Поиск..."
-          oninput="filterWish()"
-          onkeydown="if(event.key==='Enter')this.blur()"/>
-      </div>
-    </div>
+  <div class="scroll" style="padding-top:calc(44px + var(--safe-t) + 56px)">
     <div id="wish-grid" class="prod-grid" style="padding:0 12px 8px"></div>
   </div>
 </div>
@@ -1189,8 +1062,8 @@ async function checkPendingOrder() {
 
 <!-- ORDERS -->
 <div class="page" id="page-orders">
-  <div class="orders-top">
-    <button class="back-btn" onclick="navigate('profile',document.querySelector('[data-pg=profile]'))">
+  <div class="orders-top" style="position:relative;justify-content:center;">
+    <button class="back-btn" onclick="navigate('profile',document.querySelector('[data-pg=profile]'))" style="position:absolute;left:8px;">
       <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
     </button>
     <div class="page-title">Мои заказы</div>
@@ -1656,11 +1529,14 @@ function applySafeAreas() {
   const root = document.documentElement;
 
   // Telegram API — работает на Android и iOS
-  const tgTop    = (tg?.safeAreaInsets?.top    ?? 0) + (tg?.contentSafeAreaInsets?.top    ?? 0);
-  const tgBottom = (tg?.safeAreaInsets?.bottom ?? 0) + (tg?.contentSafeAreaInsets?.bottom ?? 0);
+  const tgSafeTop    = tg?.safeAreaInsets?.top    ?? 0;
+  const tgSafeBot    = tg?.safeAreaInsets?.bottom ?? 0;
+  const tgContTop    = tg?.contentSafeAreaInsets?.top    ?? 0;
+  const tgContBot    = tg?.contentSafeAreaInsets?.bottom ?? 0;
+  const tgTop    = tgSafeTop + tgContTop;
+  const tgBottom = tgSafeBot + tgContBot;
 
-  // CSS env() — читаем через скрытый элемент чтобы получить реальное px значение
-  // getComputedStyle на CSS-переменной с env() возвращает строку, не число
+  // CSS env() — читаем через скрытый элемент
   let cssTop = 0, cssBottom = 0;
   try {
     const probe = document.createElement('div');
@@ -1672,14 +1548,15 @@ function applySafeAreas() {
     document.body.removeChild(probe);
   } catch(e) {}
 
-  // Берём максимум: на iOS победит cssTop (env), на Android победит tgTop
   const top    = Math.max(tgTop, cssTop);
   const bottom = Math.max(tgBottom, cssBottom);
 
-  // Применяем только если значение реальное (защита от гонки на старте)
   if (top > 0)    root.style.setProperty('--safe-t', top + 'px');
-  if (bottom > 0) root.style.setProperty('--safe-b', bottom + 'px');
+  // bottom может быть 0 на устройствах без home indicator — это норма
+  root.style.setProperty('--safe-b', bottom + 'px');
+
 }
+
 
 if (tg) {
   tg.ready();
@@ -1742,7 +1619,8 @@ const initData = () => tg?.initData || '';
    STATE
 ═══════════════════════════════════════════════ */
 let PRODUCTS = [];
-let orders = [];
+let myOrders = [];    // мои заказы (текущего пользователя)
+let allOrders = [];   // все заказы (только для админа)
 let wishlist = new Set();
 let cart = [];
 
@@ -1786,17 +1664,28 @@ const apiDel = (path) => apiFetch(path, { method:'DELETE' });
 /* ═══════════════════════════════════════════════
    LOAD DATA
 ═══════════════════════════════════════════════ */
+function hideSplash() {
+  const s = document.getElementById('splash');
+  if (s && !s._hidden) {
+    s._hidden = true;
+    s.classList.add('hide');
+    setTimeout(() => s.remove(), 520);
+  }
+}
+
 async function loadProducts() {
   try {
     const data = await apiGet('/products');
     PRODUCTS.length = 0;
     data.forEach(p => PRODUCTS.push(p));
-    renderHome(); applySearch();
-    // Load recommendations and brands in parallel after products
+    renderHome(true); // instant=true — без skeleton, сразу карточки
+    applySearch();
+    hideSplash(); // скрываем сплэш как только товары готовы
     loadBrands();
     loadRecommendations();
   } catch(e) {
     console.error(e);
+    hideSplash();
     toast('Ошибка загрузки каталога ⚠️');
   }
 }
@@ -1804,7 +1693,8 @@ async function loadProducts() {
 async function loadMyOrders() {
   try {
     const data = await apiFetch('/orders/my');
-    orders.length = 0; data.forEach(o => orders.push(o));
+    myOrders.length = 0;
+    data.filter(o => o.paymentStatus === 'paid').forEach(o => myOrders.push(o));
     updateStats(); renderOrders();
   } catch(e) { console.error('orders/my:', e) }
 }
@@ -1812,7 +1702,7 @@ async function loadMyOrders() {
 async function loadAllOrders() {
   try {
     const data = await apiFetch('/orders');
-    orders.length = 0; data.forEach(o => orders.push(o));
+    allOrders.length = 0; data.forEach(o => allOrders.push(o));
     renderAdminOrders(); renderAdminStats();
   } catch(e) { console.error('orders all:', e) }
 }
@@ -1835,8 +1725,10 @@ function navigate(id, btn) {
   if (logoBar) logoBar.style.display = (id === 'home') ? 'flex' : 'none';
   const wishRoof = document.getElementById('wish-roof-bar');
   if (wishRoof) wishRoof.style.display = (id === 'wishlist') ? 'flex' : 'none';
+  const wishSearch = document.getElementById('wish-search-bar');
+  if (wishSearch) wishSearch.style.display = (id === 'wishlist') ? 'block' : 'none';
   if (id === 'profile') renderProfile();
-  if (id === 'orders') loadMyOrders();
+  if (id === 'orders') { if (!myOrders.length) loadMyOrders(); else renderOrders(); }
   if (id === 'wishlist') { document.getElementById('wish-input').value=''; filterWish(); }
   if (id === 'home') {
     // Refresh recs using last viewed product as anchor
@@ -1903,10 +1795,11 @@ function statusPill(s) {
 function cardHTML(p, idx = 0) {
   const disc = p.old ? Math.round((1 - p.price/p.old)*100) : 0;
   const photo = p.photos && p.photos.length ? p.photos[0] : null;
-  const delay = Math.min(idx * 0.04, 0.32);
+  // Первые 4 карточки появляются мгновенно — они заменяют skeleton без рывка
+  const delay = idx < 4 ? 0 : Math.min((idx - 4) * 0.04, 0.2);
   return `<div class="prod-card" onclick="openProduct(${p.id})" style="animation-delay:${delay}s">
     <div class="prod-img">
-      ${photo ? `<img src="${photo}" loading="lazy" alt="${p.name}"/>` : `<span>${p.emoji||'📦'}</span>`}
+      ${photo ? `<img src="${photo}" loading="${idx < 4 ? 'eager' : 'lazy'}" fetchpriority="${idx < 2 ? 'high' : 'auto'}" alt="${p.name}"/>` : `<span>${p.emoji||'📦'}</span>`}
       <button class="prod-heart ${wishlist.has(p.id)?'liked':''}" onclick="toggleWish(event,${p.id})">
         <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
       </button>
@@ -1952,12 +1845,8 @@ function renderGrid(elId, list, animate = true) {
     el.innerHTML = list.map(p => cardHTML(p)).join('');
     return;
   }
-  el.innerHTML = skeletonHTML(list.length);
-  requestAnimationFrame(() => {
-    setTimeout(() => {
-      el.innerHTML = list.map((p,i) => cardHTML(p, i)).join('');
-    }, 320);
-  });
+  // Рендерим сразу — данные уже есть
+  el.innerHTML = list.map((p,i) => cardHTML(p, i)).join('');
 }
 
 let lastViewedProduct = null; // запоминаем последний просмотренный товар
@@ -2248,9 +2137,13 @@ function openOverlay(id) {
   document.getElementById(id).classList.add('open');
   if (id === 'checkout-overlay') {
     const nav = document.querySelector('.bottom-nav');
-    const logoBar = document.getElementById('home-logo-bar');
     if (nav) nav.style.display = 'none';
+    const logoBar = document.getElementById('home-logo-bar');
     if (logoBar) logoBar.style.display = 'none';
+    const wishRoofEl = document.getElementById('wish-roof-bar');
+    if (wishRoofEl) wishRoofEl.style.display = 'none';
+    const wishSearchEl = document.getElementById('wish-search-bar');
+    if (wishSearchEl) wishSearchEl.style.display = 'none';
   }
 }
 function closeOverlay(id, e) {
@@ -2266,6 +2159,10 @@ function closeOverlay(id, e) {
     const wishRoof = document.getElementById('wish-roof-bar');
     if (wishRoof && document.getElementById('page-wishlist').classList.contains('active')) {
       wishRoof.style.display = 'flex';
+    }
+    const wishSearch = document.getElementById('wish-search-bar');
+    if (wishSearch && document.getElementById('page-wishlist').classList.contains('active')) {
+      wishSearch.style.display = 'block';
     }
   }
 }
@@ -2445,10 +2342,10 @@ async function checkPaymentStatus(orderId) {
   try {
     const data = await apiFetch(`/orders/${orderId}/payment-status`);
     if (data.paid) {
-      // Payment confirmed — add to orders list and show success
-      const existing = orders.findIndex(o => o.id === orderId);
-      if (existing === -1) orders.unshift(data.order);
-      else orders[existing] = data.order;
+      // Payment confirmed — add to myOrders list and show success
+      const existing = myOrders.findIndex(o => o.id === orderId);
+      if (existing === -1) myOrders.unshift(data.order);
+      else myOrders[existing] = data.order;
       updateStats();
       // Reset toast
       const t = document.getElementById('toast');
@@ -2530,9 +2427,9 @@ async function placeOrder() {
       total: sub,
       date_str: new Date().toLocaleDateString('ru',{day:'numeric',month:'long'}),
     });
-    orders.unshift(order);
-    // order-overlay removed — using checkout-overlay
+    myOrders.unshift(order);
     cart = []; updateStats();
+    closeOverlay('checkout-overlay');
     // success animation
     const s = document.getElementById('order-success');
     s.classList.add('show');
@@ -2553,14 +2450,14 @@ function getItemName(i) { return i.product_name||i.product?.name||'Товар' }
 function renderOrders() {
   const el = document.getElementById('orders-list');
   if (!el) return;
-  if (!orders.length) {
+  if (!myOrders.length) {
     el.innerHTML = `<div class="orders-empty"><div class="orders-empty-icon">📭</div><h3>Заказов пока нет</h3><p>Здесь появятся ваши заказы</p></div>`;
     return;
   }
-  el.innerHTML = orders.map(o => {
+  el.innerHTML = myOrders.map(o => {
     const st = getStatus(o.status);
     const names = (o.items||[]).map(getItemName).slice(0,2).join(', ') + ((o.items?.length||0)>2?` +${o.items.length-2}`:'');
-    return `<div class="order-card" onclick="openOrderDetail(${o.id})">
+    return `<div class="order-card" onclick="openOrderDetail(${o.id})" style="position:relative">
       <div class="order-top">
         <div class="order-num">Заказ #${o.id}</div>
         ${statusPill(o.status)}
@@ -2569,7 +2466,12 @@ function renderOrders() {
       <div class="order-total-line">${fmt(o.total)}</div>
       <div class="order-meta">
         <span class="order-date">${o.date||o.date_str||''}</span>
-        <span class="order-arrow">Подробнее →</span>
+        ${isAdmin() ? `<button onclick="event.stopPropagation();confirmDeleteOrder(${o.id})"
+          style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.25);
+          color:var(--red);border-radius:8px;padding:4px 10px;font-size:11px;
+          font-weight:600;cursor:pointer;font-family:'Inter',sans-serif">
+          Удалить
+        </button>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -2584,7 +2486,7 @@ const STATUS_OPTS = [
 ];
 
 function openOrderDetail(id) {
-  const o = orders.find(x => x.id===id);
+  const o = myOrders.find(x => x.id===id) || allOrders.find(x => x.id===id);
   if (!o) return;
 
   document.getElementById('od-num').textContent = `Заказ #${o.id}`;
@@ -2624,29 +2526,53 @@ function openOrderDetail(id) {
     </div>` : '';
 
   document.getElementById('od-info').innerHTML = recipHTML + adminHTML;
-  // Payment section — show for order owner if not yet paid
+  // Payment section — всегда показываем "Оплачено" (неоплаченные не отображаются)
   const paySection = document.getElementById('od-payment-section');
   if (paySection) {
-    const isOwner = o.user_id === tgId() || isAdmin();
-    const notPaid = o.paymentStatus !== 'paid';
-    if (isOwner && notPaid) {
-      openPayment(o.id, o.total);
-    } else if (o.paymentStatus === 'paid') {
-      paySection.innerHTML = `<div style="margin-top:14px;text-align:center;padding:10px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:10px;color:var(--green);font-size:13px;font-weight:500">✓ Оплачено</div>`;
-    } else {
-      paySection.innerHTML = '';
-    }
+    paySection.innerHTML = `<div style="margin-top:14px;text-align:center;padding:10px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:10px;color:var(--green);font-size:13px;font-weight:500">✓ Оплачено</div>`;
   }
   openOverlay('od-overlay');
+}
+
+async function confirmDeleteOrder(id) {
+  // Простое подтверждение через Telegram или нативный confirm
+  const ok = tg?.showPopup
+    ? await new Promise(resolve => tg.showPopup({
+        title: 'Удалить заказ?',
+        message: `Заказ #${id} будет удалён из истории.`,
+        buttons: [
+          { id: 'yes', type: 'destructive', text: 'Удалить' },
+          { id: 'no',  type: 'cancel',      text: 'Отмена'  }
+        ]
+      }, btn => resolve(btn === 'yes')))
+    : confirm(`Удалить заказ #${id}?`);
+  if (!ok) return;
+  await deleteOrder(id);
+}
+
+async function deleteOrder(id) {
+  try {
+    await apiDel(`/orders/${id}`);
+    myOrders = myOrders.filter(o => o.id !== id);
+    allOrders = allOrders.filter(o => o.id !== id);
+    updateStats();
+    renderOrders();
+    toast(`Заказ #${id} удалён`);
+    if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+  } catch(e) {
+    toast('Ошибка удаления ⚠️');
+  }
 }
 
 async function setOrderStatus(id, status) {
   try {
     const updated = await apiPatch(`/orders/${id}/status`, { status });
-    const idx = orders.findIndex(o => o.id===id);
-    if (idx !== -1) orders[idx] = updated;
     toast('Статус обновлён ✅');
     closeOverlay('od-overlay');
+    const mi = myOrders.findIndex(o => o.id === id);
+    if (mi !== -1) myOrders[mi] = updated;
+    const ai = allOrders.findIndex(o => o.id === id);
+    if (ai !== -1) allOrders[ai] = updated;
     renderOrders(); renderAdminOrders();
   } catch(e) { toast('Ошибка ⚠️') }
 }
@@ -2695,8 +2621,8 @@ function renderProfile() {
 }
 
 function updateStats() {
-  const ob = document.getElementById('orders-badge'); if (ob) ob.textContent = orders.length;
-  const po = document.getElementById('pstat-orders'); if (po) po.textContent = orders.length;
+  const ob = document.getElementById('orders-badge'); if (ob) ob.textContent = myOrders.length;
+  const po = document.getElementById('pstat-orders'); if (po) po.textContent = myOrders.length;
   const pw = document.getElementById('pstat-wish');   if (pw) pw.textContent = wishlist.size;
 }
 
@@ -2722,9 +2648,9 @@ function switchTab(tab, btn) {
 }
 
 function renderAdminStats() {
-  const rev = orders.reduce((s,o) => s+o.total, 0);
-  const act = orders.filter(o => o.status==='active').length;
-  document.getElementById('a-orders').textContent = orders.length;
+  const rev = allOrders.reduce((s,o) => s+o.total, 0);
+  const act = allOrders.filter(o => o.status==='active').length;
+  document.getElementById('a-orders').textContent = allOrders.length;
   document.getElementById('a-revenue').textContent = fmtK(rev);
   document.getElementById('a-products').textContent = PRODUCTS.length;
   document.getElementById('a-active').textContent = act;
@@ -2733,8 +2659,8 @@ function renderAdminStats() {
 function renderAdminOrders() {
   const el = document.getElementById('admin-orders-list');
   if (!el) return;
-  if (!orders.length) { el.innerHTML = `<div style="text-align:center;padding:40px 0;color:var(--text3);font-size:13px">Заказов пока нет</div>`; return; }
-  el.innerHTML = orders.map(o => {
+  if (!allOrders.length) { el.innerHTML = `<div style="text-align:center;padding:40px 0;color:var(--text3);font-size:13px">Заказов пока нет</div>`; return; }
+  el.innerHTML = allOrders.map(o => {
     const st = getStatus(o.status);
     const date = o.date||o.date_str||'';
     const count = (o.items||[]).length;
@@ -3473,10 +3399,7 @@ function loadRecommendations(lastViewed = null) {
   const allLabel = document.getElementById('home-section-label-all');
   if (allLabel) allLabel.style.display = 'block';
 
-  grid.innerHTML = skeletonHTML(6);
-  setTimeout(() => {
-    grid.innerHTML = recs.map((p,i) => cardHTML(p,i)).join('');
-  }, 300);
+  grid.innerHTML = recs.map((p,i) => cardHTML(p,i)).join('');
 }
 
 // Показывает рекомендации на странице товара
@@ -3738,9 +3661,9 @@ async function checkPendingOrder() {
   try {
     const data = await apiFetch(`/orders/${id}/payment-status`);
     if (data?.paid) {
-      const existing = orders.findIndex(o => o.id === Number(id));
-      if (existing === -1) orders.unshift(data.order);
-      else orders[existing] = data.order;
+      const existing = myOrders.findIndex(o => o.id === Number(id));
+      if (existing === -1) myOrders.unshift(data.order);
+      else myOrders[existing] = data.order;
       updateStats();
       localStorage.removeItem('pendingOrderId');
       toast('Заказ #' + id + ' оплачен ✅');
@@ -3885,14 +3808,11 @@ function toast(msg) {
 // Navbar is locked via CSS position:fixed — no JS keyboard handler needed
 
 renderProfile();
-loadProducts();
-loadAdmins();
-checkPendingOrder();
+// Запускаем параллельно — не ждём одного чтобы начать другое
+Promise.all([loadProducts(), loadMyOrders(), loadAdmins(), checkPendingOrder()]);
 
-setTimeout(() => {
-  const s = document.getElementById('splash');
-  if (s) { s.classList.add('hide'); setTimeout(() => s.remove(), 520); }
-}, 1100);
+// Максимум 800ms — потом скрываем в любом случае
+setTimeout(hideSplash, 800);
 </script>
 </body>
 </html>
