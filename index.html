@@ -317,7 +317,7 @@ body {
   overscroll-behavior-y:contain;
   touch-action:pan-y;
   visibility:hidden;
-  padding-top:var(--safe-t);
+  padding-top:calc(44px + var(--safe-t));
   padding-bottom:calc(var(--safe-b) + 16px);
 }
 #page-product.open { transform:none;pointer-events:all;visibility:visible;transition:transform .38s var(--easing), visibility 0s 0s; }
@@ -327,10 +327,30 @@ body {
 .slider-dots { position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:5px;z-index:3 }
 .slider-dot { width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.3);transition:all .22s }
 .slider-dot.on { background:#fff;width:18px;border-radius:3px }
+/* ── PRODUCT PAGE HEADER ── */
+.product-header {
+  position:fixed;
+  top:0;left:0;right:0;
+  z-index:250;
+  height:calc(44px + var(--safe-t));
+  padding-top:var(--safe-t);
+  background:rgba(8,8,8,.92);
+  backdrop-filter:blur(24px);
+  -webkit-backdrop-filter:blur(24px);
+  border-bottom:1px solid var(--border);
+  display:none;
+  align-items:center;
+  justify-content:center;
+}
+.product-header.open { display:flex }
+.product-header-title {
+  font-family:'Unbounded',sans-serif;font-size:13px;font-weight:700;letter-spacing:6px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
 .btn-back {
   position:absolute;
-  top:14px;
-  left:14px;width:36px;height:36px;border-radius:50%;
+  top:14px;left:14px;
+  width:36px;height:36px;border-radius:50%;
   background:rgba(0,0,0,.6);backdrop-filter:blur(10px);
   border:none;cursor:pointer;
   display:flex;align-items:center;justify-content:center;z-index:10;
@@ -338,8 +358,8 @@ body {
 .btn-back svg { width:20px;height:20px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round }
 .btn-wish {
   position:absolute;
-  top:14px;
-  right:14px;width:36px;height:36px;border-radius:50%;
+  top:14px;right:14px;
+  width:36px;height:36px;border-radius:50%;
   background:rgba(40,40,40,.8);backdrop-filter:blur(8px);
   border:none;cursor:pointer;
   display:flex;align-items:center;justify-content:center;z-index:10;
@@ -940,6 +960,11 @@ body {
 </div>
 
 <!-- PRODUCT DETAIL -->
+<!-- PRODUCT PAGE HEADER -->
+<div class="product-header" id="product-header">
+  <div class="product-header-title">PRIME</div>
+</div>
+
 <div id="page-product">
   <div class="detail-slider" id="detail-slider">
     <button class="btn-back" onclick="closeProduct()">
@@ -1694,7 +1719,8 @@ async function loadMyOrders() {
   try {
     const data = await apiFetch('/orders/my');
     myOrders.length = 0;
-    data.filter(o => o.paymentStatus === 'paid').forEach(o => myOrders.push(o));
+    // Суперадмин видит все свои заказы, остальные — только оплаченные
+    data.filter(o => isSuperAdmin() || o.paymentStatus === 'paid').forEach(o => myOrders.push(o));
     updateStats(); renderOrders();
   } catch(e) { console.error('orders/my:', e) }
 }
@@ -2028,18 +2054,44 @@ function openProduct(id) {
   requestAnimationFrame(() => {
     document.getElementById('page-product').classList.add('open');
     document.getElementById('detail-action').classList.add('open');
+    // Показываем шапку товара, скрываем остальные крыши
+    const ph = document.getElementById('product-header');
+    if (ph) ph.classList.add('open');
+    const logoBar = document.getElementById('home-logo-bar');
+    if (logoBar) logoBar.style.display = 'none';
+    const wishRoof = document.getElementById('wish-roof-bar');
+    if (wishRoof) wishRoof.style.display = 'none';
+    const wishSearch = document.getElementById('wish-search-bar');
+    if (wishSearch) wishSearch.style.display = 'none';
   });
 }
 
 function closeProduct() {
   document.getElementById('page-product').classList.remove('open');
   document.getElementById('detail-action').classList.remove('open');
-  // Refresh recommendations based on what was just viewed
-  const viewed = currentProduct; // сохраняем до обнуления
+  const ph = document.getElementById('product-header');
+  if (ph) ph.classList.remove('open');
+
+  // Восстанавливаем нужную крышу в зависимости от активной страницы
+  const activeId = document.querySelector('.page.active')?.id;
+  if (activeId === 'page-home') {
+    const logoBar = document.getElementById('home-logo-bar');
+    if (logoBar) logoBar.style.display = 'flex';
+  } else if (activeId === 'page-wishlist') {
+    const wishRoof = document.getElementById('wish-roof-bar');
+    if (wishRoof) wishRoof.style.display = 'flex';
+    const wishSearch = document.getElementById('wish-search-bar');
+    if (wishSearch) wishSearch.style.display = 'block';
+  }
+
+  // Обновляем ленту с рекомендациями на основе просмотренного товара
+  const viewed = currentProduct;
   currentProduct = null;
   if (viewed) {
     lastViewedProduct = viewed;
-    loadRecommendations(viewed);
+    loadProducts().then(() => loadRecommendations(viewed));
+  } else {
+    loadRecommendations(lastViewedProduct);
   }
 }
 
@@ -2228,6 +2280,36 @@ function openCheckout() {
   const photo2 = tgPhoto();
   av.innerHTML = photo2 ? `<img src="${photo2}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>` : '🧑';
 
+  // Для суперадмина — показываем кнопку бесплатного оформления
+  const paySection = document.getElementById('co-payment-section');
+  if (paySection) {
+    if (isSuperAdmin()) {
+      paySection.innerHTML = `
+        <button class="submit-btn" onclick="placeOrder()" id="order-submit-btn"
+          style="background:#fff;color:#000;display:flex;align-items:center;justify-content:center;gap:8px">
+          ✓ Оформить бесплатно
+        </button>
+        <div style="text-align:center;font-size:11px;color:var(--text3);padding:4px 0">
+          Суперадмин — оплата не требуется
+        </div>`;
+    } else {
+      paySection.innerHTML = `
+        <button class="submit-btn" id="co-payme-btn" onclick="checkoutPay('payme')"
+          style="background:#1ABC9C;display:flex;align-items:center;justify-content:center;gap:8px">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+          Оплатить через Payme
+        </button>
+        <button class="submit-btn" id="co-click-btn" onclick="checkoutPay('click')"
+          style="background:#0069FF;display:flex;align-items:center;justify-content:center;gap:8px">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+          Оплатить через Click
+        </button>
+        <div style="text-align:center;font-size:11px;color:var(--text3);padding:4px 0">
+          Заказ создаётся только после оплаты
+        </div>`;
+    }
+  }
+
   openOverlay('checkout-overlay');
 }
 
@@ -2316,26 +2398,11 @@ async function checkoutPay(provider) {
   }
 }
 
-// Show "waiting for payment" toast with option to check status
+// Тихо проверяем оплату в фоне без уведомлений пользователю
 function showPaymentWaiting(order, provider) {
-  const t = document.getElementById('toast');
-  t.innerHTML = `
-    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:4px 0">
-      <div>Ожидаем оплату заказа #${order.id}</div>
-      <button onclick="checkPaymentStatus(${order.id})"
-        style="background:rgba(255,255,255,.15);border:none;border-radius:20px;
-        padding:4px 12px;color:#fff;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">
-        Проверить оплату
-      </button>
-    </div>`;
-  t.style.opacity = '1';
-  t.style.transform = 'translateX(-50%) translateY(0)';
-  t.style.whiteSpace = 'normal';
-  t.style.textAlign = 'center';
-  t.style.width = '260px';
-  clearTimeout(t._t);
-  // Auto-check after 5 seconds
-  t._t = setTimeout(() => checkPaymentStatus(order.id), 5000);
+  // Проверяем каждые 5 секунд без toast
+  clearTimeout(window._payCheckTimer);
+  window._payCheckTimer = setTimeout(() => checkPaymentStatus(order.id), 5000);
 }
 
 async function checkPaymentStatus(orderId) {
@@ -2426,11 +2493,12 @@ async function placeOrder() {
       })),
       total: sub,
       date_str: new Date().toLocaleDateString('ru',{day:'numeric',month:'long'}),
+      // Суперадмин — сразу помечаем как оплаченный
+      payment_status: isSuperAdmin() ? 'paid' : 'pending',
     });
     myOrders.unshift(order);
     cart = []; updateStats();
     closeOverlay('checkout-overlay');
-    // success animation
     const s = document.getElementById('order-success');
     s.classList.add('show');
     setTimeout(() => s.classList.remove('show'), 3400);
