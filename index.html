@@ -1721,9 +1721,9 @@ async function loadMyOrders() {
     const myId = TG_USER?.id ? Number(TG_USER.id) : null;
     myOrders.length = 0;
     data
-      // Только оплаченные
-      .filter(o => o.paymentStatus === 'paid')
-      // Только свои (на случай если бэкенд вернёт лишнее)
+      // Суперадмин видит все свои заказы, остальные — только оплаченные
+      .filter(o => isSuperAdmin() || o.paymentStatus === 'paid')
+      // Только свои заказы
       .filter(o => !myId || Number(o.user_id) === myId)
       .forEach(o => myOrders.push(o));
     updateStats(); renderOrders();
@@ -2022,14 +2022,21 @@ function openProduct(id) {
   document.getElementById('detail-wish').classList.toggle('liked', wishlist.has(id));
   document.getElementById('d-desc').textContent = p.desc || '';
 
-  // colors
+  // colors — hex (#xxx/#xxxxxx) рендерим как свотч, остальное как текстовую кнопку
   const cs = document.getElementById('color-sec');
   cs.style.display = (p.colors&&p.colors.length) ? 'block' : 'none';
   if (p.colors&&p.colors.length) {
-    document.getElementById('sel-color').textContent = '';
-    document.getElementById('color-row').innerHTML = p.colors.map(c =>
-      `<div class="swatch${c===selColor?' on':''}" style="background:${c}" onclick="pickColor('${c}')"></div>`
-    ).join('');
+    const colorLabelEl = document.querySelector('#color-sec .var-label');
+    const isAllHex = p.colors.every(c => /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(c.trim()));
+    if (colorLabelEl) colorLabelEl.innerHTML = (isAllHex ? 'Цвет' : 'Вариация') + ' <span id="sel-color">' + (selColor||'') + '</span>';
+    document.getElementById('color-row').innerHTML = p.colors.map(c => {
+      const isHex = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(c.trim());
+      if (isHex) {
+        return `<div class="swatch${c===selColor?' on':''}" style="background:${c}" onclick="pickColor('${c}')"></div>`;
+      } else {
+        return `<button class="var-btn${c===selColor?' on':''}" onclick="pickColor('${c}')">${c}</button>`;
+      }
+    }).join('');
   }
 
   // sizes
@@ -2115,7 +2122,9 @@ function toggleDetailWish() {
 function pickColor(c) {
   selColor = c;
   document.getElementById('sel-color').textContent = c;
+  // Обновляем и свотчи и текстовые кнопки
   document.querySelectorAll('#color-row .swatch').forEach(el => el.classList.toggle('on', el.style.background===c));
+  document.querySelectorAll('#color-row .var-btn').forEach(el => el.classList.toggle('on', el.textContent===c));
 }
 function pickSize(s) {
   selSize = s;
@@ -2602,9 +2611,12 @@ async function deleteOrder(id) {
     allOrders = allOrders.filter(o => o.id !== id);
     updateStats();
     renderOrders();
-    toast(`Заказ #${id} удалён`);
+    renderAdminOrders();
+    closeOverlay('od-overlay');
+    toast(`Заказ #${id} удалён ✅`);
     if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
   } catch(e) {
+    console.error(e);
     toast('Ошибка удаления ⚠️');
   }
 }
@@ -2709,13 +2721,21 @@ function renderAdminOrders() {
     const st = getStatus(o.status);
     const date = o.date||o.date_str||'';
     const count = (o.items||[]).length;
-    return `<div class="admin-order-row" onclick="openOrderDetail(${o.id})">
+    return `<div class="admin-order-row" onclick="openOrderDetail(${o.id})" style="position:relative">
       <div style="width:7px;height:7px;border-radius:50%;background:${st.color};flex-shrink:0"></div>
       <div class="admin-order-info">
         <div class="admin-order-id">Заказ #${o.id} · <span style="color:${st.color};font-size:10px">${st.label}</span></div>
         <div class="admin-order-meta">${o.recipient} · ${date} · ${count} поз.</div>
       </div>
-      <div class="admin-order-total">${fmt(o.total)}</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="admin-order-total">${fmt(o.total)}</div>
+        ${isSuperAdmin() ? `<button onclick="event.stopPropagation();confirmDeleteOrder(${o.id})"
+          style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.25);
+          color:var(--red);border-radius:8px;padding:4px 8px;font-size:11px;
+          font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;white-space:nowrap">
+          ×
+        </button>` : ''}
+      </div>
     </div>`;
   }).join('');
 }
