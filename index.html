@@ -2560,14 +2560,38 @@ function openOrderDetail(id) {
     const name   = item.product_name||item.product?.name||'Товар';
     const price  = item.price||item.product?.price||0;
     const vars   = [item.color?'Цвет: '+item.color:'', item.size?'Размер: '+item.size:'', item.variation||''].filter(Boolean).join(' · ')||'Стандарт';
-    return `<div class="od-product">
-      <div class="od-emoji">${photos.length?`<img src="${photos[0]}" style="width:100%;height:100%;object-fit:cover;border-radius:10px"/>`:emoji}</div>
-      <div style="flex:1;min-width:0">
-        <div class="od-prod-name">${name}</div>
-        <div class="od-prod-var">${vars}</div>
-        <div class="od-prod-qty">× ${item.qty} шт.</div>
+
+    // Ищем source_links из PRODUCTS (только для админа)
+    const pid = item.product_id || item.product?.id;
+    const fullProduct = pid ? PRODUCTS.find(p => p.id === pid) : null;
+    const links = (isAdmin() && fullProduct?.source_links?.length)
+      ? fullProduct.source_links : [];
+
+    const linksHTML = links.length ? `
+      <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px">
+        ${links.map(l => `
+          <a href="${l.url}" target="_blank"
+            style="display:inline-flex;align-items:center;gap:6px;
+            padding:5px 10px;background:rgba(245,158,11,.08);
+            border:1px solid rgba(245,158,11,.2);border-radius:8px;
+            font-size:11px;font-weight:600;color:var(--orange);
+            text-decoration:none;width:fit-content"
+            onclick="event.stopPropagation();if(tg)tg.openLink('${l.url}')">
+            🔗 ${l.label}
+          </a>`).join('')}
+      </div>` : '';
+
+    return `<div class="od-product" style="flex-direction:column;align-items:stretch">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="od-emoji">${photos.length?`<img src="${photos[0]}" style="width:100%;height:100%;object-fit:cover;border-radius:10px"/>`:emoji}</div>
+        <div style="flex:1;min-width:0">
+          <div class="od-prod-name">${name}</div>
+          <div class="od-prod-var">${vars}</div>
+          <div class="od-prod-qty">× ${item.qty} шт.</div>
+        </div>
+        <div class="od-prod-price">${fmt(price*item.qty)}</div>
       </div>
-      <div class="od-prod-price">${fmt(price*item.qty)}</div>
+      ${linksHTML}
     </div>`;
   }).join('');
 
@@ -2883,10 +2907,18 @@ function renderVarChips(ctx) {
 
 function getVarData(ctx) {
   const {type, items} = varState[ctx];
-  if (type==='none'||!items.length) return {sizes:[],colors:[],variations:[]};
-  if (type==='size')  return {sizes:items,colors:[],variations:[]};
-  if (type==='color') return {sizes:[],colors:items,variations:[]};
-  return {sizes:[],colors:[],variations:items.map(v=>({label:v}))};
+  if (type==='none'||!items.length) return {colors:[],variations:[]};
+  if (type==='color') {
+    // hex (#xxx / #xxxxxx) → colors[], текст → variations[]
+    const hexItems  = items.filter(v => /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v.trim()));
+    const textItems = items.filter(v => !/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v.trim()));
+    return {
+      colors:     hexItems,
+      variations: textItems.map(v => ({label: v})),
+    };
+  }
+  if (type==='model') return {colors:[], variations: items.map(v=>({label:v}))};
+  return {colors:[], variations:[]};
 }
 
 /* ═══════════════════════════════════════════════
@@ -2903,22 +2935,23 @@ async function adminAddProduct() {
   if (!name) { toast('Введите название'); return; }
   if (!price){ toast('Введите цену'); return; }
 
-  const varData = getVarData('add');
   const btn = document.getElementById('a-submit-btn');
   btn.textContent = 'Сохранение...'; btn.disabled = true;
 
   try {
     const brand = document.getElementById('a-brand')?.value || '';
     const style = document.getElementById('a-style')?.value || '';
-    // Merge explicit sizes with variation sizes
-    const explicitSizes = varState.add.sizes || [];
     const varDataFinal = getVarData('add');
-    if (explicitSizes.length) varDataFinal.sizes = [...new Set([...explicitSizes, ...varDataFinal.sizes])];
+    // Размеры всегда из отдельного поля sizes (никогда не смешиваем с вариациями)
+    const sizes = varState.add.sizes || [];
     const product = await apiPost('/products', {
       name, cat, brand, style, emoji,
       photos: varState.add.photos,
       price, old_price: oldP,
-      ...varDataFinal, desc, is_new: true,
+      sizes,
+      colors:     varDataFinal.colors,
+      variations: varDataFinal.variations,
+      desc, is_new: true,
       source_links: varState.add.links,
     });
     PRODUCTS.unshift(product);
@@ -2973,12 +3006,17 @@ function openEdit(id) {
   const sinp = document.getElementById('e-sizes-input');
   if (sinp) sinp.value = '';
 
-  // figure out variation type
+  // Sizes — всегда в отдельном поле sizes (уже загружено выше через varState.edit.sizes)
+  // Variations — colors или model, независимо от sizes
   varState.edit.items = [];
   let vtype = 'none';
-  if (p.sizes&&p.sizes.length)      { vtype='size';  varState.edit.items=[...p.sizes]; }
-  else if (p.colors&&p.colors.length){ vtype='color'; varState.edit.items=[...p.colors]; }
-  else if (p.variations&&p.variations.length){ vtype='model'; varState.edit.items=p.variations.map(v=>v.label||v); }
+  if (p.colors && p.colors.length) {
+    vtype = 'color';
+    varState.edit.items = [...p.colors];
+  } else if (p.variations && p.variations.length) {
+    vtype = 'model';
+    varState.edit.items = p.variations.map(v => v.label || v);
+  }
   varState.edit.type = vtype;
   setVT('edit', vtype);
   renderVarChips('edit');
@@ -2998,21 +3036,22 @@ async function saveEdit() {
   if (!name) { toast('Введите название'); return; }
   if (!price){ toast('Введите цену'); return; }
 
-  const varData = getVarData('edit');
   const btn = document.getElementById('e-submit-btn');
   btn.textContent = 'Сохранение...'; btn.disabled = true;
 
   try {
     const brand = document.getElementById('e-brand')?.value || '';
     const style = document.getElementById('e-style')?.value || '';
-    const explicitSizesE = varState.edit.sizes || [];
     const varDataE = getVarData('edit');
-    if (explicitSizesE.length) varDataE.sizes = [...new Set([...explicitSizesE, ...varDataE.sizes])];
+    const sizes = varState.edit.sizes || [];
     const updated = await apiPut(`/products/${id}`, {
       name, cat, brand, style, emoji,
       photos: varState.edit.photos,
       price, old_price: oldP,
-      ...varDataE, desc, is_new: false,
+      sizes,
+      colors:     varDataE.colors,
+      variations: varDataE.variations,
+      desc, is_new: false,
       source_links: varState.edit.links,
     });
     const idx = PRODUCTS.findIndex(p => p.id===id);
