@@ -895,6 +895,23 @@ def update_order_status(oid: int, body: OrderStatusUpdate, x_init_data: Optional
     log_action(user["username"], "order_status", str(oid), body.status)
     return row_to_order(row)
 
+@app.delete("/orders/{oid}", status_code=204)
+def delete_order(oid: int, x_init_data: Optional[str] = Header(None)):
+    """Delete an order. Only superadmin can do this."""
+    user = require_admin(x_init_data, "orders")
+    if user.get("role") != "superadmin":
+        raise HTTPException(403, "Only superadmin can delete orders")
+    conn = get_db()
+    row = conn.execute("SELECT id FROM orders WHERE id=?", (oid,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "Order not found")
+    conn.execute("DELETE FROM orders WHERE id=?", (oid,))
+    conn.execute("DELETE FROM payments WHERE order_id=?", (oid,))
+    conn.commit()
+    conn.close()
+    log_action(user["username"], "order_delete", str(oid))
+
 # ═══════════════════════════════════════════════
 # ROUTES — ADMIN MANAGEMENT
 # ═══════════════════════════════════════════════
