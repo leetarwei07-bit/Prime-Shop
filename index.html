@@ -710,6 +710,25 @@ body {
 .admin-btn-edit:active { background:var(--s3) }
 .admin-btn-del { width:30px;height:30px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-size:12px;transition:background .15s }
 .admin-btn-del:active { background:rgba(239,68,68,.2) }
+.admin-btn-links { width:30px;height:30px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.2);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-size:12px;transition:background .15s;position:relative }
+.admin-btn-links:active { background:rgba(245,158,11,.2) }
+.admin-links-popup {
+  position:fixed;right:16px;
+  background:var(--s2);border:1px solid var(--border2);border-radius:14px;
+  padding:12px;min-width:220px;
+  z-index:2000;box-shadow:0 8px 32px rgba(0,0,0,.7);
+  animation:pageIn .15s ease both;
+}
+.admin-links-popup a {
+  display:flex;align-items:center;gap:8px;padding:10px 12px;
+  background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.15);
+  border-radius:9px;margin-bottom:6px;
+  font-size:12px;font-weight:600;color:var(--orange);text-decoration:none;
+}
+.admin-links-popup a:last-of-type { margin-bottom:0 }
+.admin-links-popup a:active { background:rgba(245,158,11,.15) }
+.admin-links-popup-title { font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px }
+.admin-links-popup-close { width:100%;margin-top:8px;padding:7px;background:var(--s3);border:none;border-radius:8px;color:var(--text3);font-size:12px;cursor:pointer;font-family:'Inter',sans-serif }
 .form { display:flex;flex-direction:column;gap:12px }
 .field label { display:block;font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px }
 .field input,.field select,.field textarea {
@@ -2729,6 +2748,61 @@ function switchTab(tab, btn) {
   if (tab === 'admins')  { renderAdminList(); }
   if (tab === 'brands')  { renderBrandsList(); }
   if (tab === 'log')     { loadAdminLog(); }
+  if (tab === 'add')     { resetAddForm(); }
+}
+
+function showProductLinks(e, pid) {
+  e.stopPropagation();
+  // Убираем старый попап если есть
+  const old = document.getElementById('admin-links-popup');
+  if (old) { old.remove(); return; }
+
+  const p = PRODUCTS.find(x => x.id === pid);
+  if (!p || !p.source_links?.length) return;
+
+  const popup = document.createElement('div');
+  popup.id = 'admin-links-popup';
+  popup.className = 'admin-links-popup';
+
+  // Позиционируем рядом с кнопкой
+  const rect = e.currentTarget.getBoundingClientRect();
+  popup.style.top = (rect.bottom + 8) + 'px';
+
+  popup.innerHTML = `
+    <div class="admin-links-popup-title">🔗 Источники: ${p.name}</div>
+    ${p.source_links.map(l => `
+      <a href="${l.url}" onclick="event.preventDefault();if(tg)tg.openLink('${l.url}');else window.open('${l.url}','_blank')">
+        🔗 ${l.label}
+        <span style="margin-left:auto;font-size:10px;color:var(--text3);font-weight:400;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.url.replace(/^https?:\/\//,'').slice(0,30)}...</span>
+      </a>`).join('')}
+    <button class="admin-links-popup-close" onclick="document.getElementById('admin-links-popup')?.remove()">Закрыть</button>`;
+
+  document.body.appendChild(popup);
+
+  // Закрываем по клику вне попапа
+  setTimeout(() => {
+    document.addEventListener('click', function close(ev) {
+      if (!popup.contains(ev.target)) { popup.remove(); document.removeEventListener('click', close); }
+    });
+  }, 0);
+}
+
+function resetAddForm() {
+  // Полный сброс формы добавления товара
+  ['a-name','a-price','a-old-price','a-desc','a-emoji',
+   'a-cny','a-weight','a-markup','a-insurance','a-sizes-input'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  const cr = document.getElementById('a-calc-result');
+  if (cr) cr.style.display = 'none';
+  const sp = document.getElementById('a-sizes-preview');
+  if (sp) sp.textContent = '';
+  varState.add = { type:'none', items:[], photos:[], links:[], sizes:[] };
+  renderPhotoPreviews('add');
+  renderVarChips('add');
+  renderLinkChips('add');
+  renderSizeChips('add');
+  setVT('add', 'none');
 }
 
 function renderAdminStats() {
@@ -2775,12 +2849,14 @@ function renderAdminProducts() {
     const img = p.photos&&p.photos.length
       ? `<div class="admin-prod-img"><img src="${p.photos[0]}" alt=""/></div>`
       : `<div class="admin-prod-img">${p.emoji}</div>`;
+    const hasLinks = p.source_links && p.source_links.length > 0;
     return `<div class="admin-prod-row">
       ${img}
       <div class="admin-prod-info">
         <div class="admin-prod-name">${p.name}</div>
-        <div class="admin-prod-price">${fmt(p.price)}${p.photos?.length?` · ${p.photos.length} фото`:''}</div>
+        <div class="admin-prod-price">${fmt(p.price)}${p.photos?.length?` · ${p.photos.length} фото`:''}${hasLinks?` · <span style="color:var(--orange)">${p.source_links.length} ссыл.</span>`:''}</div>
       </div>
+      ${hasLinks ? `<div class="admin-btn-links" onclick="showProductLinks(event,${p.id})" title="Ссылки на источники">🔗</div>` : ''}
       <div class="admin-btn-edit" onclick="openEdit(${p.id})">✏️</div>
       <div class="admin-btn-del" onclick="adminDel(${p.id})">🗑</div>
     </div>`;
@@ -3553,38 +3629,44 @@ function loadRecommendations(lastViewed = null) {
   if (!sec || !grid || !PRODUCTS.length) return;
   if (PRODUCTS.length < 4) return;
 
-  const anchor = lastViewed
-    || [...PRODUCTS].sort((a, b) => (b.sold || 0) - (a.sold || 0))[0];
+  if (lastViewed) {
+    // Есть anchor — показываем только реально связанные товары (score > 0)
+    const scored = scoreProducts(lastViewed, PRODUCTS);
+    const recs = scored.filter(x => x.score > 0).slice(0, 8);
 
-  // «Для вас» — топ 8 самых подходящих по score
-  const scored = scoreProducts(anchor, PRODUCTS);
-  const recs = scored.slice(0, 8);
+    sec.style.display = 'block';
+    const allLabel = document.getElementById('home-section-label-all');
+    if (allLabel) allLabel.style.display = 'block';
 
-  if (!recs.length) { sec.style.display = 'none'; return; }
+    grid.innerHTML = recs.map((x, i) => cardHTML(x.product, i)).join('');
 
-  sec.style.display = 'block';
-  const allLabel = document.getElementById('home-section-label-all');
-  if (allLabel) allLabel.style.display = 'block';
-
-  grid.innerHTML = recs.map((x, i) => cardHTML(x.product, i)).join('');
-
-  // Основная лента — все товары кроме тех что в «Для вас», от наиболее до менее подходящих
-  renderHomeSorted(anchor, scored);
+    // Лента: остальные товары по убыванию релевантности
+    const inRecs = new Set(recs.map(x => x.product.id));
+    const scoreMap = new Map(scored.map(x => [x.product.id, x.score]));
+    renderHomeSorted(inRecs, scoreMap);
+  } else {
+    // Нет истории — скрываем «Для вас», лента по новизне (дефолт)
+    sec.style.display = 'none';
+    renderHome(true);
+  }
 }
 
-function renderHomeSorted(anchor, scored) {
+function renderHomeSorted(inRecs, scoreMap) {
   const q = (document.getElementById('home-search-input')?.value||'').trim().toLowerCase();
   let list = [...PRODUCTS];
   if (homeCat !== 'Все') list = list.filter(p => p.cat === homeCat);
   if (q) list = list.filter(p => p.name.toLowerCase().includes(q) || p.cat.toLowerCase().includes(q));
 
-  // Исключаем топ-8 из «Для вас» чтобы не дублировать
-  const inRecs = new Set(scored.slice(0, 8).map(x => x.product.id));
+  // Убираем товары из «Для вас»
   list = list.filter(p => !inRecs.has(p.id));
 
-  // Сортируем оставшиеся по релевантности — самые подходящие сверху
-  const scoreMap = new Map(scored.map(x => [x.product.id, x.score]));
-  list.sort((a, b) => (scoreMap.get(b.id) || 0) - (scoreMap.get(a.id) || 0));
+  // Сортируем: релевантные сверху, потом по новизне
+  list.sort((a, b) => {
+    const sa = scoreMap.get(a.id) || 0;
+    const sb = scoreMap.get(b.id) || 0;
+    if (sb !== sa) return sb - sa;
+    return b.id - a.id; // при равном score — новее сверху
+  });
 
   renderGrid('home-grid', list, true);
 }
