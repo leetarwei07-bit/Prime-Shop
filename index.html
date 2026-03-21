@@ -923,7 +923,8 @@ body {
         <div class="home-search">
           <svg viewBox="0 0 24 24" style="cursor:pointer" onclick="renderHome()"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
           <input id="home-search-input" type="text" placeholder="Поиск товаров..."
-            onkeydown="if(event.key==='Enter'){renderHome();this.blur();}"/>
+            oninput="clearTimeout(this._t);this._t=setTimeout(()=>renderHome(),400)"
+            onkeydown="if(event.key==='Enter'){clearTimeout(this._t);renderHome();this.blur();}"/>
         </div>
         <button class="icon-btn" id="expand-btn" onclick="toggleFullscreen()" title="Полный экран">
           <svg id="expand-icon" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
@@ -1727,10 +1728,33 @@ async function loadProducts() {
     hideSplash(); // скрываем сплэш как только товары готовы
     loadBrands();
     loadRecommendations();
+    // Грузим ссылки отдельно (только для админов, бэкенд проверяет роль)
+    loadProductLinks();
   } catch(e) {
     console.error(e);
     hideSplash();
     toast('Ошибка загрузки каталога ⚠️');
+  }
+}
+
+async function loadProductLinks() {
+  try {
+    const data = await apiFetch('/products');
+    let found = 0;
+    data.forEach(p => {
+      if (p.source_links && p.source_links.length) {
+        productLinksCache[p.id] = p.source_links;
+        const local = PRODUCTS.find(x => x.id === p.id);
+        if (local) local.source_links = p.source_links;
+        found++;
+      }
+    });
+    console.log(`[links] loaded ${data.length} products, ${found} have links`, productLinksCache);
+    // Перерисовываем список товаров в админке если открыт
+    const adminPanel = document.getElementById('panel-products');
+    if (adminPanel && adminPanel.classList.contains('on')) renderAdminProducts();
+  } catch(e) {
+    console.error('[links] error:', e);
   }
 }
 
@@ -1903,6 +1927,7 @@ function renderGrid(elId, list, animate = true) {
 }
 
 let lastViewedProduct = null; // запоминаем последний просмотренный товар
+const productLinksCache = {}; // кэш source_links: {product_id: [{label,url}]}
 
 function toggleFullscreen() {
   if (!tg) { toast('Доступно только в Telegram'); return; }
@@ -1944,12 +1969,40 @@ function renderHome(instant = false) {
   const q = (document.getElementById('home-search-input')?.value||'').trim().toLowerCase();
   let list = [...PRODUCTS];
   if (homeCat !== 'Все') list = list.filter(p => p.cat === homeCat);
-  if (q) list = list.filter(p => p.name.toLowerCase().includes(q) || p.cat.toLowerCase().includes(q));
+  if (q) {
+    // Фильтруем и сортируем по приоритету: название > бренд > стиль > категория
+    list = list
+      .filter(p =>
+        p.name.toLowerCase().includes(q) ||
+        (p.brand && p.brand.toLowerCase().includes(q)) ||
+        (p.style && p.style.toLowerCase().includes(q)) ||
+        p.cat.toLowerCase().includes(q)
+      )
+      .sort((a, b) => {
+        const score = p => {
+          const n = p.name.toLowerCase();
+          const br = (p.brand||'').toLowerCase();
+          const st = (p.style||'').toLowerCase();
+          if (n.startsWith(q))   return 4; // название начинается с запроса
+          if (n.includes(q))     return 3; // название содержит
+          if (br.includes(q))    return 2; // бренд
+          if (st.includes(q))    return 1; // стиль
+          return 0;                         // категория
+        };
+        return score(b) - score(a);
+      });
+  }
 
-  // Show/hide section label
-  const allLabel = document.getElementById('home-section-label-all');
   const recSec   = document.getElementById('rec-section');
-  if (allLabel) allLabel.style.display = (recSec && recSec.style.display !== 'none') ? 'block' : 'none';
+  const allLabel = document.getElementById('home-section-label-all');
+
+  if (q) {
+    // При поиске — скрываем «Для вас» и метку «Все товары»
+    if (recSec) recSec.style.display = 'none';
+    if (allLabel) allLabel.style.display = 'none';
+  } else {
+    if (allLabel) allLabel.style.display = (recSec && recSec.style.display !== 'none') ? 'block' : 'none';
+  }
 
   renderGrid('home-grid', list, !instant);
 }
@@ -2027,9 +2080,9 @@ function openProduct(id) {
 
   // tags
   document.getElementById('d-tags').innerHTML =
-    `<span class="tag">${p.cat}</span>` +
-    (p.brand ? `<span class="tag">${p.brand}</span>` : '') +
-    (p.style  ? `<span class="tag">${p.style}</span>`  : '') +
+    `<span class="tag" style="cursor:pointer" onclick="searchByTag('cat','${p.cat}')">${p.cat}</span>` +
+    (p.brand ? `<span class="tag" style="cursor:pointer" onclick="searchByTag('brand','${p.brand}')">${p.brand}</span>` : '') +
+    (p.style  ? `<span class="tag" style="cursor:pointer" onclick="searchByTag('style','${p.style}')">${p.style}</span>`  : '') +
     (p.isNew  ? '<span class="tag new">NEW</span>' : '') +
     (disc > 0 ? `<span class="tag sale">-${disc}%</span>` : '');
 
@@ -2127,6 +2180,21 @@ function closeProduct() {
   } else {
     loadRecommendations(lastViewedProduct);
   }
+}
+
+function searchByTag(type, value) {
+  closeProduct();
+  // Небольшая задержка чтобы анимация закрытия отыграла
+  setTimeout(() => {
+    const inp = document.getElementById('home-search-input');
+    if (inp) {
+      inp.value = value;
+      renderHome();
+    }
+    // Скроллим наверх
+    const scroll = document.getElementById('home-scroll');
+    if (scroll) scroll.scrollTop = 0;
+  }, 350);
 }
 
 function toggleDetailWish() {
@@ -2580,8 +2648,7 @@ function openOrderDetail(id) {
     // Ищем source_links из PRODUCTS (только для админа)
     const pid = item.product_id || item.product?.id;
     const fullProduct = pid ? PRODUCTS.find(p => p.id === pid) : null;
-    const links = (isAdmin() && fullProduct?.source_links?.length)
-      ? fullProduct.source_links : [];
+    const links = isAdmin() ? (productLinksCache[pid] || fullProduct?.source_links || []) : [];
 
     const linksHTML = links.length ? `
       <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px">
@@ -2724,6 +2791,8 @@ function updateStats() {
   const ob = document.getElementById('orders-badge'); if (ob) ob.textContent = myOrders.length;
   const po = document.getElementById('pstat-orders'); if (po) po.textContent = myOrders.length;
   const pw = document.getElementById('pstat-wish');   if (pw) pw.textContent = wishlist.size;
+  // Сохраняем счётчик для мгновенного показа при следующем запуске
+  try { localStorage.setItem('cachedOrderCount', myOrders.length); } catch(e) {}
 }
 
 /* ═══════════════════════════════════════════════
@@ -2754,7 +2823,14 @@ function showProductLinks(e, pid) {
   if (old) { old.remove(); return; }
 
   const p = PRODUCTS.find(x => x.id === pid);
-  if (!p || !p.source_links?.length) return;
+  const links = productLinksCache[pid] || p?.source_links || [];
+  if (!p) return;
+  if (!links.length) {
+    // Ссылок нет — открываем редактирование чтобы добавить
+    toast('Ссылок нет — добавьте в редакторе');
+    setTimeout(() => openEdit(pid), 300);
+    return;
+  }
 
   const popup = document.createElement('div');
   popup.id = 'admin-links-popup';
@@ -2766,7 +2842,7 @@ function showProductLinks(e, pid) {
 
   popup.innerHTML = `
     <div class="admin-links-popup-title">🔗 Источники: ${p.name}</div>
-    ${p.source_links.map(l => `
+    ${links.map(l => `
       <a href="${l.url}" onclick="event.preventDefault();if(tg)tg.openLink('${l.url}');else window.open('${l.url}','_blank')">
         🔗 ${l.label}
         <span style="margin-left:auto;font-size:10px;color:var(--text3);font-weight:400;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.url.replace(/^https?:\/\//,'').slice(0,30)}...</span>
@@ -2845,14 +2921,16 @@ function renderAdminProducts() {
     const img = p.photos&&p.photos.length
       ? `<div class="admin-prod-img"><img src="${p.photos[0]}" alt=""/></div>`
       : `<div class="admin-prod-img">${p.emoji}</div>`;
-    const hasLinks = p.source_links && p.source_links.length > 0;
+    const pLinks = productLinksCache[p.id] || p.source_links || [];
+    const hasLinks = pLinks.length > 0;
     return `<div class="admin-prod-row">
       ${img}
       <div class="admin-prod-info">
         <div class="admin-prod-name">${p.name}</div>
-        <div class="admin-prod-price">${fmt(p.price)}${p.photos?.length?` · ${p.photos.length} фото`:''}${hasLinks?` · <span style="color:var(--orange)">${p.source_links.length} ссыл.</span>`:''}</div>
+        <div class="admin-prod-price">${fmt(p.price)}${p.photos?.length?` · ${p.photos.length} фото`:''}${hasLinks?` · <span style="color:var(--orange)">${pLinks.length} ссыл.</span>`:''}</div>
       </div>
-      ${hasLinks ? `<div class="admin-btn-links" onclick="showProductLinks(event,${p.id})" title="Ссылки на источники">🔗</div>` : ''}
+      <div class="admin-btn-links" onclick="showProductLinks(event,${p.id})"
+        style="${hasLinks ? '' : 'opacity:0.35'}" title="${hasLinks ? 'Ссылки на источники' : 'Нет ссылок'}">🔗</div>
       <div class="admin-btn-edit" onclick="openEdit(${p.id})">✏️</div>
       <div class="admin-btn-del" onclick="adminDel(${p.id})">🗑</div>
     </div>`;
@@ -3069,7 +3147,9 @@ function openEdit(id) {
   document.getElementById('e-desc').value = p.desc||'';
 
   varState.edit.photos = [...(p.photos||[])];
-  varState.edit.links  = [...(p.source_links||[])];
+  // Берём ссылки из кэша (загруженного отдельно) или из PRODUCTS
+  const cachedLinks = productLinksCache[p.id] || p.source_links || [];
+  varState.edit.links = [...cachedLinks];
   varState.edit.sizes  = [...(p.sizes||[])];
   renderPhotoPreviews('edit');
   renderLinkChips('edit');
@@ -3522,15 +3602,30 @@ function scoreProducts(anchor, allProducts) {
   const brandMap = buildBrandMap();
   const relatedBrands = brandMap[anchor.brand] || [];
 
-  return pool.map(p => {
+  // Считаем базовый score без джиттера
+  const scored = pool.map(p => {
     let score = 0;
-    if (p.brand && p.brand === anchor.brand)           score += 40; // тот же бренд
-    if (p.brand && relatedBrands.includes(p.brand))    score += 25; // связанный бренд
-    if (p.style && p.style === anchor.style)           score += 20; // тот же стиль
-    if (p.cat === anchor.cat)                          score += 10; // та же категория
-    if (p.sold > 0)                                    score += Math.min(5, p.sold / 10); // популярность
+    if (p.brand && p.brand === anchor.brand)           score += 40;
+    if (p.brand && relatedBrands.includes(p.brand))    score += 25;
+    if (p.style && p.style === anchor.style)           score += 20;
+    if (p.cat === anchor.cat)                          score += 10;
+    if (p.sold > 0)                                    score += Math.min(5, p.sold / 10);
     return { product: p, score };
   }).sort((a, b) => b.score - a.score);
+
+  // Перемешиваем каждые 4 позиции между собой (группами)
+  const GROUP = 4;
+  const result = [];
+  for (let i = 0; i < scored.length; i += GROUP) {
+    const group = scored.slice(i, i + GROUP);
+    // Перемешиваем внутри группы
+    for (let j = group.length - 1; j > 0; j--) {
+      const k = Math.floor(Math.random() * (j + 1));
+      [group[j], group[k]] = [group[k], group[j]];
+    }
+    result.push(...group);
+  }
+  return result;
 }
 
 // Главная функция рекомендаций — только высокорелевантные товары
@@ -3656,12 +3751,12 @@ function renderHomeSorted(inRecs, scoreMap) {
   // Убираем товары из «Для вас»
   list = list.filter(p => !inRecs.has(p.id));
 
-  // Сортируем: релевантные сверху, потом по новизне
+  // Сортируем: релевантные сверху, нулевые — в случайном порядке
   list.sort((a, b) => {
     const sa = scoreMap.get(a.id) || 0;
     const sb = scoreMap.get(b.id) || 0;
-    if (sb !== sa) return sb - sa;
-    return b.id - a.id; // при равном score — новее сверху
+    if (Math.abs(sb - sa) > 3) return sb - sa; // значимая разница — сортируем строго
+    return Math.random() - 0.5; // близкие score — перемешиваем
   });
 
   renderGrid('home-grid', list, true);
@@ -4074,6 +4169,16 @@ function toast(msg) {
 
 renderProfile();
 // Запускаем параллельно — не ждём одного чтобы начать другое
+// Мгновенно показываем кэшированный счётчик заказов пока грузится сервер
+try {
+  const cached = localStorage.getItem('cachedOrderCount');
+  if (cached !== null) {
+    const n = Number(cached);
+    const ob = document.getElementById('orders-badge'); if (ob) ob.textContent = n;
+    const po = document.getElementById('pstat-orders'); if (po) po.textContent = n;
+  }
+} catch(e) {}
+
 Promise.all([loadProducts(), loadMyOrders(), loadAdmins(), checkPendingOrder()]);
 
 // Максимум 800ms — потом скрываем в любом случае
