@@ -1130,7 +1130,7 @@ body {
     <button class="admin-tab" onclick="switchTab('add',this)">+ Добавить</button>
     <button class="admin-tab" id="tab-admins" onclick="switchTab('admins',this)">Команда</button>
     <button class="admin-tab" id="tab-brands" onclick="switchTab('brands',this)">Бренды</button>
-    <button class="admin-tab" id="tab-log" onclick="switchTab('log',this)">Лог</button>
+
   </div>
   <div class="scroll">
     <!-- STATS -->
@@ -1318,10 +1318,7 @@ body {
     </div>
 
     <!-- LOG -->
-    <div class="admin-panel" id="panel-log">
-      <div id="admin-log-list">
-        <div style="text-align:center;padding:30px 0;color:var(--text3);font-size:13px">Загрузка...</div>
-      </div>
+    
     </div>
   </div>
 </div>
@@ -1790,7 +1787,7 @@ function navigate(id, btn) {
   }
   if (id === 'admin') {
     pg.setAttribute('data-ok','1');
-    ['tab-admins','tab-log'].forEach(tabId => {
+    ['tab-admins'].forEach(tabId => {
       const t = document.getElementById(tabId);
       if (t) t.style.display = isSuperAdmin() ? '' : 'none';
     });
@@ -2747,7 +2744,6 @@ function switchTab(tab, btn) {
   if (tab === 'products'){ renderAdminProducts(); }
   if (tab === 'admins')  { renderAdminList(); }
   if (tab === 'brands')  { renderBrandsList(); }
-  if (tab === 'log')     { loadAdminLog(); }
   if (tab === 'add')     { resetAddForm(); }
 }
 
