@@ -180,6 +180,7 @@ def init_db():
 
     # Migrations for existing DBs
     migrations = [
+        "ALTER TABLE orders ADD COLUMN receipt_url TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE products ADD COLUMN brand TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE products ADD COLUMN style TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE brands ADD COLUMN style_names TEXT NOT NULL DEFAULT '[]'",
@@ -482,6 +483,7 @@ def row_to_order(row) -> dict:
         "statusLabel":   ORDER_STATUS_LABELS.get(row["status"], "В обработке"),
         "paymentStatus": row["payment_status"] if "payment_status" in cols else "pending",
         "paymentMethod": row["payment_method"] if "payment_method" in cols else "",
+        "receiptUrl":    row["receipt_url"] if "receipt_url" in cols else "",
         "date":          row["date_str"],
         "createdAt":     row["created_at"],
     }
@@ -946,10 +948,11 @@ def upload_receipt(oid: int, body: ReceiptUpload, x_init_data: Optional[str] = H
         except Exception as e:
             print(f"Receipt notify error: {e}")
 
-    # Помечаем заказ как ожидающий подтверждения перевода
+    # Сохраняем URL чека и помечаем заказ как ожидающий подтверждения
     conn = get_db()
     conn.execute(
-        "UPDATE orders SET payment_method='card', payment_status='receipt_sent' WHERE id=?", (oid,)
+        "UPDATE orders SET payment_method='card', payment_status='receipt_sent', receipt_url=? WHERE id=?",
+        (body.receipt, oid)
     )
     conn.commit(); conn.close()
 
