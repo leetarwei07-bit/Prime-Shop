@@ -935,38 +935,21 @@ def upload_receipt(oid: int, body: ReceiptUpload, x_init_data: Optional[str] = H
             import io
             boundary = "----FormBoundary"
             caption = (
-                f"💳 Чек об оплате
-"
-                f"Заказ #{oid}
-"
-                f"👤 {body.username or order['username']}
-"
-                f"💰 {order['total']:,} сум
-"
-                f"💳 Перевод на карту"
+                "💳 Чек об оплате\n"
+                f"Заказ #{oid}\n"
+                f"👤 {body.username or order['username']}\n"
+                f"💰 {order['total']:,} сум\n"
+                "💳 Перевод на карту"
             )
 
             # Multipart form data
+            CRLF = "\r\n"
             parts = []
-            parts.append(f"--{boundary}
-Content-Disposition: form-data; name="chat_id"
-
-{NOTIFY_CHAT_ID}")
-            parts.append(f"--{boundary}
-Content-Disposition: form-data; name="caption"
-
-{caption}")
-            parts.append(f"--{boundary}
-Content-Disposition: form-data; name="photo"; filename="receipt.jpg"
-Content-Type: image/jpeg
-
-")
-            body_start = ("
-".join(parts) + "
-").encode()
-            body_end = f"
---{boundary}--
-".encode()
+            parts.append(f"--{boundary}{CRLF}Content-Disposition: form-data; name=\"chat_id\"{CRLF}{CRLF}{NOTIFY_CHAT_ID}")
+            parts.append(f"--{boundary}{CRLF}Content-Disposition: form-data; name=\"caption\"{CRLF}{CRLF}{caption}")
+            parts.append(f"--{boundary}{CRLF}Content-Disposition: form-data; name=\"photo\"; filename=\"receipt.jpg\"{CRLF}Content-Type: image/jpeg{CRLF}{CRLF}")
+            body_start = ("\r\n".join(parts) + "\r\n").encode()
+            body_end = f"\r\n--{boundary}--\r\n".encode()
             full_body = body_start + img_bytes + body_end
 
             req = urllib.request.Request(
