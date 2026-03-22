@@ -2453,21 +2453,44 @@ function copyCard() {
   }
 }
 
-function handleReceipt(e) {
+async function handleReceipt(e) {
   const file = e.target.files[0];
   if (!file) return;
+
+  const zone = document.getElementById('co-receipt-zone');
+  const placeholder = document.getElementById('co-receipt-placeholder');
+  const preview = document.getElementById('co-receipt-preview');
+  const submitBtn = document.getElementById('co-card-submit-btn');
+
+  // Показываем превью сразу через FileReader (быстро)
   const reader = new FileReader();
   reader.onload = ev => {
-    receiptBase64 = ev.target.result;
-    const preview = document.getElementById('co-receipt-preview');
-    const placeholder = document.getElementById('co-receipt-placeholder');
-    const submitBtn = document.getElementById('co-card-submit-btn');
-    if (preview) { preview.src = receiptBase64; preview.style.display = 'block'; }
+    if (preview) { preview.src = ev.target.result; preview.style.display = 'block'; }
     if (placeholder) placeholder.style.display = 'none';
-    if (submitBtn) { submitBtn.disabled = false; submitBtn.style.opacity = '1'; }
-    toast('Чек прикреплён ✅');
   };
   reader.readAsDataURL(file);
+
+  // Показываем лоадер
+  if (placeholder) placeholder.innerHTML = '<div style="font-size:12px;color:var(--text3)">⏳ Загрузка...</div>';
+  if (placeholder) placeholder.style.display = 'block';
+
+  try {
+    // Загружаем на Cloudinary
+    const url = await uploadToCloudinary(file);
+    receiptBase64 = url; // теперь это URL а не base64
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.style.opacity = '1'; }
+    if (placeholder) placeholder.style.display = 'none';
+    toast('Чек прикреплён ✅');
+  } catch(err) {
+    console.error(err);
+    if (placeholder) {
+      placeholder.innerHTML = '<div style="font-size:24px">📎</div><div style="font-size:12px;color:var(--text3);margin-top:4px">Нажмите чтобы прикрепить чек</div>';
+      placeholder.style.display = 'block';
+    }
+    if (preview) { preview.style.display = 'none'; }
+    receiptBase64 = null;
+    toast('Ошибка загрузки чека ⚠️');
+  }
 }
 
 async function checkoutCard() {
