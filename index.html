@@ -1391,6 +1391,31 @@ body {
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
         Оплатить через Click
       </button>
+      <button class="submit-btn" id="co-card-btn" onclick="showCardPayment()"
+        style="background:var(--s2);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;gap:8px;color:#fff">
+        💳 Перевод на карту
+      </button>
+      <div id="co-card-section" style="display:none;flex-direction:column;gap:10px">
+        <div onclick="copyCard()" style="background:var(--s2);border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;transition:border-color .2s;active:border-color:var(--border2)"
+          onmousedown="this.style.borderColor='var(--border2)'" onmouseup="this.style.borderColor='var(--border)'">
+          <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Реквизиты карты · нажмите чтобы скопировать</div>
+          <div style="font-family:'Unbounded',sans-serif;font-size:16px;font-weight:700;letter-spacing:2px;margin-bottom:6px">5614 6822 1933 9936</div>
+          <div style="font-size:12px;color:var(--text2)">TARVEY KIM</div>
+        </div>
+        <div style="font-size:12px;color:var(--text2);text-align:center">Переведите точную сумму и прикрепите чек</div>
+        <div id="co-receipt-zone" style="background:var(--s2);border:2px dashed var(--border);border-radius:12px;min-height:80px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-direction:column;gap:6px"
+          onclick="document.getElementById('co-receipt-input').click()">
+          <input id="co-receipt-input" type="file" accept="image/*" style="display:none" onchange="handleReceipt(event)"/>
+          <div id="co-receipt-placeholder" style="text-align:center;padding:16px">
+            <div style="font-size:24px">📎</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:4px">Нажмите чтобы прикрепить чек</div>
+          </div>
+          <img id="co-receipt-preview" style="display:none;width:100%;border-radius:10px;object-fit:cover;max-height:200px"/>
+        </div>
+        <button class="submit-btn" id="co-card-submit-btn" onclick="checkoutCard()" disabled style="opacity:.5">
+          Отправить чек и оформить заказ
+        </button>
+      </div>
       <div style="text-align:center;font-size:11px;color:var(--text3);padding:4px 0">
         Заказ создаётся только после оплаты
       </div>
@@ -1765,7 +1790,7 @@ async function loadMyOrders() {
     myOrders.length = 0;
     data
       // Суперадмин видит все свои заказы, остальные — только оплаченные
-      .filter(o => isSuperAdmin() || o.paymentStatus === 'paid')
+      .filter(o => isSuperAdmin() || o.paymentStatus === 'paid' || o.paymentStatus === 'receipt_sent')
       // Только свои заказы
       .filter(o => !myId || Number(o.user_id) === myId)
       .forEach(o => myOrders.push(o));
@@ -1860,6 +1885,14 @@ const STATUS = {
   warehouse: { label:'На складе',   color:'#34d399', bg:'rgba(52,211,153,.1)', border:'rgba(52,211,153,.2)' },
   delivered: { label:'Доставлен',   color:'#22c55e', bg:'rgba(34,197,94,.1)',  border:'rgba(34,197,94,.2)' },
 };
+
+// Статус оплаты для отображения в карточке заказа
+function paymentBadge(o) {
+  if (o.paymentStatus === 'receipt_sent') {
+    return `<div style="margin-top:6px;display:inline-flex;align-items:center;gap:5px;padding:3px 10px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.2);border-radius:20px;font-size:10px;font-weight:600;color:var(--orange)">⏳ Чек на проверке</div>`;
+  }
+  return '';
+}
 function getStatus(s) { return STATUS[s] || STATUS.active }
 function statusPill(s) {
   const st = getStatus(s);
@@ -2306,6 +2339,18 @@ function closeOverlay(id, e) {
   if (e && e.target !== document.getElementById(id)) return;
   document.getElementById(id).classList.remove('open');
   if (id === 'checkout-overlay') {
+    // Сбрасываем чек
+    receiptBase64 = null;
+    const preview = document.getElementById('co-receipt-preview');
+    if (preview) { preview.src = ''; preview.style.display = 'none'; }
+    const placeholder = document.getElementById('co-receipt-placeholder');
+    if (placeholder) placeholder.style.display = 'block';
+    const submitBtn = document.getElementById('co-card-submit-btn');
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.style.opacity = '.5'; submitBtn.textContent = 'Отправить чек и оформить заказ'; }
+    const cardSec = document.getElementById('co-card-section');
+    if (cardSec) cardSec.style.display = 'none';
+    const cardBtn = document.getElementById('co-card-btn');
+    if (cardBtn) { cardBtn.style.borderColor = 'var(--border2)'; cardBtn.style.color = '#fff'; }
     const nav = document.querySelector('.bottom-nav');
     if (nav) nav.style.display = '';
     const logoBar = document.getElementById('home-logo-bar');
@@ -2385,6 +2430,95 @@ function openCheckout() {
   av.innerHTML = photo2 ? `<img src="${photo2}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>` : '🧑';
 
   openOverlay('checkout-overlay');
+}
+
+let receiptBase64 = null;
+
+function showCardPayment() {
+  const sec = document.getElementById('co-card-section');
+  const btn = document.getElementById('co-card-btn');
+  if (!sec) return;
+  const isOpen = sec.style.display === 'flex';
+  sec.style.display = isOpen ? 'none' : 'flex';
+  btn.style.borderColor = isOpen ? 'var(--border2)' : 'var(--orange)';
+  btn.style.color = isOpen ? '#fff' : 'var(--orange)';
+}
+
+function copyCard() {
+  const num = '5614682219339936';
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(num).then(() => toast('Номер скопирован ✅'));
+  } else {
+    toast('5614 6822 1933 9936');
+  }
+}
+
+function handleReceipt(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    receiptBase64 = ev.target.result;
+    const preview = document.getElementById('co-receipt-preview');
+    const placeholder = document.getElementById('co-receipt-placeholder');
+    const submitBtn = document.getElementById('co-card-submit-btn');
+    if (preview) { preview.src = receiptBase64; preview.style.display = 'block'; }
+    if (placeholder) placeholder.style.display = 'none';
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.style.opacity = '1'; }
+    toast('Чек прикреплён ✅');
+  };
+  reader.readAsDataURL(file);
+}
+
+async function checkoutCard() {
+  if (!receiptBase64) { toast('Прикрепите чек'); return; }
+  if (!currentProduct) return;
+
+  const p = currentProduct;
+  const total = p.price * detailQty;
+  const selfUser = tgUser();
+  const isOther = coRecMode === 'other';
+  const otherVal = (document.getElementById('co-other-input').value||'').trim();
+  const recipient = isOther ? (otherVal.startsWith('@')?otherVal:'@'+otherVal)||'@unknown' : selfUser;
+
+  const btn = document.getElementById('co-card-submit-btn');
+  btn.textContent = 'Оформление...'; btn.disabled = true;
+
+  try {
+    // Создаём заказ
+    const order = await apiPost('/orders', {
+      recipient, is_self: !isOther, self_username: selfUser,
+      items: [{
+        product_id: p.id, product_name: p.name,
+        product_emoji: p.emoji, product_photos: p.photos||[],
+        price: p.price, color: selColor||null,
+        size: selSize||null, variation: selVariation||null,
+        qty: detailQty,
+      }],
+      total,
+      date_str: new Date().toLocaleDateString('ru',{day:'numeric',month:'long'}),
+      payment_method: 'card',
+    });
+
+    // Отправляем чек на бэкенд
+    await apiPost('/orders/' + order.id + '/receipt', {
+      receipt: receiptBase64,
+      username: selfUser,
+    });
+
+    myOrders.unshift(order);
+    cart = []; updateStats();
+    receiptBase64 = null;
+    closeOverlay('checkout-overlay');
+    const s = document.getElementById('order-success');
+    s.classList.add('show');
+    setTimeout(() => s.classList.remove('show'), 3400);
+  } catch(e) {
+    console.error(e);
+    toast('Ошибка оформления ⚠️');
+    btn.textContent = 'Отправить чек и оформить заказ';
+    btn.disabled = false;
+  }
 }
 
 function coPickRec(mode) {
@@ -2605,6 +2739,7 @@ function renderOrders() {
       </div>
       <div class="order-items-preview">${names||'—'}</div>
       <div class="order-total-line">${fmt(o.total)}</div>
+      ${paymentBadge(o)}
       <div class="order-meta">
         <span class="order-date">${o.date||o.date_str||''}</span>
         ${isSuperAdmin() ? `<button onclick="event.stopPropagation();confirmDeleteOrder(${o.id})"
@@ -2683,11 +2818,19 @@ function openOrderDetail(id) {
     : `<div class="od-info-row"><span class="od-info-key">Оформил</span><span class="od-info-val">${o.selfUsername||o.username||''}</span></div>
        <div class="od-info-row"><span class="od-info-key">Получатель</span><span class="od-info-val" style="color:var(--orange)">${o.recipient}</span></div>`;
 
+  const cardConfirmHTML = isAdmin() && o.paymentStatus === 'receipt_sent' ? `
+    <div style="margin-top:12px">
+      <button onclick="confirmCardPayment(${o.id})" style="width:100%;padding:12px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:10px;color:var(--green);font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif">
+        ✅ Подтвердить оплату картой
+      </button>
+    </div>` : '';
+
   const adminHTML = isAdmin() ? `
     <div style="margin-top:16px">
       <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Изменить статус</div>
       ${STATUS_OPTS.map(s=>`<button class="status-btn${o.status===s.v?' on':''}" onclick="setOrderStatus(${o.id},'${s.v}')">${o.status===s.v?'✓ ':''}${s.l}</button>`).join('')}
-    </div>` : '';
+    </div>
+    ${cardConfirmHTML}` : '';
 
   document.getElementById('od-info').innerHTML = recipHTML + adminHTML;
   // Payment section — всегда показываем "Оплачено" (неоплаченные не отображаются)
@@ -2696,6 +2839,21 @@ function openOrderDetail(id) {
     paySection.innerHTML = `<div style="margin-top:14px;text-align:center;padding:10px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:10px;color:var(--green);font-size:13px;font-weight:500">✓ Оплачено</div>`;
   }
   openOverlay('od-overlay');
+}
+
+async function confirmCardPayment(orderId) {
+  try {
+    await apiPatch(`/orders/${orderId}/status`, { status: 'active', payment_status: 'paid' });
+    // Обновляем локально
+    const mi = myOrders.findIndex(o => o.id === orderId);
+    if (mi !== -1) myOrders[mi].paymentStatus = 'paid';
+    const ai = allOrders.findIndex(o => o.id === orderId);
+    if (ai !== -1) allOrders[ai].paymentStatus = 'paid';
+    closeOverlay('od-overlay');
+    renderOrders(); renderAdminOrders();
+    toast('Оплата подтверждена ✅');
+    if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+  } catch(e) { toast('Ошибка ⚠️'); }
 }
 
 async function confirmDeleteOrder(id) {
@@ -2803,6 +2961,11 @@ function updateStats() {
    ADMIN - STATS
 ═══════════════════════════════════════════════ */
 function switchTab(tab, btn) {
+  // Сбрасываем форму добавления при уходе с неё
+  const prevActive = document.querySelector('.admin-panel.on');
+  if (prevActive && prevActive.id === 'panel-add' && tab !== 'add') {
+    resetAddForm();
+  }
   document.querySelectorAll('.admin-tab').forEach(b => b.classList.remove('on'));
   document.querySelectorAll('.admin-panel').forEach(p => p.classList.remove('on'));
   btn.classList.add('on');
@@ -2991,6 +3154,18 @@ async function handlePhotos(e, ctx) {
   if (uploaded > 0) toast(`✅ Загружено ${uploaded} фото`);
 }
 
+function triggerPhotoAdd(ctx) {
+  // Создаём свежий input чтобы избежать проблем с повторным выбором на мобиле
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = 'image/*';
+  inp.multiple = true;
+  inp.style.display = 'none';
+  inp.onchange = (e) => { handlePhotos(e, ctx); inp.remove(); };
+  document.body.appendChild(inp);
+  inp.click();
+}
+
 function removePhoto(ctx, idx) {
   varState[ctx].photos.splice(idx, 1);
   renderPhotoPreviews(ctx);
@@ -3010,7 +3185,7 @@ function renderPhotoPreviews(ctx) {
       <button class="rm" onclick="removePhoto('${ctx}',${i})">×</button>
     </div>`
   ).join('') + (photos.length < 8 && photos.length > 0
-    ? `<div class="photo-add" onclick="document.getElementById('${prefix}-photos-input').click()">+</div>` : '');
+    ? `<div class="photo-add" onclick="triggerPhotoAdd('${ctx}')">+</div>` : '');
 }
 
 /* ═══════════════════════════════════════════════
