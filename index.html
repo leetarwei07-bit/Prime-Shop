@@ -1765,16 +1765,13 @@ async function loadProducts() {
 async function loadProductLinks() {
   try {
     const data = await apiFetch('/products');
-    let found = 0;
     data.forEach(p => {
       if (p.source_links && p.source_links.length) {
         productLinksCache[p.id] = p.source_links;
         const local = PRODUCTS.find(x => x.id === p.id);
         if (local) local.source_links = p.source_links;
-        found++;
       }
     });
-    console.log(`[links] loaded ${data.length} products, ${found} have links`, productLinksCache);
     // Перерисовываем список товаров в админке если открыт
     const adminPanel = document.getElementById('panel-products');
     if (adminPanel && adminPanel.classList.contains('on')) renderAdminProducts();
@@ -2209,7 +2206,7 @@ function closeProduct() {
   currentProduct = null;
   if (viewed) {
     lastViewedProduct = viewed;
-    loadProducts().then(() => loadRecommendations(viewed));
+    loadRecommendations(viewed); // обновляем рекомендации без перезагрузки каталога
   } else {
     loadRecommendations(lastViewedProduct);
   }
