@@ -924,16 +924,6 @@ def upload_receipt(oid: int, body: ReceiptUpload, x_init_data: Optional[str] = H
     # Отправляем чек в Telegram
     if NOTIFY_CHAT_ID and BOT_TOKEN != "YOUR_BOT_TOKEN_HERE":
         try:
-            import base64 as b64mod
-            # Извлекаем base64 данные
-            img_data = body.receipt
-            if "," in img_data:
-                img_data = img_data.split(",", 1)[1]
-            img_bytes = b64mod.b64decode(img_data)
-
-            # Отправляем фото через Telegram Bot API
-            import io
-            boundary = "----FormBoundary"
             caption = (
                 "💳 Чек об оплате\n"
                 f"Заказ #{oid}\n"
@@ -941,21 +931,16 @@ def upload_receipt(oid: int, body: ReceiptUpload, x_init_data: Optional[str] = H
                 f"💰 {order['total']:,} сум\n"
                 "💳 Перевод на карту"
             )
-
-            # Multipart form data
-            CRLF = "\r\n"
-            parts = []
-            parts.append(f"--{boundary}{CRLF}Content-Disposition: form-data; name=\"chat_id\"{CRLF}{CRLF}{NOTIFY_CHAT_ID}")
-            parts.append(f"--{boundary}{CRLF}Content-Disposition: form-data; name=\"caption\"{CRLF}{CRLF}{caption}")
-            parts.append(f"--{boundary}{CRLF}Content-Disposition: form-data; name=\"photo\"; filename=\"receipt.jpg\"{CRLF}Content-Type: image/jpeg{CRLF}{CRLF}")
-            body_start = ("\r\n".join(parts) + "\r\n").encode()
-            body_end = f"\r\n--{boundary}--\r\n".encode()
-            full_body = body_start + img_bytes + body_end
-
+            # Отправляем фото по URL (Cloudinary) — просто и надёжно
+            data = json.dumps({
+                "chat_id": NOTIFY_CHAT_ID,
+                "photo": body.receipt,
+                "caption": caption,
+            }).encode()
             req = urllib.request.Request(
                 f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto",
-                data=full_body,
-                headers={"Content-Type": f"multipart/form-data; boundary={boundary}"}
+                data=data,
+                headers={"Content-Type": "application/json"}
             )
             urllib.request.urlopen(req, timeout=10)
         except Exception as e:
