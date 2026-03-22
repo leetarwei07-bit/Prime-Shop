@@ -1381,15 +1381,15 @@ body {
       <input type="text" id="co-other-input" placeholder="@username получателя" oninput="coUpdateOtherUser()"/>
     </div>
     <div id="co-payment-section" style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
-      <button class="submit-btn" id="co-payme-btn" onclick="checkoutPay('payme')"
-        style="background:#1ABC9C;display:flex;align-items:center;justify-content:center;gap:8px">
+      <button class="submit-btn" id="co-payme-btn" onclick="toast('⚙️ Payme в разработке — используйте перевод на карту')"
+        style="background:#1ABC9C;display:flex;align-items:center;justify-content:center;gap:8px;opacity:.5">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-        Оплатить через Payme
+        Payme · В разработке
       </button>
-      <button class="submit-btn" id="co-click-btn" onclick="checkoutPay('click')"
-        style="background:#0069FF;display:flex;align-items:center;justify-content:center;gap:8px">
+      <button class="submit-btn" id="co-click-btn" onclick="toast('⚙️ Click в разработке — используйте перевод на карту')"
+        style="background:#0069FF;display:flex;align-items:center;justify-content:center;gap:8px;opacity:.5">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-        Оплатить через Click
+        Click · В разработке
       </button>
       <button class="submit-btn" id="co-card-btn" onclick="showCardPayment()"
         style="background:var(--s2);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;gap:8px;color:#fff">
@@ -2457,12 +2457,11 @@ async function handleReceipt(e) {
   const file = e.target.files[0];
   if (!file) return;
 
-  const zone = document.getElementById('co-receipt-zone');
   const placeholder = document.getElementById('co-receipt-placeholder');
   const preview = document.getElementById('co-receipt-preview');
   const submitBtn = document.getElementById('co-card-submit-btn');
 
-  // Показываем превью сразу через FileReader (быстро)
+  // Сразу показываем превью локально (не ждём Cloudinary)
   const reader = new FileReader();
   reader.onload = ev => {
     if (preview) { preview.src = ev.target.result; preview.style.display = 'block'; }
@@ -2470,26 +2469,36 @@ async function handleReceipt(e) {
   };
   reader.readAsDataURL(file);
 
-  // Показываем лоадер
-  if (placeholder) placeholder.innerHTML = '<div style="font-size:12px;color:var(--text3)">⏳ Загрузка...</div>';
-  if (placeholder) placeholder.style.display = 'block';
+  // Блокируем кнопку на время загрузки
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.style.opacity = '0.6';
+    submitBtn.textContent = '⏳ Загрузка чека...';
+  }
 
   try {
-    // Загружаем на Cloudinary
     const url = await uploadToCloudinary(file);
-    receiptBase64 = url; // теперь это URL а не base64
-    if (submitBtn) { submitBtn.disabled = false; submitBtn.style.opacity = '1'; }
-    if (placeholder) placeholder.style.display = 'none';
+    receiptBase64 = url;
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.style.opacity = '1';
+      submitBtn.textContent = 'Отправить чек и оформить заказ';
+    }
     toast('Чек прикреплён ✅');
   } catch(err) {
     console.error(err);
+    receiptBase64 = null;
+    if (preview) { preview.style.display = 'none'; }
     if (placeholder) {
       placeholder.innerHTML = '<div style="font-size:24px">📎</div><div style="font-size:12px;color:var(--text3);margin-top:4px">Нажмите чтобы прикрепить чек</div>';
       placeholder.style.display = 'block';
     }
-    if (preview) { preview.style.display = 'none'; }
-    receiptBase64 = null;
-    toast('Ошибка загрузки чека ⚠️');
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.style.opacity = '0.5';
+      submitBtn.textContent = 'Отправить чек и оформить заказ';
+    }
+    toast('Ошибка загрузки — попробуйте ещё раз ⚠️');
   }
 }
 
