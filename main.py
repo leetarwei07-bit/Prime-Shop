@@ -535,6 +535,7 @@ class OrderCreate(BaseModel):
 
 class OrderStatusUpdate(BaseModel):
     status: str
+    payment_status: Optional[str] = None
 
 class AdminRoleUpdate(BaseModel):
     username: str
@@ -887,13 +888,102 @@ def update_order_status(oid: int, body: OrderStatusUpdate, x_init_data: Optional
     if body.status not in ORDER_STATUSES:
         raise HTTPException(400, f"Valid statuses: {ORDER_STATUSES}")
     conn = get_db()
-    affected = conn.execute("UPDATE orders SET status=? WHERE id=?", (body.status, oid)).rowcount
+    if body.payment_status:
+        affected = conn.execute(
+            "UPDATE orders SET status=?, payment_status=? WHERE id=?",
+            (body.status, body.payment_status, oid)
+        ).rowcount
+    else:
+        affected = conn.execute("UPDATE orders SET status=? WHERE id=?", (body.status, oid)).rowcount
     conn.commit()
     row = conn.execute("SELECT * FROM orders WHERE id=?", (oid,)).fetchone()
     conn.close()
     if not affected: raise HTTPException(404, "Not found")
     log_action(user["username"], "order_status", str(oid), body.status)
     return row_to_order(row)
+
+class ReceiptUpload(BaseModel):
+    receipt: str   # base64 image
+    username: str  = ""
+
+@app.post("/orders/{oid}/receipt", status_code=204)
+def upload_receipt(oid: int, body: ReceiptUpload, x_init_data: Optional[str] = Header(None)):
+    """Принимает чек от покупателя и отправляет его в Telegram."""
+    user = get_user(x_init_data)
+    if not user: raise HTTPException(401, "Auth required")
+
+    conn = get_db()
+    order = conn.execute("SELECT * FROM orders WHERE id=?", (oid,)).fetchone()
+    conn.close()
+    if not order: raise HTTPException(404, "Order not found")
+
+    # Проверяем что это заказ этого пользователя
+    if str(order["user_id"]) != str(user.get("id","")) and not check_admin(x_init_data):
+        raise HTTPException(403, "Forbidden")
+
+    # Отправляем чек в Telegram
+    if NOTIFY_CHAT_ID and BOT_TOKEN != "YOUR_BOT_TOKEN_HERE":
+        try:
+            import base64 as b64mod
+            # Извлекаем base64 данные
+            img_data = body.receipt
+            if "," in img_data:
+                img_data = img_data.split(",", 1)[1]
+            img_bytes = b64mod.b64decode(img_data)
+
+            # Отправляем фото через Telegram Bot API
+            import io
+            boundary = "----FormBoundary"
+            caption = (
+                f"💳 Чек об оплате
+"
+                f"Заказ #{oid}
+"
+                f"👤 {body.username or order['username']}
+"
+                f"💰 {order['total']:,} сум
+"
+                f"💳 Перевод на карту"
+            )
+
+            # Multipart form data
+            parts = []
+            parts.append(f"--{boundary}
+Content-Disposition: form-data; name="chat_id"
+
+{NOTIFY_CHAT_ID}")
+            parts.append(f"--{boundary}
+Content-Disposition: form-data; name="caption"
+
+{caption}")
+            parts.append(f"--{boundary}
+Content-Disposition: form-data; name="photo"; filename="receipt.jpg"
+Content-Type: image/jpeg
+
+")
+            body_start = ("
+".join(parts) + "
+").encode()
+            body_end = f"
+--{boundary}--
+".encode()
+            full_body = body_start + img_bytes + body_end
+
+            req = urllib.request.Request(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto",
+                data=full_body,
+                headers={"Content-Type": f"multipart/form-data; boundary={boundary}"}
+            )
+            urllib.request.urlopen(req, timeout=10)
+        except Exception as e:
+            print(f"Receipt notify error: {e}")
+
+    # Помечаем заказ как ожидающий подтверждения перевода
+    conn = get_db()
+    conn.execute(
+        "UPDATE orders SET payment_method='card', payment_status='receipt_sent' WHERE id=?", (oid,)
+    )
+    conn.commit(); conn.close()
 
 @app.delete("/orders/{oid}", status_code=204)
 def delete_order(oid: int, x_init_data: Optional[str] = Header(None)):
