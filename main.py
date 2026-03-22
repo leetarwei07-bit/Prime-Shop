@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict
-import sqlite3, json, os, hmac, hashlib, time, math, urllib.request, urllib.parse
+import sqlite3, json, os, hmac, hashlib, time, math, urllib.request, urllib.parse, base64
 
 # ═══════════════════════════════════════════════
 # CONFIG
@@ -1065,7 +1065,6 @@ async def payme_webhook(request: Request):
     # Verify Basic Auth
     auth = request.headers.get("Authorization","")
     if PAYME_KEY:
-        import base64
         expected = base64.b64encode(f"Paycom:{PAYME_KEY}".encode()).decode()
         if auth != f"Basic {expected}":
             return JSONResponse({"error": {"code": -32504, "message": "Forbidden"}})
@@ -1157,7 +1156,6 @@ def payme_payment_url(order_id: int, x_init_data: Optional[str] = Header(None)):
         if check_admin(x_init_data) is None:
             raise HTTPException(403, "Not your order")
     amount = order["total"] * 100  # Payme works in tiyins
-    import base64
     params = f"m={PAYME_ID};ac.order_id={order_id};a={amount}"
     encoded = base64.b64encode(params.encode()).decode()
     url = f"https://checkout.paycom.uz/{encoded}"
