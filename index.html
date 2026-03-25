@@ -4500,7 +4500,9 @@ let descTemplates = [];
 async function loadDescTemplates() {
   try {
     descTemplates = await apiFetch('/desc-templates');
-    renderTemplatesList();
+    // Рендерим список в панели только если она открыта
+    const panel = document.getElementById('panel-templates');
+    if (panel && panel.classList.contains('on')) renderTemplatesList();
   } catch(e) { console.error('templates:', e) }
 }
 
@@ -4581,6 +4583,15 @@ let _tplPickerCtx = 'add';
 
 function openTemplatesPicker(ctx) {
   _tplPickerCtx = ctx;
+  // Загружаем шаблоны если ещё не загружены, потом показываем пикер
+  if (!descTemplates.length) {
+    loadDescTemplates().then(() => _showTemplatePicker());
+  } else {
+    _showTemplatePicker();
+  }
+}
+
+function _showTemplatePicker() {
   const list  = document.getElementById('tpl-picker-list');
   const empty = document.getElementById('tpl-picker-empty');
   if (!list || !empty) return;
@@ -4593,7 +4604,7 @@ function openTemplatesPicker(ctx) {
       <div onclick="applyTemplate(${t.id})"
         style="background:var(--s2);border:1px solid var(--border);border-radius:14px;padding:14px;cursor:pointer;
                transition:border-color .15s,transform .15s;animation:slideUp .22s var(--easing) both"
-        onmousedown="this.style.transform='scale(.97)'" onmouseup="this.style.transform=''" ontouchstart="this.style.transform='scale(.97)'" ontouchend="this.style.transform=''">
+        ontouchstart="this.style.transform='scale(.97)'" ontouchend="this.style.transform=''">
         <div style="font-size:13px;font-weight:600;margin-bottom:4px">${t.title}</div>
         <div style="font-size:12px;color:var(--text2);line-height:1.5;white-space:pre-wrap;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${t.body}</div>
       </div>`).join('');
