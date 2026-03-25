@@ -292,6 +292,20 @@ body {
   font-size:10px;font-weight:500;color:var(--green);letter-spacing:.1px;
 }
 .prod-cargo svg { flex-shrink:0 }
+.prod-preorder {
+  color:var(--orange) !important;
+}
+.prod-preorder-badge {
+  position:absolute;top:8px;left:8px;
+  background:rgba(245,158,11,.92);
+  color:#000;font-size:9px;font-weight:700;
+  padding:3px 8px;border-radius:20px;
+  letter-spacing:.4px;text-transform:uppercase;
+  backdrop-filter:blur(4px);
+  z-index:2;
+  animation:badgePop .3s var(--spring) both;
+}
+@keyframes badgePop { from{opacity:0;transform:scale(.7)} to{opacity:1;transform:scale(1)} }
 .empty-state {
   grid-column:1/-1;display:flex;flex-direction:column;align-items:center;
   gap:10px;padding:60px 20px;text-align:center;
@@ -372,6 +386,7 @@ body {
 .tag { display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:600;background:rgba(255,255,255,.05);color:var(--text3);border:1px solid var(--border) }
 .tag.new { background:rgba(34,197,94,.1);color:var(--green);border-color:rgba(34,197,94,.2) }
 .tag.sale { background:rgba(245,158,11,.1);color:var(--orange);border-color:rgba(245,158,11,.2) }
+.tag.preorder { background:rgba(245,158,11,.1);color:var(--orange);border-color:rgba(245,158,11,.25) }
 .detail-name { font-family:'Unbounded',sans-serif;font-size:16px;font-weight:700;line-height:1.3;margin-bottom:10px;animation:pageIn .3s ease .04s both }
 .detail-price-row { display:flex;align-items:baseline;gap:10px;margin-bottom:16px;animation:pageIn .3s ease .08s both }
 .detail-price { font-family:'Unbounded',sans-serif;font-size:22px;font-weight:700 }
@@ -379,7 +394,23 @@ body {
 .detail-disc { font-size:12px;color:var(--orange);font-weight:600 }
 .detail-divider { height:1px;background:var(--border);margin:14px 0 }
 .detail-sec { font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px }
-.detail-desc { font-size:14px;color:var(--text2);line-height:1.65 }
+.detail-desc { font-size:14px;color:var(--text2);line-height:1.65;transition:max-height .35s var(--easing) }
+.detail-desc-collapsed { max-height:72px;overflow:hidden;position:relative }
+.detail-desc-collapsed::after {
+  content:'';position:absolute;bottom:0;left:0;right:0;height:32px;
+  background:linear-gradient(to bottom,transparent,var(--bg));
+  pointer-events:none;
+}
+.detail-desc-expanded { max-height:none;overflow:visible }
+.detail-desc-expanded::after { display:none }
+.desc-toggle {
+  display:flex;align-items:center;gap:5px;
+  background:none;border:none;color:var(--orange);
+  font-family:'Inter',sans-serif;font-size:12px;font-weight:600;
+  cursor:pointer;padding:6px 0 0;letter-spacing:.2px;
+}
+.desc-toggle svg { transition:transform .25s var(--easing) }
+.desc-toggle.expanded svg { transform:rotate(180deg) }
 .var-sec { margin-bottom:16px;animation:pageIn .25s ease both }
 .var-label { font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px }
 .var-label span { color:#fff;margin-left:6px;font-weight:700 }
@@ -790,8 +821,47 @@ body {
 .photo-thumb .main-lbl { position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.6);font-size:9px;text-align:center;padding:2px;color:#fff;font-weight:600 }
 .photo-thumb .rm { position:absolute;top:3px;right:3px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.75);border:none;color:#fff;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center }
 .photo-add { width:calc(25% - 6px);aspect-ratio:1;border-radius:10px;background:var(--s1);border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--text3);cursor:pointer;flex-shrink:0 }
-/* variations */
-.var-type-row { display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap }
+/* delivery type toggle */
+.delivery-type-btn {
+  display:flex;align-items:center;gap:12px;
+  width:100%;padding:12px 14px;
+  background:var(--s2);border:1.5px solid var(--border);border-radius:12px;
+  cursor:pointer;font-family:'Inter',sans-serif;text-align:left;
+  transition:border-color .18s,background .18s,transform .12s var(--spring);
+}
+.delivery-type-btn:active { transform:scale(.97) }
+.delivery-type-icon { font-size:20px;flex-shrink:0 }
+.delivery-type-text { flex:1 }
+.delivery-type-title { font-size:13px;font-weight:600;color:var(--text2);transition:color .18s }
+.delivery-type-sub   { font-size:11px;margin-top:1px;transition:color .18s;color:var(--text3) }
+.delivery-type-check {
+  width:20px;height:20px;border-radius:50%;border:1.5px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;flex-shrink:0;color:transparent;
+  transition:all .18s var(--spring);
+}
+/* fast — green when active */
+.delivery-fast.on {
+  border-color:rgba(34,197,94,.5);
+  background:rgba(34,197,94,.06);
+}
+.delivery-fast.on .delivery-type-title { color:var(--green) }
+.delivery-fast.on .delivery-type-sub   { color:var(--green);opacity:.75 }
+.delivery-fast.on .delivery-type-check {
+  background:var(--green);border-color:var(--green);color:#000;
+  animation:dotPop .25s var(--spring) both;
+}
+/* preorder — orange when active */
+.delivery-preorder.on {
+  border-color:rgba(245,158,11,.5);
+  background:rgba(245,158,11,.06);
+}
+.delivery-preorder.on .delivery-type-title { color:var(--orange) }
+.delivery-preorder.on .delivery-type-sub   { color:var(--orange);opacity:.75 }
+.delivery-preorder.on .delivery-type-check {
+  background:var(--orange);border-color:var(--orange);color:#000;
+  animation:dotPop .25s var(--spring) both;
+}
 .vtype-btn { flex:1;padding:8px 4px;border-radius:9px;border:1px solid var(--border);background:none;color:var(--text3);font-family:'Inter',sans-serif;font-size:11px;font-weight:500;cursor:pointer;transition:all .15s;min-width:60px }
 .vtype-btn.on { border-color:#fff;color:#fff;background:rgba(255,255,255,.06) }
 .var-chips { display:flex;flex-direction:column;gap:6px;margin-bottom:8px }
@@ -808,8 +878,71 @@ body {
 .admin-list-avatar { width:36px;height:36px;border-radius:50%;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0 }
 
 /* ═══════════════════════════════════════════════
-   ORDER SUCCESS
+   TRANSIT BANNER (in_transit order card)
 ═══════════════════════════════════════════════ */
+.transit-banner {
+  margin:10px 0 8px;
+  background:rgba(96,165,250,.06);
+  border:1px solid rgba(96,165,250,.18);
+  border-radius:12px;
+  padding:12px 14px 10px;
+}
+.transit-track {
+  display:flex;align-items:center;gap:0;margin-bottom:6px;
+}
+.transit-dot {
+  width:10px;height:10px;border-radius:50%;flex-shrink:0;
+  background:rgba(96,165,250,.25);border:1.5px solid rgba(96,165,250,.4);
+}
+.transit-dot-done {
+  background:#60a5fa;border-color:#60a5fa;
+  box-shadow:0 0 0 3px rgba(96,165,250,.2);
+}
+.transit-line {
+  flex:1;height:3px;background:rgba(96,165,250,.15);border-radius:2px;overflow:hidden;
+}
+.transit-line-fill {
+  height:100%;width:55%;background:linear-gradient(90deg,#60a5fa,rgba(96,165,250,.5));
+  border-radius:2px;
+  animation:transitFill .9s var(--easing) both;
+}
+@keyframes transitFill { from{width:0} to{width:55%} }
+.transit-line-right { flex:1;height:3px;background:rgba(96,165,250,.1);border-radius:2px }
+.transit-line-fill-right { display:none }
+.transit-truck {
+  flex-shrink:0;
+  width:34px;height:34px;border-radius:50%;
+  background:rgba(96,165,250,.12);border:1.5px solid rgba(96,165,250,.3);
+  display:flex;align-items:center;justify-content:center;
+  color:#60a5fa;
+  animation:truckBounce 1.8s ease-in-out infinite;
+  position:relative;z-index:1;
+  margin:0 -2px;
+}
+@keyframes truckBounce {
+  0%,100% { transform:translateY(0) }
+  30%      { transform:translateY(-3px) }
+  60%      { transform:translateY(-1px) }
+}
+.transit-labels {
+  display:flex;justify-content:space-between;
+  font-size:10px;color:rgba(96,165,250,.7);font-weight:500;letter-spacing:.2px;
+}
+
+/* ═══════════════════════════════════════════════
+   QUALITY LABEL (badge under product card)
+═══════════════════════════════════════════════ */
+.prod-quality {
+  display:inline-flex;align-items:center;gap:4px;
+  margin-top:5px;padding:2px 8px;border-radius:20px;
+  font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
+  border:1px solid;
+}
+.prod-quality.q-original   { color:#22c55e;background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.2) }
+.prod-quality.q-near       { color:#60a5fa;background:rgba(96,165,250,.08);border-color:rgba(96,165,250,.2) }
+.prod-quality.q-lux        { color:#f59e0b;background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.2) }
+.prod-quality.q-replica    { color:#a78bfa;background:rgba(167,139,250,.08);border-color:rgba(167,139,250,.2) }
+.prod-quality.q-copy       { color:#94a3b8;background:rgba(148,163,184,.08);border-color:rgba(148,163,184,.2) }
 #order-success {
   position:fixed;inset:0;z-index:8000;
   background:rgba(0,0,0,.88);backdrop-filter:blur(16px);
@@ -1057,7 +1190,11 @@ body {
     </div>
     <div class="detail-divider"></div>
     <div class="detail-sec">Описание</div>
-    <div id="d-desc" class="detail-desc"></div>
+    <div id="d-desc" class="detail-desc detail-desc-collapsed"></div>
+    <button id="d-desc-toggle" class="desc-toggle" onclick="toggleDesc()" style="display:none">
+      <span id="d-desc-toggle-label">Читать полностью</span>
+      <svg id="d-desc-toggle-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
     <!-- admin-only source links -->
     <div id="d-source-links"></div>
   </div>
@@ -1161,6 +1298,7 @@ body {
     <button class="admin-tab" onclick="switchTab('add',this)">+ Добавить</button>
     <button class="admin-tab" id="tab-admins" onclick="switchTab('admins',this)">Команда</button>
     <button class="admin-tab" id="tab-brands" onclick="switchTab('brands',this)">Бренды</button>
+    <button class="admin-tab" onclick="switchTab('templates',this)">📋 Шаблоны</button>
 
   </div>
   <div class="scroll">
@@ -1221,7 +1359,47 @@ body {
           <div class="field"><label>Цена (сум)</label><input id="a-price" type="number" placeholder="0"/></div>
           <div class="field"><label>Старая цена</label><input id="a-old-price" type="number" placeholder="—"/></div>
         </div>
-        <div class="field"><label>Описание</label><textarea id="a-desc" placeholder="Описание товара..."></textarea></div>
+        <div class="field"><label>Описание</label>
+          <div style="display:flex;gap:8px;align-items:flex-start">
+            <textarea id="a-desc" placeholder="Описание товара..." style="flex:1"></textarea>
+            <button class="var-add-btn" onclick="openTemplatesPicker('add')" style="flex-shrink:0;padding:9px 10px;font-size:16px" title="Шаблоны описаний">📋</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Метка качества</label>
+          <select id="a-quality">
+            <option value="">— Без надписи</option>
+            <option value="original">✦ Оригинал</option>
+            <option value="near">◈ Под оригинал</option>
+            <option value="lux">◆ Люкс копия</option>
+            <option value="replica">◇ Реплика</option>
+            <option value="copy">○ Копия</option>
+          </select>
+        </div>
+
+        <!-- PREORDER TOGGLE -->
+        <div class="field">
+          <label>Тип товара</label>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <button class="delivery-type-btn delivery-fast on" id="a-type-fast" onclick="setProductType('add','fast')">
+              <div class="delivery-type-icon">🚀</div>
+              <div class="delivery-type-text">
+                <div class="delivery-type-title">Быстрая доставка</div>
+                <div class="delivery-type-sub">До 12 дней · Бесплатно</div>
+              </div>
+              <div class="delivery-type-check">✓</div>
+            </button>
+            <button class="delivery-type-btn delivery-preorder" id="a-type-preorder" onclick="setProductType('add','preorder')">
+              <div class="delivery-type-icon">⏳</div>
+              <div class="delivery-type-text">
+                <div class="delivery-type-title">Под заказ</div>
+                <div class="delivery-type-sub">Срок уточняется</div>
+              </div>
+              <div class="delivery-type-check">✓</div>
+            </button>
+          </div>
+        </div>
 
         <!-- PRICE CALCULATOR -->
         <div class="field">
@@ -1260,9 +1438,9 @@ body {
 
         <!-- SIZES -->
         <div class="field">
-          <label>Размеры <span style="color:var(--text3);font-weight:400;text-transform:none">— диапазон: 30-44 или XS-XXL</span></label>
+          <label>Размеры <span style="color:var(--text3);font-weight:400;text-transform:none">— диапазон: 30-44 или XS-2XL</span></label>
           <div style="display:flex;gap:8px">
-            <input id="a-sizes-input" type="text" placeholder="30-44 или XS-XXL или S,M,L,XL"
+            <input id="a-sizes-input" type="text" placeholder="30-44 или XS-2XL или S,M,L,XL"
               style="flex:1" oninput="previewSizes('add')"/>
             <button class="var-add-btn" onclick="addSizesFromRange('add')">+</button>
           </div>
@@ -1350,6 +1528,42 @@ body {
 
     <!-- LOG -->
     
+    <!-- TEMPLATES -->
+    <div class="admin-panel" id="panel-templates">
+      <div style="margin-bottom:16px">
+        <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Новый шаблон</div>
+        <div class="field" style="margin-bottom:8px">
+          <input id="tpl-title-input" type="text" placeholder="Название шаблона (напр. Кроссовки Nike)"
+            style="width:100%;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-family:'Inter',sans-serif;font-size:14px;color:#fff;outline:none"/>
+        </div>
+        <div class="field" style="margin-bottom:10px">
+          <textarea id="tpl-body-input" placeholder="Текст описания..."
+            style="width:100%;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-family:'Inter',sans-serif;font-size:14px;color:#fff;outline:none;resize:none;height:100px"></textarea>
+        </div>
+        <button onclick="adminSaveTemplate()"
+          style="width:100%;padding:12px;background:#fff;color:#000;border:none;border-radius:10px;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:.5px">
+          Сохранить шаблон
+        </button>
+      </div>
+      <div style="height:1px;background:var(--border);margin-bottom:16px"></div>
+      <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Мои шаблоны</div>
+      <div id="templates-list"></div>
+    </div>
+    </div>
+  </div>
+</div>
+
+<!-- TEMPLATE PICKER OVERLAY -->
+<div class="overlay" id="tpl-picker-overlay" onclick="closeOverlay('tpl-picker-overlay',event)">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <div class="sheet-title">📋 Выбрать шаблон</div>
+      <button class="sheet-close" onclick="closeOverlay('tpl-picker-overlay')">×</button>
+    </div>
+    <div id="tpl-picker-list" style="display:flex;flex-direction:column;gap:8px"></div>
+    <div id="tpl-picker-empty" style="display:none;text-align:center;padding:30px 0;color:var(--text3);font-size:13px">
+      Шаблонов пока нет.<br/>Создайте в разделе «Шаблоны»
     </div>
   </div>
 </div>
@@ -1523,7 +1737,47 @@ body {
         <div class="field"><label>Цена</label><input id="e-price" type="number"/></div>
         <div class="field"><label>Старая цена</label><input id="e-old-price" type="number" placeholder="—"/></div>
       </div>
-      <div class="field"><label>Описание</label><textarea id="e-desc"></textarea></div>
+      <div class="field"><label>Описание</label>
+        <div style="display:flex;gap:8px;align-items:flex-start">
+          <textarea id="e-desc" style="flex:1"></textarea>
+          <button class="var-add-btn" onclick="openTemplatesPicker('edit')" style="flex-shrink:0;padding:9px 10px;font-size:16px" title="Шаблоны описаний">📋</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Метка качества</label>
+        <select id="e-quality">
+          <option value="">— Без надписи</option>
+          <option value="original">✦ Оригинал</option>
+          <option value="near">◈ Под оригинал</option>
+          <option value="lux">◆ Люкс копия</option>
+          <option value="replica">◇ Реплика</option>
+          <option value="copy">○ Копия</option>
+        </select>
+      </div>
+
+      <!-- PREORDER TOGGLE -->
+      <div class="field">
+        <label>Тип товара</label>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button class="delivery-type-btn delivery-fast on" id="e-type-fast" onclick="setProductType('edit','fast')">
+            <div class="delivery-type-icon">🚀</div>
+            <div class="delivery-type-text">
+              <div class="delivery-type-title">Быстрая доставка</div>
+              <div class="delivery-type-sub">До 12 дней · Бесплатно</div>
+            </div>
+            <div class="delivery-type-check">✓</div>
+          </button>
+          <button class="delivery-type-btn delivery-preorder" id="e-type-preorder" onclick="setProductType('edit','preorder')">
+            <div class="delivery-type-icon">⏳</div>
+            <div class="delivery-type-text">
+              <div class="delivery-type-title">Под заказ</div>
+              <div class="delivery-type-sub">Срок уточняется</div>
+            </div>
+            <div class="delivery-type-check">✓</div>
+          </button>
+        </div>
+      </div>
 
       <!-- PRICE CALCULATOR (edit) -->
       <div class="field">
@@ -1562,9 +1816,9 @@ body {
 
       <!-- SIZES (edit) -->
       <div class="field">
-        <label>Размеры <span style="color:var(--text3);font-weight:400;text-transform:none">— диапазон: 30-44 или XS-XXL</span></label>
+        <label>Размеры <span style="color:var(--text3);font-weight:400;text-transform:none">— диапазон: 30-44 или XS-2XL</span></label>
         <div style="display:flex;gap:8px">
-          <input id="e-sizes-input" type="text" placeholder="30-44 или XS-XXL или S,M,L,XL"
+          <input id="e-sizes-input" type="text" placeholder="30-44 или XS-2XL или S,M,L,XL"
             style="flex:1" oninput="previewSizes('edit')"/>
           <button class="var-add-btn" onclick="addSizesFromRange('edit')">+</button>
         </div>
@@ -1903,8 +2157,25 @@ function fmt(n) { return Number(n).toLocaleString('ru') + ' сум' }
 function fmtK(n) { return n >= 1000000 ? (n/1e6).toFixed(1)+'M' : n >= 1000 ? (n/1000).toFixed(0)+'K' : String(n) }
 
 /* ═══════════════════════════════════════════════
-   STATUS HELPERS
+   QUALITY LABELS
 ═══════════════════════════════════════════════ */
+const QUALITY_LABELS = [
+  { value: '',          label: '— Без надписи' },
+  { value: 'original',  label: 'Оригинал',       cls: 'q-original', icon: '✦' },
+  { value: 'near',      label: 'Под оригинал',    cls: 'q-near',     icon: '◈' },
+  { value: 'lux',       label: 'Люкс копия',      cls: 'q-lux',      icon: '◆' },
+  { value: 'replica',   label: 'Реплика',         cls: 'q-replica',  icon: '◇' },
+  { value: 'copy',      label: 'Копия',           cls: 'q-copy',     icon: '○' },
+];
+
+function qualityBadge(q) {
+  if (!q) return '';
+  const ql = QUALITY_LABELS.find(x => x.value === q);
+  if (!ql || !ql.cls) return '';
+  return `<div class="prod-quality ${ql.cls}">${ql.icon} ${ql.label}</div>`;
+}
+
+
 const STATUS = {
   active:    { label:'В обработке', color:'#f59e0b', bg:'rgba(245,158,11,.1)', border:'rgba(245,158,11,.2)' },
   in_transit:{ label:'В пути',      color:'#60a5fa', bg:'rgba(96,165,250,.1)', border:'rgba(96,165,250,.2)' },
@@ -1932,11 +2203,20 @@ function statusPill(s) {
 function cardHTML(p, idx = 0) {
   const disc = p.old ? Math.round((1 - p.price/p.old)*100) : 0;
   const photo = p.photos && p.photos.length ? p.photos[0] : null;
-  // Первые 4 карточки появляются мгновенно — они заменяют skeleton без рывка
   const delay = idx < 4 ? 0 : Math.min((idx - 4) * 0.04, 0.2);
+  const deliveryBadge = p.isPreorder
+    ? `<div class="prod-cargo prod-preorder">
+        <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Под заказ
+      </div>`
+    : `<div class="prod-cargo">
+        <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 5v3h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+        до 12 дней · Бесплатно
+      </div>`;
   return `<div class="prod-card" onclick="openProduct(${p.id})" style="animation-delay:${delay}s">
     <div class="prod-img">
       ${photo ? `<img src="${photo}" loading="${idx < 4 ? 'eager' : 'lazy'}" fetchpriority="${idx < 2 ? 'high' : 'auto'}" alt="${p.name}"/>` : `<span>${p.emoji||'📦'}</span>`}
+      ${p.isPreorder ? `<div class="prod-preorder-badge">Под заказ</div>` : ''}
       <button class="prod-heart ${wishlist.has(p.id)?'liked':''}" onclick="toggleWish(event,${p.id})">
         <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
       </button>
@@ -1950,10 +2230,8 @@ function cardHTML(p, idx = 0) {
       <div class="prod-name">${p.name}</div>
       <div class="prod-price">${fmt(p.price)}</div>
       ${p.old ? `<div class="prod-old">${fmt(p.old)}</div>` : ''}
-      <div class="prod-cargo">
-        <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 5v3h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-        до 12 дней · Бесплатно
-      </div>
+      ${deliveryBadge}
+      ${qualityBadge(p.quality)}
     </div>
   </div>`;
 }
@@ -2143,8 +2421,10 @@ function openProduct(id) {
     `<span class="tag" style="cursor:pointer" onclick="searchByTag('cat','${p.cat}')">${p.cat}</span>` +
     (p.brand ? `<span class="tag" style="cursor:pointer" onclick="searchByTag('brand','${p.brand}')">${p.brand}</span>` : '') +
     (p.style  ? `<span class="tag" style="cursor:pointer" onclick="searchByTag('style','${p.style}')">${p.style}</span>`  : '') +
-    (p.isNew  ? '<span class="tag new">NEW</span>' : '') +
-    (disc > 0 ? `<span class="tag sale">-${disc}%</span>` : '');
+    (p.isNew      ? '<span class="tag new">NEW</span>' : '') +
+    (p.isPreorder ? '<span class="tag preorder">⏳ Под заказ</span>' : '') +
+    (disc > 0     ? `<span class="tag sale">-${disc}%</span>` : '') +
+    (p.quality    ? (() => { const ql = QUALITY_LABELS.find(x=>x.value===p.quality); return ql&&ql.cls?`<span class="tag" style="color:inherit" class="prod-quality ${ql.cls}">${ql.icon} ${ql.label}</span>`:''; })() : '');
 
   document.getElementById('d-name').textContent = p.name;
   document.getElementById('d-price').textContent = fmt(p.price);
@@ -2152,7 +2432,22 @@ function openProduct(id) {
   document.getElementById('d-disc').textContent = disc > 0 ? `-${disc}%` : '';
   document.getElementById('qty-num').textContent = 1;
   document.getElementById('detail-wish').classList.toggle('liked', wishlist.has(id));
-  document.getElementById('d-desc').textContent = p.desc || '';
+
+  // Описание — показываем кнопку «развернуть» только если текст длиннее 3 строк
+  const descEl = document.getElementById('d-desc');
+  const descToggle = document.getElementById('d-desc-toggle');
+  descEl.textContent = p.desc || '';
+  descEl.classList.remove('detail-desc-expanded');
+  descEl.classList.add('detail-desc-collapsed');
+  if (descToggle) {
+    descToggle.classList.remove('expanded');
+    document.getElementById('d-desc-toggle-label').textContent = 'Читать полностью';
+    // Показываем кнопку только если текст реально обрезается
+    requestAnimationFrame(() => {
+      const isClamped = descEl.scrollHeight > descEl.clientHeight + 4;
+      descToggle.style.display = isClamped ? 'flex' : 'none';
+    });
+  }
 
   // colors — hex (#xxx/#xxxxxx) рендерим как свотч, остальное как текстовую кнопку
   const cs = document.getElementById('color-sec');
@@ -2198,8 +2493,12 @@ function openProduct(id) {
   renderSourceLinks(p);
   showProductRecs(p);
 
+  // Сбрасываем скролл на верх ПЕРЕД открытием — иначе страница остаётся внизу
+  const ppEl = document.getElementById('page-product');
+  ppEl.scrollTop = 0;
+
   requestAnimationFrame(() => {
-    document.getElementById('page-product').classList.add('open');
+    ppEl.classList.add('open');
     document.getElementById('detail-action').classList.add('open');
     // Показываем шапку товара, скрываем остальные крыши
     const ph = document.getElementById('product-header');
@@ -2257,7 +2556,25 @@ function searchByTag(type, value) {
   }, 350);
 }
 
-function toggleDetailWish() {
+function toggleDesc() {
+  const descEl   = document.getElementById('d-desc');
+  const toggle   = document.getElementById('d-desc-toggle');
+  const label    = document.getElementById('d-desc-toggle-label');
+  const expanded = descEl.classList.contains('detail-desc-expanded');
+  if (expanded) {
+    descEl.classList.remove('detail-desc-expanded');
+    descEl.classList.add('detail-desc-collapsed');
+    toggle.classList.remove('expanded');
+    label.textContent = 'Читать полностью';
+  } else {
+    descEl.classList.remove('detail-desc-collapsed');
+    descEl.classList.add('detail-desc-expanded');
+    toggle.classList.add('expanded');
+    label.textContent = 'Свернуть';
+  }
+}
+
+
   if (!currentProduct) return;
   const id = currentProduct.id;
   const btn = document.getElementById('detail-wish');
@@ -2791,12 +3108,29 @@ function renderOrders() {
   el.innerHTML = myOrders.map(o => {
     const st = getStatus(o.status);
     const names = (o.items||[]).map(getItemName).slice(0,2).join(', ') + ((o.items?.length||0)>2?` +${o.items.length-2}`:'');
+    const transitBanner = o.status === 'in_transit' ? `
+      <div class="transit-banner">
+        <div class="transit-track">
+          <div class="transit-dot transit-dot-done"></div>
+          <div class="transit-line"><div class="transit-line-fill"></div></div>
+          <div class="transit-truck" title="Едет к вам">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 5v3h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+          </div>
+          <div class="transit-line transit-line-right"><div class="transit-line-fill-right"></div></div>
+          <div class="transit-dot"></div>
+        </div>
+        <div class="transit-labels">
+          <span>Отправлен</span>
+          <span>Доставка</span>
+        </div>
+      </div>` : '';
     return `<div class="order-card" onclick="openOrderDetail(${o.id})" style="position:relative">
       <div class="order-top">
         <div class="order-num">Заказ #${o.id}</div>
         ${statusPill(o.status)}
       </div>
       <div class="order-items-preview">${names||'—'}</div>
+      ${transitBanner}
       <div class="order-total-line">${fmt(o.total)}</div>
       ${paymentBadge(o)}
       <div class="order-meta">
@@ -3046,12 +3380,13 @@ function switchTab(tab, btn) {
   btn.classList.add('on');
   const panel = document.getElementById('panel-'+tab);
   if (panel) panel.classList.add('on');
-  if (tab === 'stats')   { loadAllOrders().then(renderAdminStats); }
-  if (tab === 'orders')  { loadAllOrders(); }
-  if (tab === 'products'){ renderAdminProducts(); }
-  if (tab === 'admins')  { renderAdminList(); }
-  if (tab === 'brands')  { renderBrandsList(); }
-  if (tab === 'add')     { resetAddForm(); }
+  if (tab === 'stats')     { loadAllOrders().then(renderAdminStats); }
+  if (tab === 'orders')    { loadAllOrders(); }
+  if (tab === 'products')  { renderAdminProducts(); }
+  if (tab === 'admins')    { renderAdminList(); }
+  if (tab === 'brands')    { renderBrandsList(); }
+  if (tab === 'add')       { resetAddForm(); }
+  if (tab === 'templates') { loadDescTemplates(); }
 }
 
 function showProductLinks(e, pid) {
@@ -3108,6 +3443,8 @@ function resetAddForm() {
   const sp = document.getElementById('a-sizes-preview');
   if (sp) sp.textContent = '';
   varState.add = { type:'none', items:[], photos:[], links:[], sizes:[] };
+  productTypeState.add = 'fast';
+  setProductType('add', 'fast');
   renderPhotoPreviews('add');
   renderVarChips('add');
   renderLinkChips('add');
@@ -3342,8 +3679,8 @@ async function adminAddProduct() {
   try {
     const brand = document.getElementById('a-brand')?.value || '';
     const style = document.getElementById('a-style')?.value || '';
+    const quality = document.getElementById('a-quality')?.value || '';
     const varDataFinal = getVarData('add');
-    // Размеры всегда из отдельного поля sizes (никогда не смешиваем с вариациями)
     const sizes = varState.add.sizes || [];
     const product = await apiPost('/products', {
       name, cat, brand, style, emoji,
@@ -3353,6 +3690,8 @@ async function adminAddProduct() {
       colors:     varDataFinal.colors,
       variations: varDataFinal.variations,
       desc, is_new: true,
+      is_preorder: productTypeState.add === 'preorder',
+      quality,
       source_links: varState.add.links,
     });
     PRODUCTS.unshift(product);
@@ -3360,7 +3699,10 @@ async function adminAddProduct() {
     ['a-name','a-price','a-old-price','a-desc','a-emoji'].forEach(id => {
       const el = document.getElementById(id); if(el) el.value='';
     });
+    const aq = document.getElementById('a-quality'); if(aq) aq.value='';
     varState.add = { type:'size', items:[], photos:[], links:[], sizes:[] };
+    productTypeState.add = 'fast';
+    setProductType('add', 'fast');
     renderPhotoPreviews('add'); renderVarChips('add'); renderLinkChips('add'); renderSizeChips('add'); setVT('add','size');
     // Clear calculator
     ['a-cny','a-weight','a-markup','a-insurance','a-sizes-input'].forEach(id => {
@@ -3396,6 +3738,8 @@ function openEdit(id) {
   document.getElementById('e-price').value= p.price||'';
   document.getElementById('e-old-price').value = p.old||'';
   document.getElementById('e-desc').value = p.desc||'';
+  const eQual = document.getElementById('e-quality');
+  if (eQual) eQual.value = p.quality || '';
 
   varState.edit.photos = [...(p.photos||[])];
   // Берём ссылки из кэша (загруженного отдельно) или из PRODUCTS
@@ -3424,6 +3768,11 @@ function openEdit(id) {
   setVT('edit', vtype);
   renderVarChips('edit');
 
+  // Тип товара (быстрая / под заказ)
+  const editType = p.isPreorder ? 'preorder' : 'fast';
+  productTypeState.edit = editType;
+  setProductType('edit', editType);
+
   openOverlay('edit-overlay');
 }
 
@@ -3445,6 +3794,7 @@ async function saveEdit() {
   try {
     const brand = document.getElementById('e-brand')?.value || '';
     const style = document.getElementById('e-style')?.value || '';
+    const quality = document.getElementById('e-quality')?.value || '';
     const varDataE = getVarData('edit');
     const sizes = varState.edit.sizes || [];
     const updated = await apiPut(`/products/${id}`, {
@@ -3455,6 +3805,8 @@ async function saveEdit() {
       colors:     varDataE.colors,
       variations: varDataE.variations,
       desc, is_new: false,
+      is_preorder: productTypeState.edit === 'preorder',
+      quality,
       source_links: varState.edit.links,
     });
     const idx = PRODUCTS.findIndex(p => p.id===id);
@@ -4119,8 +4471,142 @@ async function loadAdminLog() {
 }
 
 /* ═══════════════════════════════════════════════
-   PRICE CALCULATOR
+   PRODUCT TYPE (preorder / fast)
 ═══════════════════════════════════════════════ */
+const productTypeState = { add: 'fast', edit: 'fast' };
+
+function setProductType(ctx, type) {
+  productTypeState[ctx] = type;
+  const p = ctx === 'add' ? 'a' : 'e';
+  document.getElementById(`${p}-type-fast`)?.classList.toggle('on', type === 'fast');
+  document.getElementById(`${p}-type-preorder`)?.classList.toggle('on', type === 'preorder');
+}
+
+/* ═══════════════════════════════════════════════
+   DESCRIPTION TEMPLATES
+═══════════════════════════════════════════════ */
+let descTemplates = [];
+
+async function loadDescTemplates() {
+  try {
+    descTemplates = await apiFetch('/desc-templates');
+    renderTemplatesList();
+  } catch(e) { console.error('templates:', e) }
+}
+
+function renderTemplatesList() {
+  const el = document.getElementById('templates-list');
+  if (!el) return;
+  if (!descTemplates.length) {
+    el.innerHTML = `<div style="text-align:center;padding:30px 0;color:var(--text3);font-size:13px">Шаблонов пока нет</div>`;
+    return;
+  }
+  el.innerHTML = descTemplates.map(t => `
+    <div style="background:var(--s2);border:1px solid var(--border);border-radius:14px;padding:14px;animation:slideUp .25s var(--easing) both">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:600">${t.title}</div>
+        <div style="display:flex;gap:6px">
+          <button onclick="editTemplate(${t.id})"
+            style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:8px;padding:5px 10px;color:var(--text2);font-size:11px;cursor:pointer;font-family:'Inter',sans-serif">✏️</button>
+          <button onclick="deleteTemplate(${t.id})"
+            style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:5px 10px;color:var(--red);font-size:11px;cursor:pointer;font-family:'Inter',sans-serif">🗑</button>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.5;white-space:pre-wrap;max-height:60px;overflow:hidden;text-overflow:ellipsis">${t.body}</div>
+    </div>`).join('');
+}
+
+async function adminSaveTemplate() {
+  const titleEl = document.getElementById('tpl-title-input');
+  const bodyEl  = document.getElementById('tpl-body-input');
+  const title = titleEl?.value.trim();
+  const body  = bodyEl?.value.trim();
+  if (!title) { toast('Введите название шаблона'); return; }
+
+  // Editing existing?
+  const editId = titleEl.dataset.editId;
+  try {
+    if (editId) {
+      const updated = await apiPatch(`/desc-templates/${editId}`, { title, body });
+      const idx = descTemplates.findIndex(t => t.id === Number(editId));
+      if (idx !== -1) descTemplates[idx] = updated;
+      delete titleEl.dataset.editId;
+      toast('Шаблон обновлён ✅');
+    } else {
+      const tpl = await apiPost('/desc-templates', { title, body });
+      descTemplates.unshift(tpl);
+      toast('Шаблон сохранён ✅');
+    }
+    if (titleEl) titleEl.value = '';
+    if (bodyEl)  bodyEl.value  = '';
+    renderTemplatesList();
+  } catch(e) { console.error(e); toast('Ошибка ⚠️'); }
+}
+
+function editTemplate(id) {
+  const t = descTemplates.find(x => x.id === id);
+  if (!t) return;
+  const titleEl = document.getElementById('tpl-title-input');
+  const bodyEl  = document.getElementById('tpl-body-input');
+  if (titleEl) { titleEl.value = t.title; titleEl.dataset.editId = id; }
+  if (bodyEl)  bodyEl.value  = t.body;
+  // Scroll to top of panel
+  const panel = document.getElementById('panel-templates');
+  if (panel) panel.closest('.scroll')?.scrollTo({ top: 0, behavior: 'smooth' });
+  toast('Редактирование шаблона');
+}
+
+async function deleteTemplate(id) {
+  const t = descTemplates.find(x => x.id === id);
+  if (!t) return;
+  try {
+    await apiDel(`/desc-templates/${id}`);
+    descTemplates = descTemplates.filter(x => x.id !== id);
+    renderTemplatesList();
+    toast('Шаблон удалён');
+  } catch(e) { toast('Ошибка ⚠️'); }
+}
+
+let _tplPickerCtx = 'add';
+
+function openTemplatesPicker(ctx) {
+  _tplPickerCtx = ctx;
+  const list  = document.getElementById('tpl-picker-list');
+  const empty = document.getElementById('tpl-picker-empty');
+  if (!list || !empty) return;
+  if (!descTemplates.length) {
+    list.innerHTML = '';
+    empty.style.display = 'block';
+  } else {
+    empty.style.display = 'none';
+    list.innerHTML = descTemplates.map(t => `
+      <div onclick="applyTemplate(${t.id})"
+        style="background:var(--s2);border:1px solid var(--border);border-radius:14px;padding:14px;cursor:pointer;
+               transition:border-color .15s,transform .15s;animation:slideUp .22s var(--easing) both"
+        onmousedown="this.style.transform='scale(.97)'" onmouseup="this.style.transform=''" ontouchstart="this.style.transform='scale(.97)'" ontouchend="this.style.transform=''">
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px">${t.title}</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.5;white-space:pre-wrap;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${t.body}</div>
+      </div>`).join('');
+  }
+  openOverlay('tpl-picker-overlay');
+}
+
+function applyTemplate(id) {
+  const t = descTemplates.find(x => x.id === id);
+  if (!t) return;
+  const p = _tplPickerCtx === 'add' ? 'a' : 'e';
+  const descEl = document.getElementById(`${p}-desc`);
+  if (descEl) {
+    descEl.value = t.body;
+    // Flash border to confirm
+    descEl.style.borderColor = 'var(--orange)';
+    setTimeout(() => { descEl.style.borderColor = ''; }, 700);
+  }
+  closeOverlay('tpl-picker-overlay');
+  toast(`Шаблон «${t.title}» применён ✅`);
+}
+
+
 // CNY → UZS exchange rate (update manually or later via API)
 const CNY_RATE = 1950; // 1 CNY ≈ 1950 UZS (approximate)
 const CARGO_PER_100G = 13000; // 13,000 UZS per 100g
@@ -4165,30 +4651,31 @@ function applyCalcPrice(ctx) {
    SIZE RANGE PARSER
 ═══════════════════════════════════════════════ */
 // Maps letter sizes to numeric order for range generation
-const SIZE_ORDER = ['XXS','XS','S','M','L','XL','XXL','XXXL','3XL','4XL'];
+const SIZE_ORDER = ['2XS','XS','S','M','L','XL','2XL','3XL','4XL','5XL'];
 
 function parseSizeRange(input) {
   input = input.trim();
   if (!input) return [];
 
-  // Format: "30-44" or "36-42" — numeric range
+  // Format: "30-44" or "36-42" — numeric range, always step 1 (no skipping)
   const numRange = input.match(/^(\d+)\s*[-–]\s*(\d+)$/);
   if (numRange) {
     const from = parseInt(numRange[1]);
     const to   = parseInt(numRange[2]);
-    if (from >= to) return [String(from), String(to)];
+    if (from > to) return [String(from)];
     const sizes = [];
-    // Detect step: jeans are even (28,30,32...), shoes are integer (36,37,38...)
-    const step = (from % 2 === 0 && to % 2 === 0 && (to - from) >= 4) ? 2 : 1;
-    for (let i = from; i <= to; i += step) sizes.push(String(i));
+    for (let i = from; i <= to; i++) sizes.push(String(i));
     return sizes;
   }
 
-  // Format: "XS-XXL" — letter range
-  const letRange = input.match(/^([A-Z]+)\s*[-–]\s*([A-Z]+)$/i);
+  // Format: "XS-2XL" or "S-4XL" — letter range (supports both XXL and 2XL notation)
+  const letRange = input.match(/^([A-Z0-9]+)\s*[-–]\s*([A-Z0-9]+)$/i);
   if (letRange) {
-    const from = letRange[1].toUpperCase();
-    const to   = letRange[2].toUpperCase();
+    const normalize = s => s.toUpperCase()
+      .replace(/^XXS$/,'2XS').replace(/^XXL$/,'2XL')
+      .replace(/^XXXL$/,'3XL').replace(/^4XL$/,'4XL');
+    const from = normalize(letRange[1]);
+    const to   = normalize(letRange[2]);
     const fromIdx = SIZE_ORDER.indexOf(from);
     const toIdx   = SIZE_ORDER.indexOf(to);
     if (fromIdx !== -1 && toIdx !== -1 && fromIdx <= toIdx) {
@@ -4223,7 +4710,7 @@ function addSizesFromRange(ctx) {
   const inp = document.getElementById(`${p}-sizes-input`);
   if (!inp || !inp.value.trim()) { toast('Введите диапазон размеров'); return; }
   const parsed = parseSizeRange(inp.value);
-  if (!parsed.length) { toast('Не удалось распознать. Пример: 30-44 или XS-XXL'); return; }
+  if (!parsed.length) { toast('Не удалось распознать. Пример: 30-44 или XS-2XL'); return; }
   if (!Array.isArray(varState[ctx].sizes)) varState[ctx].sizes = [];
   parsed.forEach(s => {
     if (!varState[ctx].sizes.includes(s)) varState[ctx].sizes.push(s);
@@ -4246,23 +4733,27 @@ function renderSizeChips(ctx) {
   const el = document.getElementById(`${p}-sizes-chips`);
   if (!el) return;
   const sizes = Array.isArray(varState[ctx].sizes) ? varState[ctx].sizes : [];
-  if (!sizes.length) {
-    el.innerHTML = '';
-    return;
-  }
-  el.innerHTML = `
-    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
-      ${sizes.map((s, i) => `
-        <div style="display:inline-flex;align-items:center;gap:4px;
-          padding:4px 10px;background:var(--s2);border:1px solid var(--border);
-          border-radius:20px;font-size:12px;animation:pageIn .15s ease both">
-          <span>${s}</span>
-          <button onclick="removeSizeChip('${ctx}',${i})"
-            style="background:none;border:none;color:var(--text3);cursor:pointer;
-            font-size:13px;line-height:1;padding:0 0 0 2px">×</button>
-        </div>`
-      ).join('')}
-    </div>`;
+  el.innerHTML = '';
+  if (!sizes.length) return;
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-top:4px';
+
+  sizes.forEach((s, i) => {
+    const chip = document.createElement('div');
+    chip.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--s2);border:1px solid var(--border);border-radius:20px;font-size:12px;animation:pageIn .15s ease both';
+    const label = document.createElement('span');
+    label.textContent = s;
+    const btn = document.createElement('button');
+    btn.textContent = '×';
+    btn.style.cssText = 'background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;line-height:1;padding:0 0 0 2px';
+    btn.addEventListener('click', () => removeSizeChip(ctx, varState[ctx].sizes.indexOf(s)));
+    chip.appendChild(label);
+    chip.appendChild(btn);
+    wrap.appendChild(chip);
+  });
+
+  el.appendChild(wrap);
 }
 
 // On app start — resume polling if payment was pending
