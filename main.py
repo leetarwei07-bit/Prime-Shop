@@ -914,12 +914,13 @@ def list_orders(x_init_data: Optional[str] = Header(None)):
 def my_orders(x_init_data: Optional[str] = Header(None)):
     user = get_user(x_init_data)
     if not user: return []
-    uid = str(user.get("id",""))
+    uid = str(user.get("id", ""))
     conn = get_db()
     rows = conn.execute(
         "SELECT * FROM orders WHERE user_id=? ORDER BY created_at DESC", (uid,)
     ).fetchall()
     conn.close()
+    print(f"[my_orders] uid={uid!r} → {len(rows)} orders")
     return [row_to_order(r) for r in rows]
 
 @app.post("/orders", status_code=201)
