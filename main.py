@@ -610,7 +610,10 @@ def create_brand(body: BrandCreate, x_init_data: Optional[str] = Header(None)):
     if not name: raise HTTPException(400, "Name required")
     conn = get_db()
     try:
-        cur = conn.execute("INSERT INTO brands (name) VALUES (?)", (name,))
+        cur = conn.execute(
+            "INSERT INTO brands (name, style_names) VALUES (?,?)",
+            (name, json.dumps(body.styles, ensure_ascii=False))
+        )
         conn.commit()
         bid = cur.lastrowid
         conn.close()
@@ -784,11 +787,11 @@ def get_recommendations(x_init_data: Optional[str] = Header(None), limit: int = 
 
     conn = get_db()
     all_rows = conn.execute("SELECT * FROM products").fetchall()
-    conn.close()
-
     all_brands      = get_all_brand_names(conn)
     all_styles      = get_style_names(conn)
     brand_style_map = get_brand_style_map(conn)
+    conn.close()
+
     all_products    = [row_to_product(r, include_links=is_admin) for r in all_rows]
 
     if uid:
