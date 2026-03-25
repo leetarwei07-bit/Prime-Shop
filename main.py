@@ -84,6 +84,7 @@ def init_db():
             is_new       INTEGER NOT NULL DEFAULT 0,
             is_sale      INTEGER NOT NULL DEFAULT 0,
             is_preorder  INTEGER NOT NULL DEFAULT 0,
+            quality      TEXT    NOT NULL DEFAULT '',
             rating       REAL    NOT NULL DEFAULT 5.0,
             reviews      INTEGER NOT NULL DEFAULT 0,
             sold         INTEGER NOT NULL DEFAULT 0,
@@ -200,6 +201,7 @@ def init_db():
         "ALTER TABLE orders ADD COLUMN payment_method TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE orders ADD COLUMN payment_id TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE products ADD COLUMN is_preorder INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE products ADD COLUMN quality TEXT NOT NULL DEFAULT ''",
     ]
     for m in migrations:
         try: conn.execute(m)
@@ -472,6 +474,7 @@ def row_to_product(row, include_links=False) -> dict:
         "isNew":      bool(row["is_new"]),
         "isSale":     bool(row["is_sale"]),
         "isPreorder": bool(row["is_preorder"]) if "is_preorder" in cols else False,
+        "quality":    row["quality"] if "quality" in cols else "",
         "rating":     row["rating"],
         "reviews":    row["reviews"],
         "sold":       row["sold"],
@@ -523,6 +526,7 @@ class ProductCreate(BaseModel):
     style:        str             = ""
     is_new:       bool            = False
     is_preorder:  bool            = False
+    quality:      str             = ""
     source_links: List[SourceLink] = []
 
 class ProductUpdate(BaseModel):
@@ -540,6 +544,7 @@ class ProductUpdate(BaseModel):
     style:        Optional[str]             = None
     is_new:       Optional[bool]            = None
     is_preorder:  Optional[bool]            = None
+    quality:      Optional[str]             = None
     source_links: Optional[List[SourceLink]] = None
 
 class OrderCreate(BaseModel):
@@ -679,8 +684,8 @@ def create_product(body: ProductCreate, x_init_data: Optional[str] = Header(None
     conn = get_db()
     cur = conn.execute("""
         INSERT INTO products
-          (name,cat,brand,style,emoji,photos,price,old_price,sizes,colors,variations,desc,is_new,is_sale,is_preorder,source_links)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          (name,cat,brand,style,emoji,photos,price,old_price,sizes,colors,variations,desc,is_new,is_sale,is_preorder,quality,source_links)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     """, (
         body.name, body.cat, body.brand, body.style, body.emoji,
         json.dumps(body.photos, ensure_ascii=False),
@@ -689,7 +694,7 @@ def create_product(body: ProductCreate, x_init_data: Optional[str] = Header(None
         json.dumps(body.colors, ensure_ascii=False),
         json.dumps(body.variations, ensure_ascii=False),
         body.desc, int(body.is_new), 1 if body.old_price else 0,
-        int(body.is_preorder),
+        int(body.is_preorder), body.quality,
         json.dumps([l.dict() for l in body.source_links], ensure_ascii=False),
     ))
     new_id = cur.lastrowid
@@ -721,6 +726,7 @@ def update_product(pid: int, body: ProductUpdate, x_init_data: Optional[str] = H
     if body.desc         is not None: add("desc", body.desc)
     if body.is_new       is not None: add("is_new", int(body.is_new))
     if body.is_preorder  is not None: add("is_preorder", int(body.is_preorder))
+    if body.quality      is not None: add("quality", body.quality)
     if body.source_links is not None:
         add("source_links", json.dumps([l.dict() for l in body.source_links], ensure_ascii=False))
     if fields:
