@@ -394,14 +394,18 @@ body {
 .detail-disc { font-size:12px;color:var(--orange);font-weight:600 }
 .detail-divider { height:1px;background:var(--border);margin:14px 0 }
 .detail-sec { font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px }
-.detail-desc { font-size:14px;color:var(--text2);line-height:1.65;transition:max-height .35s var(--easing) }
-.detail-desc-collapsed { max-height:72px;overflow:hidden;position:relative }
+.detail-desc { font-size:14px;color:var(--text2);line-height:1.65 }
+.detail-desc-collapsed {
+  max-height:72px;overflow:hidden;position:relative;
+}
 .detail-desc-collapsed::after {
   content:'';position:absolute;bottom:0;left:0;right:0;height:32px;
   background:linear-gradient(to bottom,transparent,var(--bg));
   pointer-events:none;
 }
-.detail-desc-expanded { max-height:none;overflow:visible }
+.detail-desc-expanded {
+  max-height:none;overflow:visible;
+}
 .detail-desc-expanded::after { display:none }
 .desc-toggle {
   display:flex;align-items:center;gap:5px;
@@ -2569,12 +2573,17 @@ function toggleDesc() {
   const descEl   = document.getElementById('d-desc');
   const toggle   = document.getElementById('d-desc-toggle');
   const label    = document.getElementById('d-desc-toggle-label');
+  if (!descEl || !toggle) return;
   const expanded = descEl.classList.contains('detail-desc-expanded');
   if (expanded) {
-    descEl.classList.remove('detail-desc-expanded');
-    descEl.classList.add('detail-desc-collapsed');
-    toggle.classList.remove('expanded');
-    label.textContent = 'Читать полностью';
+    // Сначала скроллим к кнопке, потом сворачиваем — пробел исчезает
+    toggle.scrollIntoView({ block: 'end', behavior: 'smooth' });
+    setTimeout(() => {
+      descEl.classList.remove('detail-desc-expanded');
+      descEl.classList.add('detail-desc-collapsed');
+      toggle.classList.remove('expanded');
+      label.textContent = 'Читать полностью';
+    }, 200);
   } else {
     descEl.classList.remove('detail-desc-collapsed');
     descEl.classList.add('detail-desc-expanded');
