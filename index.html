@@ -1558,7 +1558,7 @@ body {
 </div>
 
 <!-- TEMPLATE PICKER OVERLAY -->
-<div class="overlay" id="tpl-picker-overlay" onclick="closeOverlay('tpl-picker-overlay',event)">
+<div class="overlay" id="tpl-picker-overlay" onclick="closeOverlay('tpl-picker-overlay',event)" style="z-index:1500">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <div class="sheet-header">
@@ -4624,16 +4624,25 @@ function _showTemplatePicker() {
 function applyTemplate(id) {
   const t = descTemplates.find(x => x.id === id);
   if (!t) return;
-  const p = _tplPickerCtx === 'add' ? 'a' : 'e';
-  const descEl = document.getElementById(`${p}-desc`);
-  if (descEl) {
-    descEl.value = t.body;
-    // Flash border to confirm
-    descEl.style.borderColor = 'var(--orange)';
-    setTimeout(() => { descEl.style.borderColor = ''; }, 700);
-  }
-  closeOverlay('tpl-picker-overlay');
-  toast(`Шаблон «${t.title}» применён ✅`);
+
+  const descId = _tplPickerCtx === 'add' ? 'a-desc' : 'e-desc';
+  const descEl = document.getElementById(descId);
+
+  // Закрываем пикер
+  document.getElementById('tpl-picker-overlay').classList.remove('open');
+
+  // Вставляем текст с небольшой задержкой чтобы пикер успел закрыться
+  setTimeout(() => {
+    if (descEl) {
+      descEl.value = t.body;
+      descEl.focus();
+      // Мигание рамки для подтверждения
+      descEl.style.transition = 'border-color .15s';
+      descEl.style.borderColor = 'var(--orange)';
+      setTimeout(() => { descEl.style.borderColor = ''; }, 800);
+    }
+    toast(`✅ «${t.title}» применён`);
+  }, 150);
 }
 
 
