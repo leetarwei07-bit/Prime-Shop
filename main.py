@@ -797,7 +797,7 @@ class DescTemplateUpdate(BaseModel):
 
 @app.get("/desc-templates")
 def list_desc_templates(x_init_data: Optional[str] = Header(None)):
-    require_admin(x_init_data, "products")
+    # Читать шаблоны может любой авторизованный пользователь
     conn = get_db()
     rows = conn.execute("SELECT * FROM desc_templates ORDER BY created_at DESC").fetchall()
     conn.close()
