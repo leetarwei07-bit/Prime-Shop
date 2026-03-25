@@ -1366,7 +1366,7 @@ body {
         <div class="field"><label>Описание</label>
           <div style="display:flex;gap:8px;align-items:flex-start">
             <textarea id="a-desc" placeholder="Описание товара..." style="flex:1"></textarea>
-            <button class="var-add-btn" onclick="openTemplatesPicker('add')" style="flex-shrink:0;padding:9px 10px;font-size:16px" title="Шаблоны описаний">📋</button>
+            <button class="var-add-btn" onclick="event.stopPropagation();openTemplatesPicker('add')" style="flex-shrink:0;padding:9px 10px;font-size:16px" title="Шаблоны описаний">📋</button>
           </div>
         </div>
 
@@ -1744,7 +1744,7 @@ body {
       <div class="field"><label>Описание</label>
         <div style="display:flex;gap:8px;align-items:flex-start">
           <textarea id="e-desc" style="flex:1"></textarea>
-          <button class="var-add-btn" onclick="openTemplatesPicker('edit')" style="flex-shrink:0;padding:9px 10px;font-size:16px" title="Шаблоны описаний">📋</button>
+          <button class="var-add-btn" onclick="event.stopPropagation();openTemplatesPicker('edit')" style="flex-shrink:0;padding:9px 10px;font-size:16px" title="Шаблоны описаний">📋</button>
         </div>
       </div>
 
@@ -4626,17 +4626,22 @@ function applyTemplate(id) {
   if (!t) return;
 
   const descId = _tplPickerCtx === 'add' ? 'a-desc' : 'e-desc';
-  const descEl = document.getElementById(descId);
 
-  // Закрываем пикер
-  document.getElementById('tpl-picker-overlay').classList.remove('open');
+  // Закрываем только пикер, родительский overlay остаётся открытым
+  const pickerEl = document.getElementById('tpl-picker-overlay');
+  if (pickerEl) pickerEl.classList.remove('open');
 
-  // Вставляем текст с небольшой задержкой чтобы пикер успел закрыться
+  // Если шаблон для edit — убеждаемся что edit-overlay открыт
+  if (_tplPickerCtx === 'edit') {
+    const editEl = document.getElementById('edit-overlay');
+    if (editEl) editEl.classList.add('open');
+  }
+
+  // Вставляем текст после закрытия пикера
   setTimeout(() => {
+    const descEl = document.getElementById(descId);
     if (descEl) {
       descEl.value = t.body;
-      descEl.focus();
-      // Мигание рамки для подтверждения
       descEl.style.transition = 'border-color .15s';
       descEl.style.borderColor = 'var(--orange)';
       setTimeout(() => { descEl.style.borderColor = ''; }, 800);
