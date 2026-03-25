@@ -2001,13 +2001,22 @@ async function apiFetch(path, opts = {}) {
     headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(opts.body);
   }
-  const r = await fetch(API + path, { ...opts, headers });
-  if (!r.ok) {
-    const msg = await r.text().catch(() => r.statusText);
-    throw new Error(msg);
+  // Таймаут 10 секунд — если API не отвечает, не висим вечно
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), 10000);
+  try {
+    const r = await fetch(API + path, { ...opts, headers, signal: controller.signal });
+    clearTimeout(tid);
+    if (!r.ok) {
+      const msg = await r.text().catch(() => r.statusText);
+      throw new Error(msg);
+    }
+    if (r.status === 204) return null;
+    return r.json();
+  } catch(e) {
+    clearTimeout(tid);
+    throw e;
   }
-  if (r.status === 204) return null;
-  return r.json();
 }
 const apiGet = (path) => apiFetch(path);
 const apiPost = (path, body) => apiFetch(path, { method:'POST', body });
@@ -2020,11 +2029,11 @@ const apiDel = (path) => apiFetch(path, { method:'DELETE' });
 ═══════════════════════════════════════════════ */
 function hideSplash() {
   const s = document.getElementById('splash');
-  if (s && !s._hidden) {
-    s._hidden = true;
-    s.classList.add('hide');
-    setTimeout(() => s.remove(), 520);
-  }
+  if (!s) return; // уже удалён
+  if (s._hidden) return; // уже скрывается
+  s._hidden = true;
+  s.classList.add('hide');
+  setTimeout(() => { if (s.parentNode) s.parentNode.removeChild(s); }, 540);
 }
 
 async function loadProducts() {
@@ -4910,7 +4919,6 @@ function toast(msg) {
 // Navbar is locked via CSS position:fixed — no JS keyboard handler needed
 
 renderProfile();
-// Запускаем параллельно — не ждём одного чтобы начать другое
 // Мгновенно показываем кэшированный счётчик заказов пока грузится сервер
 try {
   const cached = localStorage.getItem('cachedOrderCount');
@@ -4921,10 +4929,18 @@ try {
   }
 } catch(e) {}
 
-Promise.all([loadProducts(), loadMyOrders(), loadAdmins(), checkPendingOrder()]);
+// Жёсткий fallback — скрываем сплэш максимум через 3 секунды в любом случае
+const _splashKill = setTimeout(hideSplash, 3000);
 
-// Максимум 800ms — потом скрываем в любом случае
-setTimeout(hideSplash, 800);
+Promise.all([
+  loadProducts(),
+  loadMyOrders(),
+  loadAdmins(),
+  checkPendingOrder()
+]).finally(() => {
+  clearTimeout(_splashKill);
+  hideSplash(); // на случай если loadProducts не вызвал
+});
 </script>
 </body>
 </html>
