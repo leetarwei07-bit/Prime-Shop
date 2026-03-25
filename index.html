@@ -4583,9 +4583,9 @@ let _tplPickerCtx = 'add';
 
 function openTemplatesPicker(ctx) {
   _tplPickerCtx = ctx;
-  // Загружаем шаблоны если ещё не загружены, потом показываем пикер
   if (!descTemplates.length) {
-    loadDescTemplates().then(() => _showTemplatePicker());
+    // Пробуем перезагрузить (на случай если при старте не успело)
+    loadDescTemplates().finally(() => _showTemplatePicker());
   } else {
     _showTemplatePicker();
   }
@@ -4948,10 +4948,11 @@ Promise.all([
   loadProducts(),
   loadMyOrders(),
   loadAdmins(),
-  checkPendingOrder()
+  checkPendingOrder(),
+  loadDescTemplates(),
 ]).finally(() => {
   clearTimeout(_splashKill);
-  hideSplash(); // на случай если loadProducts не вызвал
+  hideSplash();
 });
 </script>
 </body>
