@@ -898,76 +898,67 @@ body {
   background:var(--s2);
   border:1px solid var(--border);
   border-radius:14px;
-  padding:14px 14px 12px;
+  padding:14px 10px 14px;
 }
-/* ── верхняя полоса с иконками ── */
 .track-bar {
-  display:flex;align-items:center;position:relative;margin-bottom:10px;
+  display:flex;align-items:flex-start;position:relative;
 }
+/* линия-сегмент между узлами */
 .track-seg {
-  flex:1;height:3px;background:var(--border);border-radius:2px;overflow:hidden;position:relative;
+  flex:1;height:3px;background:var(--border);border-radius:2px;
+  overflow:hidden;position:relative;
+  margin-top:16px; /* центруем по кругу 32px */
 }
 .track-seg-fill {
-  position:absolute;inset:0;
-  border-radius:2px;
+  position:absolute;inset:0;border-radius:2px;
   transform:scaleX(0);transform-origin:left;
   transition:transform .6s var(--easing);
 }
 .track-seg.done .track-seg-fill { transform:scaleX(1) }
 .track-seg.half .track-seg-fill { transform:scaleX(.5) }
 
+/* узел = кружок + SVG + подпись снизу */
+.track-step {
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  flex-shrink:0;width:52px;
+}
 .track-node {
-  flex-shrink:0;
-  width:28px;height:28px;border-radius:50%;
+  width:34px;height:34px;border-radius:50%;
   background:var(--s1);border:2px solid var(--border);
   display:flex;align-items:center;justify-content:center;
-  font-size:13px;position:relative;z-index:1;
+  position:relative;z-index:1;
   transition:border-color .4s,background .4s,box-shadow .4s;
+  color:var(--text3);
 }
+.track-node svg { width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;transition:stroke .4s }
 .track-node.done {
   border-color:var(--green);background:rgba(34,197,94,.12);
   box-shadow:0 0 0 3px rgba(34,197,94,.15);
+  color:var(--green);
 }
 .track-node.active {
   border-color:#60a5fa;background:rgba(96,165,250,.12);
-  box-shadow:0 0 0 4px rgba(96,165,250,.18);
+  box-shadow:0 0 0 4px rgba(96,165,250,.2);
+  color:#60a5fa;
   animation:nodePulse 2s ease-in-out infinite;
 }
+.track-node.bouncing { animation:nodePulse 2s ease-in-out infinite, truckBounce 1.8s ease-in-out infinite }
 @keyframes nodePulse {
   0%,100% { box-shadow:0 0 0 4px rgba(96,165,250,.18) }
-  50%      { box-shadow:0 0 0 7px rgba(96,165,250,.06) }
+  50%      { box-shadow:0 0 0 8px rgba(96,165,250,.05) }
 }
-
-/* грузовик — подпрыгивает только когда в_пути */
-.track-truck {
-  flex-shrink:0;
-  width:32px;height:32px;border-radius:50%;
-  background:rgba(96,165,250,.15);border:2px solid #60a5fa;
-  display:flex;align-items:center;justify-content:center;
-  color:#60a5fa;font-size:14px;
-  position:relative;z-index:2;
-  transition:margin .5s var(--easing);
-}
-.track-truck.bouncing { animation:truckBounce 1.8s ease-in-out infinite }
 @keyframes truckBounce {
   0%,100% { transform:translateY(0) }
   40%     { transform:translateY(-4px) }
   70%     { transform:translateY(-1px) }
 }
-
-/* ── подписи ── */
-.track-labels {
-  display:flex;
-  justify-content:space-between;
-  padding:0 2px;
-}
-.track-label {
+.track-step-label {
   font-size:9px;font-weight:500;color:var(--text3);
-  text-align:center;flex:1;line-height:1.3;
-  transition:color .3s;
+  text-align:center;line-height:1.2;
+  transition:color .3s;white-space:nowrap;
 }
-.track-label.active { color:#60a5fa;font-weight:600 }
-.track-label.done   { color:var(--green);font-weight:500 }
+.track-step-label.active { color:#60a5fa;font-weight:700 }
+.track-step-label.done   { color:var(--green);font-weight:600 }
 
 /* ═══════════════════════════════════════════════
    QUALITY LABEL (badge under product card)
@@ -3180,64 +3171,57 @@ async function placeOrder() {
    ORDERS
 ═══════════════════════════════════════════════ */
 function renderOrderTrack(status) {
-  // Этапы: иконка, подпись, ключ статуса
-  const steps = [
-    { key:'active',     icon:'📦', label:'Принят'   },
-    { key:'in_transit', icon:'🚛', label:'В пути'   },
-    { key:'customs',    icon:'🛃', label:'Таможня'  },
-    { key:'warehouse',  icon:'🏪', label:'Склад'    },
-    { key:'delivered',  icon:'✅', label:'Доставлен'},
-  ];
   const ORDER = ['active','in_transit','customs','warehouse','delivered'];
   const currentIdx = ORDER.indexOf(status);
 
-  // Строим трек
-  // Между узлами — сегменты линии (4 сегмента для 5 узлов)
-  // Грузовик рисуется вместо иконки активного узла
-  let barHtml = '';
-  steps.forEach((step, i) => {
-    const idx = ORDER.indexOf(step.key);
-    const isDone   = idx < currentIdx;
-    const isActive = idx === currentIdx;
+  // SVG иконки для каждого этапа
+  const ICONS = {
+    active: `<svg viewBox="0 0 24 24"><path d="M20 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>`,
+    in_transit: `<svg viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 5v3h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>`,
+    customs: `<svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><path d="M12 11v4"/><path d="M10 13h4"/></svg>`,
+    warehouse: `<svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`,
+    delivered: `<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>`,
+  };
 
-    // Узел
-    if (isActive) {
-      const bouncing = status === 'in_transit' ? 'bouncing' : '';
-      barHtml += `<div class="track-truck ${bouncing}">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="1" y="3" width="15" height="13" rx="1"/>
-          <path d="M16 8h4l3 5v3h-7V8z"/>
-          <circle cx="5.5" cy="18.5" r="2.5"/>
-          <circle cx="18.5" cy="18.5" r="2.5"/>
-        </svg>
-      </div>`;
-    } else {
-      const cls = isDone ? 'done' : '';
-      barHtml += `<div class="track-node ${cls}">${isDone ? '✓' : step.icon}</div>`;
-    }
+  // Подписи
+  const LABELS = {
+    active:     'Принят',
+    in_transit: 'В пути',
+    customs:    'Таможня',
+    warehouse:  'Склад',
+    delivered:  'Доставлен',
+  };
+
+  let html = '';
+  ORDER.forEach((key, i) => {
+    const isDone   = i < currentIdx;
+    const isActive = i === currentIdx;
+    const labelCls = isDone ? 'done' : isActive ? 'active' : '';
+    const nodeCls  = isDone ? 'done' : isActive ? `active${key === 'in_transit' ? ' bouncing' : ''}` : '';
+
+    // Узел со SVG
+    html += `<div class="track-step">
+      <div class="track-node ${nodeCls}">
+        ${isDone
+          ? `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`
+          : ICONS[key]
+        }
+      </div>
+      <div class="track-step-label ${labelCls}">${LABELS[key]}</div>
+    </div>`;
 
     // Сегмент после узла (кроме последнего)
-    if (i < steps.length - 1) {
-      const segDone = idx < currentIdx;   // сегмент полностью пройден
-      const segHalf = idx === currentIdx; // сегмент наполовину (грузовик в начале)
-      const color = segDone ? 'var(--green)' : '#60a5fa';
-      barHtml += `<div class="track-seg ${segDone?'done':''} ${segHalf?'half':''}">
+    if (i < ORDER.length - 1) {
+      const segDone = i < currentIdx;
+      const segHalf = i === currentIdx;
+      const color   = segDone ? 'var(--green)' : '#60a5fa';
+      html += `<div class="track-seg ${segDone?'done':''} ${segHalf?'half':''}">
         <div class="track-seg-fill" style="background:${color}"></div>
       </div>`;
     }
   });
 
-  // Подписи
-  const labelsHtml = steps.map((step, i) => {
-    const idx = ORDER.indexOf(step.key);
-    const cls = idx < currentIdx ? 'done' : idx === currentIdx ? 'active' : '';
-    return `<div class="track-label ${cls}">${step.label}</div>`;
-  }).join('');
-
-  return `<div class="order-track">
-    <div class="track-bar">${barHtml}</div>
-    <div class="track-labels">${labelsHtml}</div>
-  </div>`;
+  return `<div class="order-track"><div class="track-bar">${html}</div></div>`;
 }
 
 
