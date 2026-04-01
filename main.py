@@ -738,6 +738,48 @@ def update_product(pid: int, body: ProductUpdate, x_init_data: Optional[str] = H
     log_action(user["username"], "product_update", str(pid))
     return row_to_product(row, include_links=True)
 
+class BulkPriceBody(BaseModel):
+    action:   str   # "increase" | "decrease" | "discount"
+    amount:   int   # сумма в единицах валюты
+
+@app.post("/products/bulk-price")
+def bulk_price(body: BulkPriceBody, x_init_data: Optional[str] = Header(None)):
+    """
+    Массовое изменение цен:
+    - increase  : price += amount
+    - decrease  : price -= amount (минимум 1)
+    - discount  : old_price = price, price = price - amount, is_sale = 1
+    """
+    user = require_admin(x_init_data, "products")
+    if body.action not in ("increase", "decrease", "discount"):
+        raise HTTPException(400, "Invalid action")
+    if body.amount <= 0:
+        raise HTTPException(400, "amount must be > 0")
+
+    conn = get_db()
+    rows = conn.execute("SELECT id, price FROM products").fetchall()
+    updated = 0
+    for row in rows:
+        pid_  = row["id"]
+        price = row["price"]
+        if body.action == "increase":
+            new_price = price + body.amount
+            conn.execute("UPDATE products SET price=? WHERE id=?", (new_price, pid_))
+        elif body.action == "decrease":
+            new_price = max(1, price - body.amount)
+            conn.execute("UPDATE products SET price=? WHERE id=?", (new_price, pid_))
+        elif body.action == "discount":
+            new_price = max(1, price - body.amount)
+            conn.execute(
+                "UPDATE products SET old_price=?, price=?, is_sale=1 WHERE id=?",
+                (price, new_price, pid_)
+            )
+        updated += 1
+    conn.commit()
+    conn.close()
+    log_action(user["username"], f"bulk_price_{body.action}", f"amount={body.amount}, products={updated}")
+    return {"updated": updated}
+
 @app.delete("/products/{pid}", status_code=204)
 def delete_product(pid: int, x_init_data: Optional[str] = Header(None)):
     user = require_admin(x_init_data, "products")
