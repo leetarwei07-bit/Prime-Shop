@@ -1444,6 +1444,11 @@ body {
         <div class="field">
           <label>Калькулятор цены <span style="color:var(--text3);font-weight:400;text-transform:none">— необязательно</span></label>
           <div class="calc-box">
+            <!-- Быстрый выбор типа товара по весу -->
+            <div style="margin-bottom:10px">
+              <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Быстрый выбор — нажми на тип товара</div>
+              <div id="a-weight-chips" style="display:flex;flex-wrap:wrap;gap:5px;"></div>
+            </div>
             <div class="field-row" style="gap:8px;margin-bottom:8px">
               <div class="field" style="margin:0">
                 <label style="margin-bottom:4px">Юани (CNY)</label>
@@ -1460,13 +1465,19 @@ body {
                 <input id="a-markup" type="number" placeholder="75000" oninput="calcPrice('add')" style="padding:8px 10px;font-size:13px"/>
               </div>
               <div class="field" style="margin:0">
+                <label style="margin-bottom:4px">Карго (сум / 100г)</label>
+                <input id="a-cargo-rate" type="number" placeholder="13000" value="13000" oninput="calcPrice('add')" style="padding:8px 10px;font-size:13px"/>
+              </div>
+            </div>
+            <div class="field-row" style="gap:8px;margin-bottom:8px">
+              <div class="field" style="margin:0">
                 <label style="margin-bottom:4px">Страховка (сум)</label>
                 <input id="a-insurance" type="number" placeholder="15000" oninput="calcPrice('add')" style="padding:8px 10px;font-size:13px"/>
               </div>
             </div>
             <div id="a-calc-result" style="display:none">
               <div class="calc-row"><span>Цена товара (CNY→сум)</span><span id="a-cr-product">—</span></div>
-              <div class="calc-row"><span>Карго (13 000 / 100г)</span><span id="a-cr-cargo">—</span></div>
+              <div class="calc-row"><span>Карго</span><span id="a-cr-cargo">—</span></div>
               <div class="calc-row"><span>Наценка</span><span id="a-cr-markup">—</span></div>
               <div class="calc-row"><span>Страховка</span><span id="a-cr-insurance">—</span></div>
               <div class="calc-row total"><span>Итоговая цена</span><span id="a-cr-total">—</span></div>
@@ -1886,6 +1897,11 @@ body {
       <div class="field">
         <label>Калькулятор цены <span style="color:var(--text3);font-weight:400;text-transform:none">— необязательно</span></label>
         <div class="calc-box">
+          <!-- Быстрый выбор типа товара по весу -->
+          <div style="margin-bottom:10px">
+            <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Быстрый выбор — нажми на тип товара</div>
+            <div id="e-weight-chips" style="display:flex;flex-wrap:wrap;gap:5px;"></div>
+          </div>
           <div class="field-row" style="gap:8px;margin-bottom:8px">
             <div class="field" style="margin:0">
               <label style="margin-bottom:4px">Юани (CNY)</label>
@@ -1902,13 +1918,19 @@ body {
               <input id="e-markup" type="number" placeholder="75000" oninput="calcPrice('edit')" style="padding:8px 10px;font-size:13px"/>
             </div>
             <div class="field" style="margin:0">
+              <label style="margin-bottom:4px">Карго (сум / 100г)</label>
+              <input id="e-cargo-rate" type="number" placeholder="13000" value="13000" oninput="calcPrice('edit')" style="padding:8px 10px;font-size:13px"/>
+            </div>
+          </div>
+          <div class="field-row" style="gap:8px;margin-bottom:8px">
+            <div class="field" style="margin:0">
               <label style="margin-bottom:4px">Страховка (сум)</label>
               <input id="e-insurance" type="number" placeholder="15000" oninput="calcPrice('edit')" style="padding:8px 10px;font-size:13px"/>
             </div>
           </div>
           <div id="e-calc-result" style="display:none">
             <div class="calc-row"><span>Цена товара (CNY→сум)</span><span id="e-cr-product">—</span></div>
-            <div class="calc-row"><span>Карго (13 000 / 100г)</span><span id="e-cr-cargo">—</span></div>
+            <div class="calc-row"><span>Карго</span><span id="e-cr-cargo">—</span></div>
             <div class="calc-row"><span>Наценка</span><span id="e-cr-markup">—</span></div>
             <div class="calc-row"><span>Страховка</span><span id="e-cr-insurance">—</span></div>
             <div class="calc-row total"><span>Итоговая цена</span><span id="e-cr-total">—</span></div>
@@ -3667,6 +3689,7 @@ function resetAddForm() {
   renderLinkChips('add');
   renderSizeChips('add');
   setVT('add', 'none');
+  initWeightChips('add');
 }
 
 function renderAdminStats() {
@@ -3945,6 +3968,7 @@ async function adminAddProduct() {
 function openEdit(id) {
   const p = PRODUCTS.find(x => x.id===id);
   if (!p) return;
+  initWeightChips('edit');
 
   document.getElementById('e-id').value = p.id;
   document.getElementById('e-name').value = p.name||'';
@@ -4851,21 +4875,97 @@ function applyTemplate(id) {
 
 // CNY → UZS exchange rate (update manually or later via API)
 const CNY_RATE = 1950; // 1 CNY ≈ 1950 UZS (approximate)
-const CARGO_PER_100G = 13000; // 13,000 UZS per 100g
+const CARGO_PER_100G_DEFAULT = 13000;
+
+// Таблица категорий одежды с примерным весом (г)
+const CLOTHING_WEIGHTS = [
+  { label: '👟 Кроссовки',     w: 700  },
+  { label: '👢 Сапоги',        w: 900  },
+  { label: '👞 Туфли',         w: 600  },
+  { label: '🥾 Берцы',         w: 1000 },
+  { label: '🩴 Сланцы',        w: 280  },
+  { label: '👖 Джинсы',        w: 650  },
+  { label: '👖 Брюки',         w: 450  },
+  { label: '🩳 Шорты',         w: 280  },
+  { label: '👗 Платье',        w: 400  },
+  { label: '👗 Юбка',          w: 300  },
+  { label: '🧥 Куртка',        w: 1100 },
+  { label: '🧥 Пуховик',       w: 1500 },
+  { label: '🥼 Пальто',        w: 1300 },
+  { label: '🧥 Бомбер',        w: 800  },
+  { label: '👕 Футболка',      w: 200  },
+  { label: '👕 Поло',          w: 250  },
+  { label: '👔 Рубашка',       w: 280  },
+  { label: '🧣 Худи',          w: 550  },
+  { label: '🧥 Свитшот',       w: 480  },
+  { label: '🧶 Свитер',        w: 600  },
+  { label: '🧤 Кардиган',      w: 500  },
+  { label: '🩱 Топ / Майка',   w: 150  },
+  { label: '🩲 Нижнее бельё',  w: 120  },
+  { label: '🧦 Носки (3 пары)',w: 120  },
+  { label: '🧢 Кепка',         w: 150  },
+  { label: '🎩 Шапка',         w: 120  },
+  { label: '🧣 Шарф',          w: 200  },
+  { label: '🧤 Перчатки',      w: 150  },
+  { label: '👝 Сумка',         w: 500  },
+  { label: '🎒 Рюкзак',        w: 800  },
+  { label: '⌚ Часы',           w: 150  },
+  { label: '💍 Аксессуар',     w: 80   },
+  { label: '👜 Клатч',         w: 350  },
+  { label: '🕶️ Очки',          w: 100  },
+  { label: '👒 Панама',         w: 130  },
+  { label: '🩰 Балетки',       w: 350  },
+  { label: '🥻 Комбинезон',    w: 500  },
+  { label: '🧳 Чемодан малый', w: 3000 },
+];
+
+function initWeightChips(ctx) {
+  const p = ctx === 'add' ? 'a' : 'e';
+  const container = document.getElementById(`${p}-weight-chips`);
+  if (!container || container.dataset.ready) return;
+  container.dataset.ready = '1';
+  container.innerHTML = CLOTHING_WEIGHTS.map(item =>
+    `<button type="button" onclick="pickWeight('${ctx}',${item.w},this)"
+      style="padding:4px 10px;background:var(--s2);border:1px solid var(--border);
+             border-radius:20px;color:var(--text2);font-family:'Inter',sans-serif;
+             font-size:11px;cursor:pointer;white-space:nowrap;
+             transition:background .15s,color .15s,border-color .15s">
+      ${item.label} <span style="color:var(--text3)">${item.w}г</span>
+    </button>`
+  ).join('');
+}
+
+function pickWeight(ctx, w, btn) {
+  const p = ctx === 'add' ? 'a' : 'e';
+  // Подсветка активного чипа
+  btn.closest('[id$="-weight-chips"]').querySelectorAll('button').forEach(b => {
+    b.style.background = 'var(--s2)';
+    b.style.color = 'var(--text2)';
+    b.style.borderColor = 'var(--border)';
+  });
+  btn.style.background = 'rgba(255,255,255,.14)';
+  btn.style.color = '#fff';
+  btn.style.borderColor = 'rgba(255,255,255,.35)';
+  // Проставляем вес и пересчитываем
+  const weightInput = document.getElementById(`${p}-weight`);
+  if (weightInput) weightInput.value = w;
+  calcPrice(ctx);
+}
 
 function calcPrice(ctx) {
   const p = ctx === 'add' ? 'a' : 'e';
-  const cny      = parseFloat(document.getElementById(`${p}-cny`)?.value)     || 0;
-  const weight   = parseFloat(document.getElementById(`${p}-weight`)?.value)  || 0;
-  const markup   = parseFloat(document.getElementById(`${p}-markup`)?.value)  || 0;
-  const insurance= parseFloat(document.getElementById(`${p}-insurance`)?.value)|| 0;
-  const resultEl = document.getElementById(`${p}-calc-result`);
+  const cny       = parseFloat(document.getElementById(`${p}-cny`)?.value)        || 0;
+  const weight    = parseFloat(document.getElementById(`${p}-weight`)?.value)     || 0;
+  const markup    = parseFloat(document.getElementById(`${p}-markup`)?.value)     || 0;
+  const insurance = parseFloat(document.getElementById(`${p}-insurance`)?.value)  || 0;
+  const cargoRate = parseFloat(document.getElementById(`${p}-cargo-rate`)?.value) || CARGO_PER_100G_DEFAULT;
+  const resultEl  = document.getElementById(`${p}-calc-result`);
   if (!resultEl) return;
 
   if (!cny && !weight) { resultEl.style.display = 'none'; return; }
 
   const productPrice = Math.round(cny * CNY_RATE);
-  const cargoPrice   = Math.round((weight / 100) * CARGO_PER_100G);
+  const cargoPrice   = Math.round((weight / 100) * cargoRate);
   const total        = productPrice + cargoPrice + markup + insurance;
 
   document.getElementById(`${p}-cr-product`).textContent  = fmt(productPrice);
