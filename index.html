@@ -317,6 +317,13 @@ body {
   z-index:2;
   animation:badgePop .3s var(--spring) both;
 }
+.autoplay-wrap { position:relative;width:100%;height:100%;overflow:hidden }
+.autoplay-slide { position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .5s ease }
+.autoplay-slide.active { opacity:1 }
+.autoplay-dots { position:absolute;bottom:6px;left:50%;transform:translateX(-50%);display:flex;gap:4px;z-index:3 }
+.autoplay-dot { width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.4);transition:background .3s }
+.autoplay-dot.on { background:#fff }
+.vscroll-sentinel { height:1px;grid-column:1/-1 }
 .prod-sale-badge {
   position:absolute;top:8px;left:8px;
   background:rgba(239,68,68,.92);
@@ -2148,6 +2155,11 @@ async function loadProducts() {
   try {
     const data = await apiGet('/products');
     PRODUCTS.length = 0;
+    // Fisher-Yates shuffle при загрузке — порядок всегда случайный
+    for (let i = data.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [data[i], data[j]] = [data[j], data[i]];
+    }
     data.forEach(p => PRODUCTS.push(p));
     renderHome(true); // instant=true — без skeleton, сразу карточки
     applySearch();
@@ -2331,13 +2343,11 @@ function statusPill(s) {
 /* ═══════════════════════════════════════════════
    PRODUCT CARDS
 ═══════════════════════════════════════════════ */
-function cardHTML(p, idx = 0) {
-  const disc = p.old ? Math.round((1 - p.price/p.old)*100) : 0;
-  const photo = p.photos && p.photos.length ? p.photos[0] : null;
+function cardHTML(p, idx = 0, autoplay = false) {
+  const disc = (p.old && p.old > p.price) ? Math.round((1 - p.price/p.old)*100) : 0;
+  const photos = (p.photos && p.photos.length) ? p.photos : null;
+  const photo  = photos ? photos[0] : null;
 
-  // Волна: каждая карточка появляется с нарастающей задержкой
-  // Первые 2 — мгновенно (eager, above the fold)
-  // Дальше — плавная волна с шагом 60ms, максимум 500ms
   const delay = idx < 2 ? 0 : Math.min((idx - 2) * 0.06, 0.5);
 
   const deliveryBadge = p.isPreorder
@@ -2350,17 +2360,21 @@ function cardHTML(p, idx = 0) {
         до 12 дней · Бесплатно
       </div>`;
 
-  // Фото появляется плавно через onload — добавляем класс img-loaded
-  const imgHtml = photo
-    ? `<img
-        src="${photo}"
-        loading="${idx < 4 ? 'eager' : 'lazy'}"
-        fetchpriority="${idx < 2 ? 'high' : 'auto'}"
-        alt="${p.name}"
-        onload="this.classList.add('img-loaded')"
-        onerror="this.style.display='none'"
-       />`
-    : `<span>${p.emoji||'📦'}</span>`;
+  // Автоплей-слайдер для первых 4 карточек, обычное фото для остальных
+  let imgHtml;
+  if (autoplay && photos && photos.length > 1) {
+    const slides = photos.map((src, si) =>
+      `<img src="${src}" class="autoplay-slide${si===0?' active':''}" loading="${idx<4?'eager':'lazy'}" alt="${p.name}" onload="this.classList.add('img-loaded')" onerror="this.style.display='none'/>`
+    ).join('');
+    imgHtml = `<div class="autoplay-wrap" data-pid="${p.id}" data-cur="0" data-total="${photos.length}">
+      ${slides}
+      <div class="autoplay-dots">${photos.map((_,si)=>`<span class="autoplay-dot${si===0?' on':''}"></span>`).join('')}</div>
+    </div>`;
+  } else if (photo) {
+    imgHtml = `<img src="${photo}" loading="${idx<4?'eager':'lazy'}" fetchpriority="${idx<2?'high':'auto'}" alt="${p.name}" onload="this.classList.add('img-loaded')" onerror="this.style.display='none'"/>`;
+  } else {
+    imgHtml = `<span>${p.emoji||'📦'}</span>`;
+  }
 
   return `<div class="prod-card" onclick="openProduct(${p.id})" style="animation-delay:${delay}s">
     <div class="prod-img">
@@ -2399,20 +2413,69 @@ function skeletonHTML(count = 6) {
   ).join('');
 }
 
+// Виртуальный скролл: держим ~40 карточек в DOM
+const VSCROLL_PAGE = 40;
+const vscrollState = {}; // {elId: {list, offset, sentinel}}
+
 function renderGrid(elId, list, animate = true) {
   const el = document.getElementById(elId);
   if (!el) return;
   if (!list || !list.length) {
     el.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-h">Ничего не найдено</div><div class="empty-p">Попробуйте другой запрос</div></div>`;
+    if (vscrollState[elId]) delete vscrollState[elId];
     return;
   }
-  el.innerHTML = list.map((p,i) => cardHTML(p, animate ? i : 0)).join('');
-  // Помечаем уже закешированные фото — onload для них не срабатывает
+  // Только home-grid получает виртуальный скролл; остальные рендерим целиком
+  if (elId !== 'home-grid') {
+    el.innerHTML = list.map((p,i) => cardHTML(p, animate ? i : 0)).join('');
+    requestAnimationFrame(() => {
+      el.querySelectorAll('.prod-img img').forEach(img => {
+        if (img.complete && img.naturalWidth) img.classList.add('img-loaded');
+      });
+    });
+    return;
+  }
+  // Виртуальный скролл для home-grid
+  const chunk = list.slice(0, VSCROLL_PAGE);
+  el.innerHTML = chunk.map((p,i) => cardHTML(p, animate ? i : 0)).join('');
   requestAnimationFrame(() => {
     el.querySelectorAll('.prod-img img').forEach(img => {
       if (img.complete && img.naturalWidth) img.classList.add('img-loaded');
     });
   });
+  if (list.length <= VSCROLL_PAGE) {
+    if (vscrollState[elId]) delete vscrollState[elId];
+    return;
+  }
+  // Sentinel для подгрузки
+  const sentinel = document.createElement('div');
+  sentinel.className = 'vscroll-sentinel';
+  el.appendChild(sentinel);
+  vscrollState[elId] = { list, offset: VSCROLL_PAGE, sentinel, animate };
+  // Disconnect old observer if any
+  if (vscrollState[elId]._obs) vscrollState[elId]._obs.disconnect();
+  const obs = new IntersectionObserver(entries => {
+    if (!entries[0].isIntersecting) return;
+    const st = vscrollState[elId];
+    if (!st) return;
+    const next = st.list.slice(st.offset, st.offset + VSCROLL_PAGE);
+    if (!next.length) { obs.disconnect(); sentinel.remove(); return; }
+    next.forEach((p, i) => {
+      const div = document.createElement('div');
+      div.innerHTML = cardHTML(p, st.animate ? st.offset + i : 0);
+      el.insertBefore(div.firstChild, sentinel);
+    });
+    // Mark cached images
+    requestAnimationFrame(() => {
+      el.querySelectorAll('.prod-img img').forEach(img => {
+        if (img.complete && img.naturalWidth) img.classList.add('img-loaded');
+      });
+    });
+    st.offset += VSCROLL_PAGE;
+    if (st.offset >= st.list.length) { obs.disconnect(); sentinel.remove(); delete vscrollState[elId]; }
+  }, { rootMargin: '300px' });
+  obs.observe(sentinel);
+  vscrollState[elId]._obs = obs;
 }
 
 let lastViewedProduct = null; // запоминаем последний просмотренный товар
@@ -3570,7 +3633,7 @@ function renderRecentlyViewed() {
     const products = ids.map(id => PRODUCTS.find(p => p.id === id)).filter(Boolean).slice(0, 4);
     if (!products.length) { sec.style.display = 'none'; return; }
     sec.style.display = 'block';
-    grid.innerHTML = products.map((p, i) => cardHTML(p, i)).join('');
+    grid.innerHTML = products.map((p, i) => cardHTML(p, i, true)).join('');
   } catch(e) { sec.style.display = 'none'; }
 }
 
@@ -4554,7 +4617,7 @@ function loadRecommendations(lastViewed = null) {
     const allLabel = document.getElementById('home-section-label-all');
     if (allLabel) allLabel.style.display = 'block';
 
-    grid.innerHTML = recs.map((x, i) => cardHTML(x.product, i)).join('');
+    grid.innerHTML = recs.map((x, i) => cardHTML(x.product, i, true)).join('');
 
     // Лента: остальные товары по убыванию релевантности
     const inRecs = new Set(recs.map(x => x.product.id));
@@ -4761,6 +4824,56 @@ async function bulkPrice(action, inputId) {
     input.value = '';
     await loadProducts();
   } catch(e) { showToast('Ошибка: ' + (e.message || 'неизвестная')); }
+}
+
+// ── AUTOPLAY ENGINE ─────────────────────────────────────────────────────
+const autoplayTimers = new Map();
+
+function startAutoplay(wrap) {
+  const pid = wrap.dataset.pid;
+  if (autoplayTimers.has(pid)) return;
+  const slides = wrap.querySelectorAll('.autoplay-slide');
+  const dots   = wrap.querySelectorAll('.autoplay-dot');
+  if (slides.length < 2) return;
+  let cur = parseInt(wrap.dataset.cur) || 0;
+  const timer = setInterval(() => {
+    slides[cur].classList.remove('active');
+    dots[cur]?.classList.remove('on');
+    cur = (cur + 1) % slides.length;
+    slides[cur].classList.add('active');
+    dots[cur]?.classList.add('on');
+    wrap.dataset.cur = cur;
+  }, 3000);
+  autoplayTimers.set(pid, timer);
+}
+
+function stopAutoplay(wrap) {
+  const pid = wrap.dataset.pid;
+  const timer = autoplayTimers.get(pid);
+  if (timer) { clearInterval(timer); autoplayTimers.delete(pid); }
+}
+
+function initAutoplayObserver() {
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      const wrap = entry.target;
+      if (entry.isIntersecting) startAutoplay(wrap);
+      else stopAutoplay(wrap);
+    });
+  }, { threshold: 0.3 });
+  // Observe existing wraps
+  document.querySelectorAll('.autoplay-wrap').forEach(w => obs.observe(w));
+  // Watch for new wraps added dynamically
+  const mutObs = new MutationObserver(muts => {
+    muts.forEach(m => m.addedNodes.forEach(node => {
+      if (node.nodeType !== 1) return;
+      const wraps = node.classList?.contains('autoplay-wrap')
+        ? [node]
+        : [...(node.querySelectorAll?.('.autoplay-wrap') || [])];
+      wraps.forEach(w => obs.observe(w));
+    }));
+  });
+  mutObs.observe(document.body, { childList: true, subtree: true });
 }
 
 async function loadPendingCount() {
@@ -5268,6 +5381,9 @@ try {
 
 // Жёсткий fallback — скрываем сплэш максимум через 3 секунды в любом случае
 const _splashKill = setTimeout(hideSplash, 3000);
+
+// Запускаем автоплей observer
+initAutoplayObserver();
 
 Promise.all([
   loadProducts(),
