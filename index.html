@@ -271,12 +271,12 @@ body {
   background:var(--s2);position:relative;overflow:hidden;
   display:flex;align-items:center;justify-content:center;font-size:52px;
 }
-.prod-img img {
+.prod-img img:not(.autoplay-slide) {
   width:100%;height:100%;object-fit:cover;position:absolute;inset:0;
   transition:transform .3s ease, opacity .45s ease;
   opacity:0;
 }
-.prod-img img.img-loaded { opacity:1 }
+.prod-img img.img-loaded:not(.autoplay-slide) { opacity:1 }
 .prod-card:active .prod-img img { transform:scale(1.03) }
 .prod-heart {
   position:absolute;top:8px;right:8px;width:28px;height:28px;border-radius:50%;
@@ -318,8 +318,8 @@ body {
   animation:badgePop .3s var(--spring) both;
 }
 .autoplay-wrap { position:absolute;inset:0;overflow:hidden }
-.autoplay-slide { position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .6s ease }
-.autoplay-slide.active { opacity:1 }
+.autoplay-slide { position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .5s ease }
+.autoplay-slide.active { opacity:1 !important }
 .autoplay-dots { position:absolute;bottom:6px;left:50%;transform:translateX(-50%);display:flex;gap:4px;z-index:3;pointer-events:none }
 .autoplay-dot { width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.35);transition:background .3s }
 .autoplay-dot.on { background:#fff;width:12px;border-radius:3px }
@@ -2166,6 +2166,7 @@ async function loadProducts() {
     hideSplash(); // скрываем сплэш как только товары готовы
     loadBrands();
     loadRecommendations();
+    setTimeout(startAutoplayAll, 800);
     // Грузим ссылки отдельно (только для админов, бэкенд проверяет роль)
     loadProductLinks();
   } catch(e) {
@@ -2249,9 +2250,8 @@ function navigate(id, btn) {
   if (id === 'orders') { loadMyOrders(); }
   if (id === 'wishlist') { document.getElementById('wish-input').value=''; filterWish(); }
   if (id === 'home') {
-    // Если уже на главной — просто скроллим наверх, не перемешиваем
-    const homeScroll = document.getElementById('home-scroll');
-    if (homeScroll) homeScroll.scrollTo({ top: 0, behavior: 'smooth' });
+    // Refresh recs using last viewed product as anchor
+    renderHome();
     loadRecommendations(lastViewedProduct);
   }
   if (id === 'admin') {
@@ -2753,12 +2753,12 @@ function closeProduct() {
     if (wishSearch) wishSearch.style.display = 'block';
   }
 
-  // Обновляем только рекомендации — ленту не трогаем, позицию не сбрасываем
+  // Обновляем ленту с рекомендациями на основе просмотренного товара
   const viewed = currentProduct;
   currentProduct = null;
   if (viewed) {
     lastViewedProduct = viewed;
-    loadRecommendations(viewed);
+    loadRecommendations(viewed); // обновляем рекомендации без перезагрузки каталога
   } else {
     loadRecommendations(lastViewedProduct);
   }
@@ -3635,6 +3635,7 @@ function renderRecentlyViewed() {
     if (!products.length) { sec.style.display = 'none'; return; }
     sec.style.display = 'block';
     grid.innerHTML = products.map((p, i) => cardHTML(p, i, true)).join('');
+    stopAllAutoplay(); setTimeout(startAutoplayAll, 100);
   } catch(e) { sec.style.display = 'none'; }
 }
 
@@ -4619,6 +4620,7 @@ function loadRecommendations(lastViewed = null) {
     if (allLabel) allLabel.style.display = 'block';
 
     grid.innerHTML = recs.map((x, i) => cardHTML(x.product, i, true)).join('');
+    stopAllAutoplay(); setTimeout(startAutoplayAll, 100);
 
     // Лента: остальные товары по убыванию релевантности
     const inRecs = new Set(recs.map(x => x.product.id));
@@ -4830,51 +4832,36 @@ async function bulkPrice(action, inputId) {
 // ── AUTOPLAY ENGINE ─────────────────────────────────────────────────────
 const autoplayTimers = new Map();
 
-function startAutoplay(wrap) {
-  const pid = wrap.dataset.pid;
-  if (autoplayTimers.has(pid)) return;
-  const slides = wrap.querySelectorAll('.autoplay-slide');
-  const dots   = wrap.querySelectorAll('.autoplay-dot');
-  if (slides.length < 2) return;
-  let cur = parseInt(wrap.dataset.cur) || 0;
-  const timer = setInterval(() => {
-    slides[cur].classList.remove('active');
-    dots[cur]?.classList.remove('on');
-    cur = (cur + 1) % slides.length;
-    slides[cur].classList.add('active');
-    dots[cur]?.classList.add('on');
-    wrap.dataset.cur = cur;
-  }, 3000);
-  autoplayTimers.set(pid, timer);
+function startAutoplayAll() {
+  document.querySelectorAll('.autoplay-wrap').forEach(wrap => {
+    const pid = wrap.dataset.pid;
+    if (!pid || autoplayTimers.has(pid)) return;
+    const slides = wrap.querySelectorAll('.autoplay-slide');
+    const dots   = wrap.querySelectorAll('.autoplay-dot');
+    if (slides.length < 2) return;
+    // Сброс: первый слайд активен, остальные скрыты
+    slides.forEach((s, i) => { s.classList.toggle('active', i === 0); });
+    dots.forEach((d, i) => { d.classList.toggle('on', i === 0); });
+    let cur = 0;
+    const timer = setInterval(() => {
+      slides[cur].classList.remove('active');
+      if (dots[cur]) dots[cur].classList.remove('on');
+      cur = (cur + 1) % slides.length;
+      slides[cur].classList.add('active');
+      if (dots[cur]) dots[cur].classList.add('on');
+    }, 3000);
+    autoplayTimers.set(pid, timer);
+  });
 }
 
-function stopAutoplay(wrap) {
-  const pid = wrap.dataset.pid;
-  const timer = autoplayTimers.get(pid);
-  if (timer) { clearInterval(timer); autoplayTimers.delete(pid); }
+function stopAllAutoplay() {
+  autoplayTimers.forEach(t => clearInterval(t));
+  autoplayTimers.clear();
 }
 
 function initAutoplayObserver() {
-  const obs = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-      const wrap = entry.target;
-      if (entry.isIntersecting) startAutoplay(wrap);
-      else stopAutoplay(wrap);
-    });
-  }, { threshold: 0.3 });
-  // Observe existing wraps
-  document.querySelectorAll('.autoplay-wrap').forEach(w => obs.observe(w));
-  // Watch for new wraps added dynamically
-  const mutObs = new MutationObserver(muts => {
-    muts.forEach(m => m.addedNodes.forEach(node => {
-      if (node.nodeType !== 1) return;
-      const wraps = node.classList?.contains('autoplay-wrap')
-        ? [node]
-        : [...(node.querySelectorAll?.('.autoplay-wrap') || [])];
-      wraps.forEach(w => obs.observe(w));
-    }));
-  });
-  mutObs.observe(document.body, { childList: true, subtree: true });
+  // Запускаем после загрузки DOM
+  setTimeout(startAutoplayAll, 600);
 }
 
 async function loadPendingCount() {
