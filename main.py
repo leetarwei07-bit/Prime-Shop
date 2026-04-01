@@ -739,16 +739,17 @@ def update_product(pid: int, body: ProductUpdate, x_init_data: Optional[str] = H
     return row_to_product(row, include_links=True)
 
 class BulkPriceBody(BaseModel):
-    action: str   # "increase" | "decrease" | "discount"
-    amount: float # сумма в сум или процент для discount
+    action: str    # "increase" | "decrease" | "discount"
+    amount: float  # сум для increase/decrease, процент (1-99) для discount
 
 @app.post("/products/bulk-price")
 def bulk_price(body: BulkPriceBody, x_init_data: Optional[str] = Header(None)):
     """
     Массовое изменение цен:
-    - increase : price += amount (сум)
-    - decrease : price -= amount (сум), минимум 1
+    - increase : price += amount
+    - decrease : price -= amount (минимум 1)
     - discount : old_price = price, price = round(price * (1 - amount/100)), is_sale = 1
+                 Пример: amount=20 → скидка 20%
     """
     user = require_admin(x_init_data, "products")
     if body.action not in ("increase", "decrease", "discount"):
@@ -756,7 +757,7 @@ def bulk_price(body: BulkPriceBody, x_init_data: Optional[str] = Header(None)):
     if body.amount <= 0:
         raise HTTPException(400, "amount must be > 0")
     if body.action == "discount" and body.amount >= 100:
-        raise HTTPException(400, "discount must be < 100%")
+        raise HTTPException(400, "discount percent must be < 100")
 
     conn = get_db()
     rows = conn.execute("SELECT id, price FROM products").fetchall()
@@ -765,11 +766,9 @@ def bulk_price(body: BulkPriceBody, x_init_data: Optional[str] = Header(None)):
         pid_  = row["id"]
         price = row["price"]
         if body.action == "increase":
-            new_price = price + int(body.amount)
-            conn.execute("UPDATE products SET price=? WHERE id=?", (new_price, pid_))
+            conn.execute("UPDATE products SET price=? WHERE id=?", (price + int(body.amount), pid_))
         elif body.action == "decrease":
-            new_price = max(1, price - int(body.amount))
-            conn.execute("UPDATE products SET price=? WHERE id=?", (new_price, pid_))
+            conn.execute("UPDATE products SET price=? WHERE id=?", (max(1, price - int(body.amount)), pid_))
         elif body.action == "discount":
             new_price = max(1, round(price * (1 - body.amount / 100)))
             if new_price < price:
