@@ -90,16 +90,9 @@ def init_db():
             sold         INTEGER NOT NULL DEFAULT 0,
             style        TEXT    NOT NULL DEFAULT '',
             source_links TEXT    NOT NULL DEFAULT '[]',
-            created_at   INTEGER NOT NULL DEFAULT (strftime('%s','now')),
-            added_by     TEXT    NOT NULL DEFAULT ''
+            created_at   INTEGER NOT NULL DEFAULT (strftime('%s','now'))
         )
     """)
-    # Migration: add added_by if missing
-    try:
-        conn.execute("ALTER TABLE products ADD COLUMN added_by TEXT NOT NULL DEFAULT ''")
-        conn.commit()
-    except Exception:
-        pass
 
     # Styles
     conn.execute("""
@@ -209,10 +202,17 @@ def init_db():
         "ALTER TABLE orders ADD COLUMN payment_id TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE products ADD COLUMN is_preorder INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE products ADD COLUMN quality TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE products ADD COLUMN moderation_status TEXT NOT NULL DEFAULT 'active'",
+        "ALTER TABLE products ADD COLUMN added_by TEXT NOT NULL DEFAULT ''",
     ]
     for m in migrations:
         try: conn.execute(m)
         except: pass
+    # Existing products are already live — mark them active
+    try:
+        conn.execute("UPDATE products SET moderation_status='active' WHERE moderation_status=''")
+        conn.commit()
+    except: pass
 
     # Seed superadmin role
     conn.execute(
@@ -478,10 +478,12 @@ def row_to_product(row, include_links=False) -> dict:
         "colors":     json.loads(row["colors"]),
         "variations": json.loads(row["variations"]) if "variations" in cols else [],
         "desc":       row["desc"],
-        "isNew":      bool(row["is_new"]),
-        "isSale":     bool(row["is_sale"]),
-        "isPreorder": bool(row["is_preorder"]) if "is_preorder" in cols else False,
-        "quality":    row["quality"] if "quality" in cols else "",
+        "isNew":         bool(row["is_new"]),
+        "isSale":        bool(row["is_sale"]),
+        "isPreorder":    bool(row["is_preorder"]) if "is_preorder" in cols else False,
+        "quality":       row["quality"] if "quality" in cols else "",
+        "modStatus":     row["moderation_status"] if "moderation_status" in cols else "active",
+        "addedBy":       row["added_by"] if "added_by" in cols else "",
         "rating":     row["rating"],
         "reviews":    row["reviews"],
         "sold":       row["sold"],
@@ -679,11 +681,54 @@ def delete_brand(bid: int, x_init_data: Optional[str] = Header(None)):
 # ═══════════════════════════════════════════════
 @app.get("/products")
 def list_products(x_init_data: Optional[str] = Header(None)):
-    is_admin = check_admin(x_init_data) is not None
+    admin = check_admin(x_init_data)
+    is_admin = admin is not None
+    is_super = is_admin and admin.get("role") == "superadmin"
     conn = get_db()
-    rows = conn.execute("SELECT * FROM products ORDER BY created_at DESC").fetchall()
+    # Superadmin sees all products; everyone else only sees active
+    if is_super:
+        rows = conn.execute("SELECT * FROM products ORDER BY created_at DESC").fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM products WHERE moderation_status='active' ORDER BY created_at DESC"
+        ).fetchall()
     conn.close()
     return [row_to_product(r, include_links=is_admin) for r in rows]
+
+@app.get("/products/pending")
+def list_pending_products(x_init_data: Optional[str] = Header(None)):
+    """Superadmin only — returns products awaiting moderation."""
+    user = require_admin(x_init_data, "admins")
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM products WHERE moderation_status='pending' ORDER BY created_at DESC"
+    ).fetchall()
+    conn.close()
+    return [row_to_product(r, include_links=True) for r in rows]
+
+@app.post("/products/{pid}/approve")
+def approve_product(pid: int, x_init_data: Optional[str] = Header(None)):
+    """Superadmin approves a pending product."""
+    user = require_admin(x_init_data, "admins")
+    conn = get_db()
+    conn.execute("UPDATE products SET moderation_status='active' WHERE id=?", (pid,))
+    conn.commit()
+    conn.close()
+    log_action(user["username"], "product_approve", str(pid))
+    return {"ok": True}
+
+@app.post("/products/{pid}/reject")
+def reject_product(pid: int, x_init_data: Optional[str] = Header(None)):
+    """Superadmin rejects (deletes) a pending product."""
+    user = require_admin(x_init_data, "admins")
+    conn = get_db()
+    row = conn.execute("SELECT name FROM products WHERE id=?", (pid,)).fetchone()
+    if row:
+        conn.execute("DELETE FROM products WHERE id=?", (pid,))
+        conn.commit()
+        log_action(user["username"], "product_reject", row["name"])
+    conn.close()
+    return {"ok": True}
 
 @app.post("/products", status_code=201)
 def create_product(body: ProductCreate, x_init_data: Optional[str] = Header(None)):
@@ -691,8 +736,8 @@ def create_product(body: ProductCreate, x_init_data: Optional[str] = Header(None
     conn = get_db()
     cur = conn.execute("""
         INSERT INTO products
-          (name,cat,brand,style,emoji,photos,price,old_price,sizes,colors,variations,desc,is_new,is_sale,is_preorder,quality,source_links,added_by)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          (name,cat,brand,style,emoji,photos,price,old_price,sizes,colors,variations,desc,is_new,is_sale,is_preorder,quality,source_links)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     """, (
         body.name, body.cat, body.brand, body.style, body.emoji,
         json.dumps(body.photos, ensure_ascii=False),
@@ -703,14 +748,20 @@ def create_product(body: ProductCreate, x_init_data: Optional[str] = Header(None
         body.desc, int(body.is_new), 1 if body.old_price else 0,
         int(body.is_preorder), body.quality,
         json.dumps([l.dict() for l in body.source_links], ensure_ascii=False),
-        user["username"],
     ))
     new_id = cur.lastrowid
     conn.commit()
     row = conn.execute("SELECT * FROM products WHERE id=?", (new_id,)).fetchone()
     conn.close()
+    mod_status = "active" if user.get("role") == "superadmin" else "pending"
+    conn2 = get_db()
+    conn2.execute("UPDATE products SET moderation_status=? WHERE id=?", (mod_status, new_id))
+    conn2.commit()
+    conn2.close()
+    row2 = get_db().execute("SELECT * FROM products WHERE id=?", (new_id,)).fetchone()
+    get_db().close()
     log_action(user["username"], "product_create", body.name)
-    return row_to_product(row, include_links=True)
+    return row_to_product(row2 or row, include_links=True)
 
 @app.put("/products/{pid}")
 def update_product(pid: int, body: ProductUpdate, x_init_data: Optional[str] = Header(None)):
@@ -1175,30 +1226,6 @@ def admin_log(x_init_data: Optional[str] = Header(None), limit: int = 50):
     conn.close()
     return [{"id": r["id"], "admin": r["admin"], "action": r["action"],
              "target": r["target"], "details": r["details"], "ts": r["created_at"]} for r in rows]
-
-@app.get("/admins/products")
-def admin_products_stats(x_init_data: Optional[str] = Header(None)):
-    """Returns per-admin product counts with product list. Superadmin only."""
-    user = require_admin(x_init_data, "admins")
-    conn = get_db()
-    # Get all admins
-    admins = conn.execute("SELECT username, role FROM admin_roles ORDER BY added_at").fetchall()
-    result = []
-    for a in admins:
-        uname = a["username"]
-        rows = conn.execute(
-            """SELECT id, name, cat, price, created_at FROM products
-               WHERE added_by = ? ORDER BY created_at DESC""",
-            (uname,)
-        ).fetchall()
-        result.append({
-            "username": uname,
-            "role": a["role"],
-            "count": len(rows),
-            "products": [{"id": r["id"], "name": r["name"], "cat": r["cat"], "price": r["price"]} for r in rows]
-        })
-    conn.close()
-    return result
 
 @app.get("/admin/stats")
 def admin_stats(x_init_data: Optional[str] = Header(None)):
