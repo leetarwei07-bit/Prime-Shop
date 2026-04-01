@@ -1306,10 +1306,6 @@ body {
         <div class="menu-badge" id="orders-badge">0</div>
       </div>
     </div>
-    <div id="recently-viewed-section" style="display:none;padding:0 16px;margin-top:14px">
-      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:10px">Недавно просмотрено</div>
-      <div id="recently-viewed-grid" class="prod-grid" style="padding:0"></div>
-    </div>
     <div style="height:20px"></div>
   </div>
 </div>
@@ -1642,7 +1638,7 @@ body {
           </div>
         </div>
         <div style="display:flex;gap:8px">
-          <input id="bulk-discount-amount" type="number" min="1" placeholder="Размер скидки (сум)"
+          <input id="bulk-discount-amount" type="number" min="1" max="90" placeholder="Скидка %"
             style="flex:1;background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none"/>
           <button onclick="bulkPrice('discount','bulk-discount-amount')"
             style="padding:10px 18px;background:var(--orange);color:#fff;border:none;border-radius:10px;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">
@@ -2322,7 +2318,7 @@ function statusPill(s) {
    PRODUCT CARDS
 ═══════════════════════════════════════════════ */
 function cardHTML(p, idx = 0) {
-  const disc = p.old ? Math.round((1 - p.price/p.old)*100) : 0;
+  const disc = (p.old && p.old > p.price) ? Math.round((1 - p.price/p.old)*100) : 0;
   const photo = p.photos && p.photos.length ? p.photos[0] : null;
 
   // Волна: каждая карточка появляется с нарастающей задержкой
@@ -2356,7 +2352,7 @@ function cardHTML(p, idx = 0) {
     <div class="prod-img">
       ${imgHtml}
       ${p.isPreorder ? `<div class="prod-preorder-badge">Под заказ</div>` : ''}
-      ${p.isSale && !p.isPreorder ? `<div class="prod-sale-badge">SALE</div>` : ''}
+      ${(p.isSale && !p.isPreorder && p.old && p.old > p.price) ? `<div class="prod-sale-badge">SALE</div>` : ''}
       <button class="prod-heart ${wishlist.has(p.id)?'liked':''}" onclick="toggleWish(event,${p.id})">
         <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
       </button>
@@ -2369,7 +2365,7 @@ function cardHTML(p, idx = 0) {
       </div>
       <div class="prod-name">${p.name}</div>
       <div class="prod-price">${fmt(p.price)}</div>
-      ${p.old ? `<div class="prod-old">${fmt(p.old)}</div>` : ''}
+      ${p.old && p.old > p.price ? `<div class="prod-old">${fmt(p.old)}</div>` : ''}
       ${deliveryBadge}
       ${qualityBadge(p.quality)}
     </div>
@@ -2562,7 +2558,7 @@ function openProduct(id) {
   selSize  = (p.sizes&&p.sizes.length)   ? p.sizes[0]  : null;
   selVariation = (p.variations&&p.variations.length) ? (p.variations[0]?.label||p.variations[0]) : null;
 
-  const disc = p.old ? Math.round((1-p.price/p.old)*100) : 0;
+  const disc = (p.old && p.old > p.price) ? Math.round((1-p.price/p.old)*100) : 0;
 
   // tags
   document.getElementById('d-tags').innerHTML =
@@ -2576,7 +2572,7 @@ function openProduct(id) {
 
   document.getElementById('d-name').textContent = p.name;
   document.getElementById('d-price').textContent = fmt(p.price);
-  document.getElementById('d-old').textContent = p.old ? fmt(p.old) : '';
+  document.getElementById('d-old').textContent = (p.old && p.old > p.price) ? fmt(p.old) : '';
   document.getElementById('d-disc').textContent = disc > 0 ? `-${disc}%` : '';
   document.getElementById('qty-num').textContent = 1;
   document.getElementById('detail-wish').classList.toggle('liked', wishlist.has(id));
@@ -2678,13 +2674,19 @@ function closeProduct() {
     if (wishSearch) wishSearch.style.display = 'block';
   }
 
+  // Скроллим ленту наверх
+  const homeScroll = document.getElementById('home-scroll');
+  if (homeScroll) homeScroll.scrollTo({ top: 0, behavior: 'instant' });
+
   // Обновляем ленту с рекомендациями на основе просмотренного товара
   const viewed = currentProduct;
   currentProduct = null;
   if (viewed) {
     lastViewedProduct = viewed;
-    loadRecommendations(viewed); // обновляем рекомендации без перезагрузки каталога
+    renderHome(); // обновляем и перемешиваем ленту
+    loadRecommendations(viewed);
   } else {
+    renderHome();
     loadRecommendations(lastViewedProduct);
   }
 }
@@ -3547,20 +3549,6 @@ function renderProfile() {
   } else if (ami) { ami.remove(); }
 
   updateStats();
-  renderRecentlyViewed();
-}
-
-function renderRecentlyViewed() {
-  const sec  = document.getElementById('recently-viewed-section');
-  const grid = document.getElementById('recently-viewed-grid');
-  if (!sec || !grid) return;
-  try {
-    const ids = JSON.parse(localStorage.getItem('recentlyViewed') || '[]');
-    const products = ids.map(id => PRODUCTS.find(p => p.id === id)).filter(Boolean).slice(0, 8);
-    if (!products.length) { sec.style.display = 'none'; return; }
-    sec.style.display = 'block';
-    grid.innerHTML = products.map((p, i) => cardHTML(p, i)).join('');
-  } catch(e) { sec.style.display = 'none'; }
 }
 
 function updateStats() {
@@ -3600,10 +3588,11 @@ function switchTab(tab, btn) {
 
 async function bulkPrice(action, inputId) {
   const input = document.getElementById(inputId);
-  const amount = parseInt(input?.value);
-  if (!amount || amount <= 0) { showToast('Введите сумму больше 0'); return; }
-  const labels = { increase: 'повысить', decrease: 'снизить', discount: 'поставить скидку' };
-  if (!confirm(`Применить "${labels[action]}" на ${amount.toLocaleString()} сум ко всем товарам?`)) return;
+  const amount = parseFloat(input?.value);
+  if (!amount || amount <= 0) { showToast('Введите значение больше 0'); return; }
+  if (action === 'discount' && amount >= 100) { showToast('Скидка должна быть меньше 100%'); return; }
+  const labels = { increase: `повысить на ${amount.toLocaleString()} сум`, decrease: `снизить на ${amount.toLocaleString()} сум`, discount: `поставить скидку ${amount}%` };
+  if (!confirm(`Применить ко всем товарам: ${labels[action]}?`)) return;
   try {
     const res = await apiFetch('/products/bulk-price', { method: 'POST', body: { action, amount } });
     showToast('✅ Обновлено товаров: ' + res.updated);
@@ -3612,6 +3601,7 @@ async function bulkPrice(action, inputId) {
   } catch(e) { showToast('Ошибка: ' + (e.message || 'неизвестная')); }
 }
 
+// SALE badge CSS added inline
 function showProductLinks(e, pid) {
   e.stopPropagation();
   // Убираем старый попап если есть
@@ -4549,7 +4539,7 @@ function loadRecommendations(lastViewed = null) {
   if (lastViewed) {
     // Есть anchor — показываем только реально связанные товары (score > 0)
     const scored = scoreProducts(lastViewed, PRODUCTS);
-    const recs = scored.filter(x => x.score > 0).slice(0, 4);
+    const recs = scored.filter(x => x.score > 0).slice(0, 8);
 
     sec.style.display = 'block';
     const allLabel = document.getElementById('home-section-label-all');
@@ -4614,16 +4604,7 @@ function showProductRecs(product) {
 function trackView(productId) {
   // Сохраняем последний просмотренный товар для рекомендаций
   const p = PRODUCTS.find(x => x.id === productId);
-  if (p) {
-    lastViewedProduct = p;
-    try {
-      let viewed = JSON.parse(localStorage.getItem('recentlyViewed') || '[]');
-      viewed = viewed.filter(id => id !== productId);
-      viewed.unshift(productId);
-      if (viewed.length > 20) viewed = viewed.slice(0, 20);
-      localStorage.setItem('recentlyViewed', JSON.stringify(viewed));
-    } catch(e) {}
-  }
+  if (p) lastViewedProduct = p;
   if (!TG_USER) return;
   apiFetch('/events', {
     method: 'POST',
