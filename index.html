@@ -1296,10 +1296,6 @@ body {
         <div class="menu-badge" id="orders-badge">0</div>
       </div>
     </div>
-    <div id="recently-viewed-section" style="display:none;padding:0 16px;margin-top:14px">
-      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:10px">Недавно просмотрено</div>
-      <div id="recently-viewed-grid" class="prod-grid" style="padding:0"></div>
-    </div>
     <div style="height:20px"></div>
   </div>
 </div>
@@ -1328,6 +1324,7 @@ body {
     <button class="admin-tab" onclick="switchTab('orders',this)">Заказы</button>
     <button class="admin-tab" onclick="switchTab('products',this)">Товары</button>
     <button class="admin-tab" onclick="switchTab('add',this)">+ Добавить</button>
+    <button class="admin-tab" id="tab-moderation" onclick="switchTab('moderation',this)">🔍 Проверка <span id="moderation-badge" style="display:none;background:var(--red);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:3px">0</span></button>
     <button class="admin-tab" id="tab-admins" onclick="switchTab('admins',this)">Команда</button>
     <button class="admin-tab" id="tab-brands" onclick="switchTab('brands',this)">Бренды</button>
     <button class="admin-tab" onclick="switchTab('templates',this)">📋 Шаблоны</button>
@@ -1581,6 +1578,13 @@ body {
       <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Мои шаблоны</div>
       <div id="templates-list"></div>
     </div>
+
+    <!-- MODERATION PANEL -->
+    <div class="admin-panel" id="panel-moderation">
+      <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:16px">Товары на проверке</div>
+      <div id="moderation-list"><div style="text-align:center;padding:30px 0;color:var(--text3);font-size:13px">Загрузка...</div></div>
+    </div>
+
     </div>
   </div>
 </div>
@@ -1597,18 +1601,6 @@ body {
     <div id="tpl-picker-empty" style="display:none;text-align:center;padding:30px 0;color:var(--text3);font-size:13px">
       Шаблонов пока нет.<br/>Создайте в разделе «Шаблоны»
     </div>
-  </div>
-</div>
-
-<!-- ADMIN PRODUCTS OVERLAY -->
-<div class="overlay" id="admin-products-overlay" onclick="closeOverlay('admin-products-overlay',event)">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-header">
-      <div class="sheet-title" id="admin-products-title">Товары</div>
-      <button class="sheet-close" onclick="closeOverlay('admin-products-overlay')">×</button>
-    </div>
-    <div id="admin-products-list-inner" style="overflow-y:auto;max-height:60vh"></div>
   </div>
 </div>
 
@@ -2179,26 +2171,16 @@ function navigate(id, btn) {
   }
   if (id === 'admin') {
     pg.setAttribute('data-ok','1');
-    // Суперадмин видит все вкладки; обычный менеджер — только Статистика и + Добавить
-    const superOnly = ['tab-admins'];
-    const managerHidden = ['tab-orders-admin','tab-products-admin','tab-brands','tab-templates','tab-prices'];
-    superOnly.forEach(tabId => {
-      const t = document.getElementById(tabId);
-      if (t) t.style.display = isSuperAdmin() ? '' : 'none';
-    });
-    // Скрываем вкладки для обычного менеджера через data-id
+    // Суперадмин видит всё; менеджер — только Статистика и + Добавить
     document.querySelectorAll('.admin-tab').forEach(btn => {
-      const onclick = btn.getAttribute('onclick') || '';
-      const match = onclick.match(/switchTab\('(\w+)'/);
+      const match = (btn.getAttribute('onclick')||'').match(/switchTab\('(\w+)'/);
       if (!match) return;
-      const tabName = match[1];
+      const tab = match[1];
       const managerCanSee = ['stats','add'];
-      if (!isSuperAdmin() && !managerCanSee.includes(tabName)) {
-        btn.style.display = 'none';
-      } else {
-        btn.style.display = '';
-      }
+      btn.style.display = (!isSuperAdmin() && !managerCanSee.includes(tab)) ? 'none' : '';
     });
+    if (isSuperAdmin()) loadPendingCount();
+    // Загружаем все заказы для статистики и вкладки заказов
     loadAllOrders();
     renderAdminStats();
     renderAdminProducts();
@@ -3495,20 +3477,6 @@ function renderProfile() {
   } else if (ami) { ami.remove(); }
 
   updateStats();
-  renderRecentlyViewed();
-}
-
-function renderRecentlyViewed() {
-  const sec  = document.getElementById('recently-viewed-section');
-  const grid = document.getElementById('recently-viewed-grid');
-  if (!sec || !grid) return;
-  try {
-    const ids = JSON.parse(localStorage.getItem('recentlyViewed') || '[]');
-    const products = ids.map(id => PRODUCTS.find(p => p.id === id)).filter(Boolean).slice(0, 4);
-    if (!products.length) { sec.style.display = 'none'; return; }
-    sec.style.display = 'block';
-    grid.innerHTML = products.map((p, i) => cardHTML(p, i)).join('');
-  } catch(e) { sec.style.display = 'none'; }
 }
 
 function updateStats() {
@@ -3544,6 +3512,7 @@ function switchTab(tab, btn) {
   if (tab === 'brands')    { renderBrandsList(); }
   if (tab === 'add')       { resetAddForm(); }
   if (tab === 'templates') { loadDescTemplates(); }
+  if (tab === 'moderation') { loadPendingProducts(); }
 }
 
 function showProductLinks(e, pid) {
@@ -3867,7 +3836,8 @@ async function adminAddProduct() {
     });
     const cr = document.getElementById('a-calc-result'); if(cr) cr.style.display='none';
     renderHome(); applySearch(); renderAdminStats();
-    toast('Товар добавлен ✅');
+    const addedMsg = isSuperAdmin() ? 'Товар добавлен ✅' : 'Товар отправлен на проверку 🔍 Суперадмин должен его одобрить';
+    toast(addedMsg, isSuperAdmin() ? 2000 : 4000);
     // switch to products tab
     const tabs = document.querySelectorAll('.admin-tab');
     const prodsTab = Array.from(tabs).find(t => t.textContent.includes('Товары'));
@@ -4005,33 +3975,18 @@ async function renderAdminList() {
     data.forEach(a => { adminRoles[a.username.toLowerCase()] = a.role; });
     adminList.add(SUPER_ADMIN);
     const roleLabel = { superadmin:'👑 Суперадмин', manager:'🛠 Менеджер', moderator:'👁 Модератор' };
-    // Load per-admin product stats
-    let adminProdStats = {};
-    try {
-      const stats = await apiFetch('/admins/products');
-      stats.forEach(s => { adminProdStats[s.username.toLowerCase()] = s; });
-    } catch(e) {}
-    el.innerHTML = data.length ? data.map(a => {
-      const st = adminProdStats[a.username.toLowerCase()] || { count: 0, products: [] };
-      return `<div class="admin-list-item" style="flex-direction:column;align-items:stretch;gap:8px">
-        <div style="display:flex;align-items:center;gap:10px">
-          <div class="admin-list-avatar">${a.role==='superadmin'?'👑':'⚡'}</div>
-          <div style="flex:1">
-            <div style="font-weight:600;font-size:14px">@${a.username}</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:2px">${roleLabel[a.role]||a.role}</div>
-          </div>
-          <div style="display:flex;gap:6px;align-items:center">
-            <button onclick="showAdminProducts('${a.username}',${JSON.stringify(st.products)})"
-              style="padding:5px 10px;background:var(--s2);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-family:'Inter',sans-serif;font-size:11px;cursor:pointer;white-space:nowrap">
-              📦 ${st.count} товаров
-            </button>
-            ${a.username!==SUPER_ADMIN
-              ? `<button onclick="removeAdmin('${a.username}')" style="width:28px;height:28px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;color:var(--red)">✕</button>`
-              : ''}
-          </div>
+    el.innerHTML = data.length ? data.map(a =>
+      `<div class="admin-list-item">
+        <div class="admin-list-avatar">${a.role==='superadmin'?'👑':'⚡'}</div>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:14px">@${a.username}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">${roleLabel[a.role]||a.role}</div>
         </div>
-      </div>`;
-    }).join('') : '<div style="text-align:center;padding:20px;color:var(--text3);font-size:13px">Только суперадмин</div>';
+        ${a.username!==SUPER_ADMIN
+          ? `<button onclick="removeAdmin('${a.username}')" style="width:28px;height:28px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;color:var(--red)">✕</button>`
+          : ''}
+      </div>`
+    ).join('') : '<div style="text-align:center;padding:20px;color:var(--text3);font-size:13px">Только суперадмин</div>';
   } catch(e) {
     el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--red);font-size:13px">Ошибка загрузки</div>';
   }
@@ -4053,28 +4008,6 @@ async function adminAddAdmin() {
     renderAdminList();
     toast(`@${val} добавлен как ${role} ✅`);
   } catch(e) { toast('Ошибка добавления ⚠️'); }
-}
-
-function showAdminProducts(username, products) {
-  const overlay = document.getElementById('admin-products-overlay');
-  const title   = document.getElementById('admin-products-title');
-  const list    = document.getElementById('admin-products-list-inner');
-  if (!overlay || !title || !list) return;
-  title.textContent = `@${username} — товары (${products.length})`;
-  if (!products.length) {
-    list.innerHTML = '<div style="text-align:center;padding:30px 0;color:var(--text3);font-size:13px">Товаров не добавлено</div>';
-  } else {
-    list.innerHTML = products.map(p =>
-      `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
-        <div>
-          <div style="font-size:13px;font-weight:500;color:#fff">${p.name}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:2px">${p.cat}</div>
-        </div>
-        <div style="font-size:12px;font-weight:600;color:#fff;white-space:nowrap">${fmt(p.price)}</div>
-      </div>`
-    ).join('');
-  }
-  overlay.classList.add('open');
 }
 
 async function removeAdmin(u) {
@@ -4520,7 +4453,7 @@ function loadRecommendations(lastViewed = null) {
   if (lastViewed) {
     // Есть anchor — показываем только реально связанные товары (score > 0)
     const scored = scoreProducts(lastViewed, PRODUCTS);
-    const recs = scored.filter(x => x.score > 0).slice(0, 4);
+    const recs = scored.filter(x => x.score > 0).slice(0, 8);
 
     sec.style.display = 'block';
     const allLabel = document.getElementById('home-section-label-all');
@@ -4583,17 +4516,9 @@ function showProductRecs(product) {
 }
 
 function trackView(productId) {
+  // Сохраняем последний просмотренный товар для рекомендаций
   const p = PRODUCTS.find(x => x.id === productId);
-  if (p) {
-    lastViewedProduct = p;
-    try {
-      let viewed = JSON.parse(localStorage.getItem('recentlyViewed') || '[]');
-      viewed = viewed.filter(id => id !== productId);
-      viewed.unshift(productId);
-      if (viewed.length > 20) viewed = viewed.slice(0, 20);
-      localStorage.setItem('recentlyViewed', JSON.stringify(viewed));
-    } catch(e) {}
-  }
+  if (p) lastViewedProduct = p;
   if (!TG_USER) return;
   apiFetch('/events', {
     method: 'POST',
@@ -4718,6 +4643,82 @@ function renderTemplatesList() {
       </div>
       <div style="font-size:12px;color:var(--text2);line-height:1.5;white-space:pre-wrap;max-height:60px;overflow:hidden;text-overflow:ellipsis">${t.body}</div>
     </div>`).join('');
+}
+
+async function loadPendingCount() {
+  try {
+    const data = await apiFetch('/products/pending');
+    const badge = document.getElementById('moderation-badge');
+    if (badge) {
+      if (data.length > 0) {
+        badge.textContent = data.length;
+        badge.style.display = 'inline';
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+  } catch(e) {}
+}
+
+async function loadPendingProducts() {
+  const el = document.getElementById('moderation-list');
+  if (!el) return;
+  el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text3);font-size:13px">Загрузка...</div>';
+  try {
+    const data = await apiFetch('/products/pending');
+    if (!data.length) {
+      el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--text3);font-size:13px">✅ Нет товаров на проверке</div>';
+      return;
+    }
+    el.innerHTML = data.map(p => `
+      <div style="background:var(--s2);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px">
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          ${p.photos && p.photos.length
+            ? `<img src="${p.photos[0]}" style="width:64px;height:64px;object-fit:cover;border-radius:10px;flex-shrink:0"/>`
+            : `<div style="width:64px;height:64px;background:var(--s1);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">${p.emoji||'📦'}</div>`}
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;color:#fff;margin-bottom:2px">${p.name}</div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:4px">${p.cat}${p.brand ? ' · ' + p.brand : ''}</div>
+            <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:6px">${fmt(p.price)}</div>
+            <div style="font-size:11px;color:var(--text3)">Добавил: @${p.addedBy || '?'}</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button onclick="approveProduct(${p.id},this)"
+            style="flex:1;padding:10px;background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.3);border-radius:10px;color:#22c55e;font-family:'Unbounded',sans-serif;font-size:10px;font-weight:700;cursor:pointer">
+            ✓ Одобрить
+          </button>
+          <button onclick="rejectProduct(${p.id},this)"
+            style="flex:1;padding:10px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.25);border-radius:10px;color:var(--red);font-family:'Unbounded',sans-serif;font-size:10px;font-weight:700;cursor:pointer">
+            ✕ Отклонить
+          </button>
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--red);font-size:13px">Ошибка загрузки</div>';
+  }
+}
+
+async function approveProduct(id, btn) {
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    await apiFetch('/products/' + id + '/approve', { method: 'POST' });
+    await loadProducts();
+    loadPendingProducts();
+    loadPendingCount();
+    toast('Товар одобрен ✅');
+  } catch(e) { toast('Ошибка ⚠️'); btn.disabled = false; btn.textContent = '✓ Одобрить'; }
+}
+
+async function rejectProduct(id, btn) {
+  if (!confirm('Отклонить и удалить товар?')) return;
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    await apiFetch('/products/' + id + '/reject', { method: 'POST' });
+    loadPendingProducts();
+    loadPendingCount();
+    toast('Товар отклонён');
+  } catch(e) { toast('Ошибка ⚠️'); btn.disabled = false; btn.textContent = '✕ Отклонить'; }
 }
 
 async function adminSaveTemplate() {
