@@ -2249,8 +2249,9 @@ function navigate(id, btn) {
   if (id === 'orders') { loadMyOrders(); }
   if (id === 'wishlist') { document.getElementById('wish-input').value=''; filterWish(); }
   if (id === 'home') {
-    // Refresh recs using last viewed product as anchor
-    renderHome();
+    // Если уже на главной — просто скроллим наверх, не перемешиваем
+    const homeScroll = document.getElementById('home-scroll');
+    if (homeScroll) homeScroll.scrollTo({ top: 0, behavior: 'smooth' });
     loadRecommendations(lastViewedProduct);
   }
   if (id === 'admin') {
@@ -2752,12 +2753,12 @@ function closeProduct() {
     if (wishSearch) wishSearch.style.display = 'block';
   }
 
-  // Обновляем ленту с рекомендациями на основе просмотренного товара
+  // Обновляем только рекомендации — ленту не трогаем, позицию не сбрасываем
   const viewed = currentProduct;
   currentProduct = null;
   if (viewed) {
     lastViewedProduct = viewed;
-    loadRecommendations(viewed); // обновляем рекомендации без перезагрузки каталога
+    loadRecommendations(viewed);
   } else {
     loadRecommendations(lastViewedProduct);
   }
