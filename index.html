@@ -317,16 +317,6 @@ body {
   z-index:2;
   animation:badgePop .3s var(--spring) both;
 }
-.prod-sale-badge {
-  position:absolute;top:8px;left:8px;
-  background:rgba(239,68,68,.92);
-  color:#fff;font-size:9px;font-weight:700;
-  padding:3px 8px;border-radius:20px;
-  letter-spacing:.6px;text-transform:uppercase;
-  backdrop-filter:blur(4px);
-  z-index:2;
-  animation:badgePop .3s var(--spring) both;
-}
 @keyframes badgePop { from{opacity:0;transform:scale(.7)} to{opacity:1;transform:scale(1)} }
 .empty-state {
   grid-column:1/-1;display:flex;flex-direction:column;align-items:center;
@@ -1306,6 +1296,10 @@ body {
         <div class="menu-badge" id="orders-badge">0</div>
       </div>
     </div>
+    <div id="recently-viewed-section" style="display:none;padding:0 16px;margin-top:14px">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:10px">Недавно просмотрено</div>
+      <div id="recently-viewed-grid" class="prod-grid" style="padding:0"></div>
+    </div>
     <div style="height:20px"></div>
   </div>
 </div>
@@ -1337,7 +1331,6 @@ body {
     <button class="admin-tab" id="tab-admins" onclick="switchTab('admins',this)">Команда</button>
     <button class="admin-tab" id="tab-brands" onclick="switchTab('brands',this)">Бренды</button>
     <button class="admin-tab" onclick="switchTab('templates',this)">📋 Шаблоны</button>
-    <button class="admin-tab" onclick="switchTab('prices',this)">💰 Цены</button>
 
   </div>
   <div class="scroll">
@@ -1444,11 +1437,6 @@ body {
         <div class="field">
           <label>Калькулятор цены <span style="color:var(--text3);font-weight:400;text-transform:none">— необязательно</span></label>
           <div class="calc-box">
-            <!-- Быстрый выбор типа товара по весу -->
-            <div style="margin-bottom:10px">
-              <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Быстрый выбор — нажми на тип товара</div>
-              <div id="a-weight-chips" style="display:flex;flex-wrap:wrap;gap:5px;"></div>
-            </div>
             <div class="field-row" style="gap:8px;margin-bottom:8px">
               <div class="field" style="margin:0">
                 <label style="margin-bottom:4px">Юани (CNY)</label>
@@ -1465,19 +1453,13 @@ body {
                 <input id="a-markup" type="number" placeholder="75000" oninput="calcPrice('add')" style="padding:8px 10px;font-size:13px"/>
               </div>
               <div class="field" style="margin:0">
-                <label style="margin-bottom:4px">Карго (сум / 100г)</label>
-                <input id="a-cargo-rate" type="number" placeholder="13000" value="13000" oninput="calcPrice('add')" style="padding:8px 10px;font-size:13px"/>
-              </div>
-            </div>
-            <div class="field-row" style="gap:8px;margin-bottom:8px">
-              <div class="field" style="margin:0">
                 <label style="margin-bottom:4px">Страховка (сум)</label>
                 <input id="a-insurance" type="number" placeholder="15000" oninput="calcPrice('add')" style="padding:8px 10px;font-size:13px"/>
               </div>
             </div>
             <div id="a-calc-result" style="display:none">
               <div class="calc-row"><span>Цена товара (CNY→сум)</span><span id="a-cr-product">—</span></div>
-              <div class="calc-row"><span>Карго</span><span id="a-cr-cargo">—</span></div>
+              <div class="calc-row"><span>Карго (13 000 / 100г)</span><span id="a-cr-cargo">—</span></div>
               <div class="calc-row"><span>Наценка</span><span id="a-cr-markup">—</span></div>
               <div class="calc-row"><span>Страховка</span><span id="a-cr-insurance">—</span></div>
               <div class="calc-row total"><span>Итоговая цена</span><span id="a-cr-total">—</span></div>
@@ -1599,70 +1581,6 @@ body {
       <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Мои шаблоны</div>
       <div id="templates-list"></div>
     </div>
-
-    <!-- PRICES PANEL -->
-    <div class="admin-panel" id="panel-prices">
-      <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:16px">Массовое изменение цен</div>
-
-      <div style="background:var(--s2);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <span style="font-size:20px">📈</span>
-          <div>
-            <div style="font-size:13px;font-weight:600;color:#fff">Повысить цены</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:1px">Прибавить сумму ко всем товарам</div>
-          </div>
-        </div>
-        <div style="display:flex;gap:8px">
-          <input id="bulk-increase-amount" type="number" min="1" placeholder="Сумма (сум)"
-            style="flex:1;background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none"/>
-          <button onclick="bulkPrice('increase','bulk-increase-amount')"
-            style="padding:10px 18px;background:#fff;color:#000;border:none;border-radius:10px;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">
-            Применить
-          </button>
-        </div>
-      </div>
-
-      <div style="background:var(--s2);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <span style="font-size:20px">📉</span>
-          <div>
-            <div style="font-size:13px;font-weight:600;color:#fff">Снизить цены</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:1px">Вычесть сумму из всех товаров</div>
-          </div>
-        </div>
-        <div style="display:flex;gap:8px">
-          <input id="bulk-decrease-amount" type="number" min="1" placeholder="Сумма (сум)"
-            style="flex:1;background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none"/>
-          <button onclick="bulkPrice('decrease','bulk-decrease-amount')"
-            style="padding:10px 18px;background:#fff;color:#000;border:none;border-radius:10px;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">
-            Применить
-          </button>
-        </div>
-      </div>
-
-      <div style="background:var(--s2);border:1px solid var(--border);border-radius:14px;padding:16px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <span style="font-size:20px">🏷️</span>
-          <div>
-            <div style="font-size:13px;font-weight:600;color:#fff">Поставить скидку</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:1px">Старая цена сохранится — на карточке появится бейдж SALE</div>
-          </div>
-        </div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <div style="position:relative;flex:1">
-            <input id="bulk-discount-amount" type="number" min="1" max="99" placeholder="напр. 20"
-              style="width:100%;background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:10px 36px 10px 12px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none;box-sizing:border-box"/>
-            <span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:14px;font-weight:600;pointer-events:none">%</span>
-          </div>
-          <button onclick="bulkPrice('discount','bulk-discount-amount')"
-            style="padding:10px 18px;background:var(--orange);color:#fff;border:none;border-radius:10px;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">
-            Скидка
-          </button>
-        </div>
-        <div style="font-size:11px;color:var(--text3);margin-top:6px">Введите число от 1 до 99 — например 20 означает скидку 20%</div>
-      </div>
-    </div>
-
     </div>
   </div>
 </div>
@@ -1679,6 +1597,18 @@ body {
     <div id="tpl-picker-empty" style="display:none;text-align:center;padding:30px 0;color:var(--text3);font-size:13px">
       Шаблонов пока нет.<br/>Создайте в разделе «Шаблоны»
     </div>
+  </div>
+</div>
+
+<!-- ADMIN PRODUCTS OVERLAY -->
+<div class="overlay" id="admin-products-overlay" onclick="closeOverlay('admin-products-overlay',event)">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <div class="sheet-title" id="admin-products-title">Товары</div>
+      <button class="sheet-close" onclick="closeOverlay('admin-products-overlay')">×</button>
+    </div>
+    <div id="admin-products-list-inner" style="overflow-y:auto;max-height:60vh"></div>
   </div>
 </div>
 
@@ -1897,11 +1827,6 @@ body {
       <div class="field">
         <label>Калькулятор цены <span style="color:var(--text3);font-weight:400;text-transform:none">— необязательно</span></label>
         <div class="calc-box">
-          <!-- Быстрый выбор типа товара по весу -->
-          <div style="margin-bottom:10px">
-            <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Быстрый выбор — нажми на тип товара</div>
-            <div id="e-weight-chips" style="display:flex;flex-wrap:wrap;gap:5px;"></div>
-          </div>
           <div class="field-row" style="gap:8px;margin-bottom:8px">
             <div class="field" style="margin:0">
               <label style="margin-bottom:4px">Юани (CNY)</label>
@@ -1918,19 +1843,13 @@ body {
               <input id="e-markup" type="number" placeholder="75000" oninput="calcPrice('edit')" style="padding:8px 10px;font-size:13px"/>
             </div>
             <div class="field" style="margin:0">
-              <label style="margin-bottom:4px">Карго (сум / 100г)</label>
-              <input id="e-cargo-rate" type="number" placeholder="13000" value="13000" oninput="calcPrice('edit')" style="padding:8px 10px;font-size:13px"/>
-            </div>
-          </div>
-          <div class="field-row" style="gap:8px;margin-bottom:8px">
-            <div class="field" style="margin:0">
               <label style="margin-bottom:4px">Страховка (сум)</label>
               <input id="e-insurance" type="number" placeholder="15000" oninput="calcPrice('edit')" style="padding:8px 10px;font-size:13px"/>
             </div>
           </div>
           <div id="e-calc-result" style="display:none">
             <div class="calc-row"><span>Цена товара (CNY→сум)</span><span id="e-cr-product">—</span></div>
-            <div class="calc-row"><span>Карго</span><span id="e-cr-cargo">—</span></div>
+            <div class="calc-row"><span>Карго (13 000 / 100г)</span><span id="e-cr-cargo">—</span></div>
             <div class="calc-row"><span>Наценка</span><span id="e-cr-markup">—</span></div>
             <div class="calc-row"><span>Страховка</span><span id="e-cr-insurance">—</span></div>
             <div class="calc-row total"><span>Итоговая цена</span><span id="e-cr-total">—</span></div>
@@ -2260,11 +2179,26 @@ function navigate(id, btn) {
   }
   if (id === 'admin') {
     pg.setAttribute('data-ok','1');
-    ['tab-admins'].forEach(tabId => {
+    // Суперадмин видит все вкладки; обычный менеджер — только Статистика и + Добавить
+    const superOnly = ['tab-admins'];
+    const managerHidden = ['tab-orders-admin','tab-products-admin','tab-brands','tab-templates','tab-prices'];
+    superOnly.forEach(tabId => {
       const t = document.getElementById(tabId);
       if (t) t.style.display = isSuperAdmin() ? '' : 'none';
     });
-    // Загружаем все заказы для статистики и вкладки заказов
+    // Скрываем вкладки для обычного менеджера через data-id
+    document.querySelectorAll('.admin-tab').forEach(btn => {
+      const onclick = btn.getAttribute('onclick') || '';
+      const match = onclick.match(/switchTab\('(\w+)'/);
+      if (!match) return;
+      const tabName = match[1];
+      const managerCanSee = ['stats','add'];
+      if (!isSuperAdmin() && !managerCanSee.includes(tabName)) {
+        btn.style.display = 'none';
+      } else {
+        btn.style.display = '';
+      }
+    });
     loadAllOrders();
     renderAdminStats();
     renderAdminProducts();
@@ -2344,7 +2278,7 @@ function statusPill(s) {
    PRODUCT CARDS
 ═══════════════════════════════════════════════ */
 function cardHTML(p, idx = 0) {
-  const disc = (p.old && p.old > p.price) ? Math.round((1 - p.price/p.old)*100) : 0;
+  const disc = p.old ? Math.round((1 - p.price/p.old)*100) : 0;
   const photo = p.photos && p.photos.length ? p.photos[0] : null;
 
   // Волна: каждая карточка появляется с нарастающей задержкой
@@ -2378,7 +2312,6 @@ function cardHTML(p, idx = 0) {
     <div class="prod-img">
       ${imgHtml}
       ${p.isPreorder ? `<div class="prod-preorder-badge">Под заказ</div>` : ''}
-      ${(p.isSale && !p.isPreorder && p.old && p.old > p.price) ? `<div class="prod-sale-badge">SALE</div>` : ''}
       <button class="prod-heart ${wishlist.has(p.id)?'liked':''}" onclick="toggleWish(event,${p.id})">
         <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
       </button>
@@ -2391,7 +2324,7 @@ function cardHTML(p, idx = 0) {
       </div>
       <div class="prod-name">${p.name}</div>
       <div class="prod-price">${fmt(p.price)}</div>
-      ${p.old && p.old > p.price ? `<div class="prod-old">${fmt(p.old)}</div>` : ''}
+      ${p.old ? `<div class="prod-old">${fmt(p.old)}</div>` : ''}
       ${deliveryBadge}
       ${qualityBadge(p.quality)}
     </div>
@@ -2470,13 +2403,6 @@ function renderHome(instant = false) {
   const q = (document.getElementById('home-search-input')?.value||'').trim().toLowerCase();
   let list = [...PRODUCTS];
   if (homeCat !== 'Все') list = list.filter(p => p.cat === homeCat);
-  // Перемешиваем при обычном просмотре (без поиска)
-  if (!q) {
-    for (let i = list.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [list[i], list[j]] = [list[j], list[i]];
-    }
-  }
   if (q) {
     // Фильтруем и сортируем по приоритету: название > бренд > стиль > категория
     list = list
@@ -2584,7 +2510,7 @@ function openProduct(id) {
   selSize  = (p.sizes&&p.sizes.length)   ? p.sizes[0]  : null;
   selVariation = (p.variations&&p.variations.length) ? (p.variations[0]?.label||p.variations[0]) : null;
 
-  const disc = (p.old && p.old > p.price) ? Math.round((1-p.price/p.old)*100) : 0;
+  const disc = p.old ? Math.round((1-p.price/p.old)*100) : 0;
 
   // tags
   document.getElementById('d-tags').innerHTML =
@@ -2598,7 +2524,7 @@ function openProduct(id) {
 
   document.getElementById('d-name').textContent = p.name;
   document.getElementById('d-price').textContent = fmt(p.price);
-  document.getElementById('d-old').textContent = (p.old && p.old > p.price) ? fmt(p.old) : '';
+  document.getElementById('d-old').textContent = p.old ? fmt(p.old) : '';
   document.getElementById('d-disc').textContent = disc > 0 ? `-${disc}%` : '';
   document.getElementById('qty-num').textContent = 1;
   document.getElementById('detail-wish').classList.toggle('liked', wishlist.has(id));
@@ -2700,19 +2626,13 @@ function closeProduct() {
     if (wishSearch) wishSearch.style.display = 'block';
   }
 
-  // Скроллим ленту наверх
-  const homeScroll = document.getElementById('home-scroll');
-  if (homeScroll) homeScroll.scrollTo({ top: 0, behavior: 'instant' });
-
   // Обновляем ленту с рекомендациями на основе просмотренного товара
   const viewed = currentProduct;
   currentProduct = null;
   if (viewed) {
     lastViewedProduct = viewed;
-    renderHome(); // обновляем и перемешиваем ленту
-    loadRecommendations(viewed);
+    loadRecommendations(viewed); // обновляем рекомендации без перезагрузки каталога
   } else {
-    renderHome();
     loadRecommendations(lastViewedProduct);
   }
 }
@@ -3575,6 +3495,20 @@ function renderProfile() {
   } else if (ami) { ami.remove(); }
 
   updateStats();
+  renderRecentlyViewed();
+}
+
+function renderRecentlyViewed() {
+  const sec  = document.getElementById('recently-viewed-section');
+  const grid = document.getElementById('recently-viewed-grid');
+  if (!sec || !grid) return;
+  try {
+    const ids = JSON.parse(localStorage.getItem('recentlyViewed') || '[]');
+    const products = ids.map(id => PRODUCTS.find(p => p.id === id)).filter(Boolean).slice(0, 4);
+    if (!products.length) { sec.style.display = 'none'; return; }
+    sec.style.display = 'block';
+    grid.innerHTML = products.map((p, i) => cardHTML(p, i)).join('');
+  } catch(e) { sec.style.display = 'none'; }
 }
 
 function updateStats() {
@@ -3612,22 +3546,6 @@ function switchTab(tab, btn) {
   if (tab === 'templates') { loadDescTemplates(); }
 }
 
-async function bulkPrice(action, inputId) {
-  const input = document.getElementById(inputId);
-  const amount = parseFloat(input?.value);
-  if (!amount || amount <= 0) { showToast('Введите значение больше 0'); return; }
-  if (action === 'discount' && amount >= 100) { showToast('Скидка должна быть меньше 100%'); return; }
-  const labels = { increase: `повысить на ${amount.toLocaleString()} сум`, decrease: `снизить на ${amount.toLocaleString()} сум`, discount: `поставить скидку ${amount}%` };
-  if (!confirm(`Применить ко всем товарам: ${labels[action]}?`)) return;
-  try {
-    const res = await apiFetch('/products/bulk-price', { method: 'POST', body: { action, amount } });
-    showToast('✅ Обновлено товаров: ' + res.updated);
-    input.value = '';
-    await loadProducts();
-  } catch(e) { showToast('Ошибка: ' + (e.message || 'неизвестная')); }
-}
-
-// SALE badge CSS added inline
 function showProductLinks(e, pid) {
   e.stopPropagation();
   // Убираем старый попап если есть
@@ -3689,7 +3607,6 @@ function resetAddForm() {
   renderLinkChips('add');
   renderSizeChips('add');
   setVT('add', 'none');
-  initWeightChips('add');
 }
 
 function renderAdminStats() {
@@ -3968,7 +3885,6 @@ async function adminAddProduct() {
 function openEdit(id) {
   const p = PRODUCTS.find(x => x.id===id);
   if (!p) return;
-  initWeightChips('edit');
 
   document.getElementById('e-id').value = p.id;
   document.getElementById('e-name').value = p.name||'';
@@ -4089,18 +4005,33 @@ async function renderAdminList() {
     data.forEach(a => { adminRoles[a.username.toLowerCase()] = a.role; });
     adminList.add(SUPER_ADMIN);
     const roleLabel = { superadmin:'👑 Суперадмин', manager:'🛠 Менеджер', moderator:'👁 Модератор' };
-    el.innerHTML = data.length ? data.map(a =>
-      `<div class="admin-list-item">
-        <div class="admin-list-avatar">${a.role==='superadmin'?'👑':'⚡'}</div>
-        <div style="flex:1">
-          <div style="font-weight:600;font-size:14px">@${a.username}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:2px">${roleLabel[a.role]||a.role}</div>
+    // Load per-admin product stats
+    let adminProdStats = {};
+    try {
+      const stats = await apiFetch('/admins/products');
+      stats.forEach(s => { adminProdStats[s.username.toLowerCase()] = s; });
+    } catch(e) {}
+    el.innerHTML = data.length ? data.map(a => {
+      const st = adminProdStats[a.username.toLowerCase()] || { count: 0, products: [] };
+      return `<div class="admin-list-item" style="flex-direction:column;align-items:stretch;gap:8px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="admin-list-avatar">${a.role==='superadmin'?'👑':'⚡'}</div>
+          <div style="flex:1">
+            <div style="font-weight:600;font-size:14px">@${a.username}</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px">${roleLabel[a.role]||a.role}</div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button onclick="showAdminProducts('${a.username}',${JSON.stringify(st.products)})"
+              style="padding:5px 10px;background:var(--s2);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-family:'Inter',sans-serif;font-size:11px;cursor:pointer;white-space:nowrap">
+              📦 ${st.count} товаров
+            </button>
+            ${a.username!==SUPER_ADMIN
+              ? `<button onclick="removeAdmin('${a.username}')" style="width:28px;height:28px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;color:var(--red)">✕</button>`
+              : ''}
+          </div>
         </div>
-        ${a.username!==SUPER_ADMIN
-          ? `<button onclick="removeAdmin('${a.username}')" style="width:28px;height:28px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;color:var(--red)">✕</button>`
-          : ''}
-      </div>`
-    ).join('') : '<div style="text-align:center;padding:20px;color:var(--text3);font-size:13px">Только суперадмин</div>';
+      </div>`;
+    }).join('') : '<div style="text-align:center;padding:20px;color:var(--text3);font-size:13px">Только суперадмин</div>';
   } catch(e) {
     el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--red);font-size:13px">Ошибка загрузки</div>';
   }
@@ -4122,6 +4053,28 @@ async function adminAddAdmin() {
     renderAdminList();
     toast(`@${val} добавлен как ${role} ✅`);
   } catch(e) { toast('Ошибка добавления ⚠️'); }
+}
+
+function showAdminProducts(username, products) {
+  const overlay = document.getElementById('admin-products-overlay');
+  const title   = document.getElementById('admin-products-title');
+  const list    = document.getElementById('admin-products-list-inner');
+  if (!overlay || !title || !list) return;
+  title.textContent = `@${username} — товары (${products.length})`;
+  if (!products.length) {
+    list.innerHTML = '<div style="text-align:center;padding:30px 0;color:var(--text3);font-size:13px">Товаров не добавлено</div>';
+  } else {
+    list.innerHTML = products.map(p =>
+      `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+        <div>
+          <div style="font-size:13px;font-weight:500;color:#fff">${p.name}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">${p.cat}</div>
+        </div>
+        <div style="font-size:12px;font-weight:600;color:#fff;white-space:nowrap">${fmt(p.price)}</div>
+      </div>`
+    ).join('');
+  }
+  overlay.classList.add('open');
 }
 
 async function removeAdmin(u) {
@@ -4567,7 +4520,7 @@ function loadRecommendations(lastViewed = null) {
   if (lastViewed) {
     // Есть anchor — показываем только реально связанные товары (score > 0)
     const scored = scoreProducts(lastViewed, PRODUCTS);
-    const recs = scored.filter(x => x.score > 0).slice(0, 8);
+    const recs = scored.filter(x => x.score > 0).slice(0, 4);
 
     sec.style.display = 'block';
     const allLabel = document.getElementById('home-section-label-all');
@@ -4630,9 +4583,17 @@ function showProductRecs(product) {
 }
 
 function trackView(productId) {
-  // Сохраняем последний просмотренный товар для рекомендаций
   const p = PRODUCTS.find(x => x.id === productId);
-  if (p) lastViewedProduct = p;
+  if (p) {
+    lastViewedProduct = p;
+    try {
+      let viewed = JSON.parse(localStorage.getItem('recentlyViewed') || '[]');
+      viewed = viewed.filter(id => id !== productId);
+      viewed.unshift(productId);
+      if (viewed.length > 20) viewed = viewed.slice(0, 20);
+      localStorage.setItem('recentlyViewed', JSON.stringify(viewed));
+    } catch(e) {}
+  }
   if (!TG_USER) return;
   apiFetch('/events', {
     method: 'POST',
@@ -4875,97 +4836,21 @@ function applyTemplate(id) {
 
 // CNY → UZS exchange rate (update manually or later via API)
 const CNY_RATE = 1950; // 1 CNY ≈ 1950 UZS (approximate)
-const CARGO_PER_100G_DEFAULT = 13000;
-
-// Таблица категорий одежды с примерным весом (г)
-const CLOTHING_WEIGHTS = [
-  { label: '👟 Кроссовки',     w: 700  },
-  { label: '👢 Сапоги',        w: 900  },
-  { label: '👞 Туфли',         w: 600  },
-  { label: '🥾 Берцы',         w: 1000 },
-  { label: '🩴 Сланцы',        w: 280  },
-  { label: '👖 Джинсы',        w: 650  },
-  { label: '👖 Брюки',         w: 450  },
-  { label: '🩳 Шорты',         w: 280  },
-  { label: '👗 Платье',        w: 400  },
-  { label: '👗 Юбка',          w: 300  },
-  { label: '🧥 Куртка',        w: 1100 },
-  { label: '🧥 Пуховик',       w: 1500 },
-  { label: '🥼 Пальто',        w: 1300 },
-  { label: '🧥 Бомбер',        w: 800  },
-  { label: '👕 Футболка',      w: 200  },
-  { label: '👕 Поло',          w: 250  },
-  { label: '👔 Рубашка',       w: 280  },
-  { label: '🧣 Худи',          w: 550  },
-  { label: '🧥 Свитшот',       w: 480  },
-  { label: '🧶 Свитер',        w: 600  },
-  { label: '🧤 Кардиган',      w: 500  },
-  { label: '🩱 Топ / Майка',   w: 150  },
-  { label: '🩲 Нижнее бельё',  w: 120  },
-  { label: '🧦 Носки (3 пары)',w: 120  },
-  { label: '🧢 Кепка',         w: 150  },
-  { label: '🎩 Шапка',         w: 120  },
-  { label: '🧣 Шарф',          w: 200  },
-  { label: '🧤 Перчатки',      w: 150  },
-  { label: '👝 Сумка',         w: 500  },
-  { label: '🎒 Рюкзак',        w: 800  },
-  { label: '⌚ Часы',           w: 150  },
-  { label: '💍 Аксессуар',     w: 80   },
-  { label: '👜 Клатч',         w: 350  },
-  { label: '🕶️ Очки',          w: 100  },
-  { label: '👒 Панама',         w: 130  },
-  { label: '🩰 Балетки',       w: 350  },
-  { label: '🥻 Комбинезон',    w: 500  },
-  { label: '🧳 Чемодан малый', w: 3000 },
-];
-
-function initWeightChips(ctx) {
-  const p = ctx === 'add' ? 'a' : 'e';
-  const container = document.getElementById(`${p}-weight-chips`);
-  if (!container || container.dataset.ready) return;
-  container.dataset.ready = '1';
-  container.innerHTML = CLOTHING_WEIGHTS.map(item =>
-    `<button type="button" onclick="pickWeight('${ctx}',${item.w},this)"
-      style="padding:4px 10px;background:var(--s2);border:1px solid var(--border);
-             border-radius:20px;color:var(--text2);font-family:'Inter',sans-serif;
-             font-size:11px;cursor:pointer;white-space:nowrap;
-             transition:background .15s,color .15s,border-color .15s">
-      ${item.label} <span style="color:var(--text3)">${item.w}г</span>
-    </button>`
-  ).join('');
-}
-
-function pickWeight(ctx, w, btn) {
-  const p = ctx === 'add' ? 'a' : 'e';
-  // Подсветка активного чипа
-  btn.closest('[id$="-weight-chips"]').querySelectorAll('button').forEach(b => {
-    b.style.background = 'var(--s2)';
-    b.style.color = 'var(--text2)';
-    b.style.borderColor = 'var(--border)';
-  });
-  btn.style.background = 'rgba(255,255,255,.14)';
-  btn.style.color = '#fff';
-  btn.style.borderColor = 'rgba(255,255,255,.35)';
-  // Проставляем вес и пересчитываем
-  const weightInput = document.getElementById(`${p}-weight`);
-  if (weightInput) weightInput.value = w;
-  calcPrice(ctx);
-}
+const CARGO_PER_100G = 13000; // 13,000 UZS per 100g
 
 function calcPrice(ctx) {
   const p = ctx === 'add' ? 'a' : 'e';
-  const cny       = parseFloat(document.getElementById(`${p}-cny`)?.value)        || 0;
-  const weight    = parseFloat(document.getElementById(`${p}-weight`)?.value)     || 0;
-  const markup    = parseFloat(document.getElementById(`${p}-markup`)?.value)     || 0;
-  const insurance = parseFloat(document.getElementById(`${p}-insurance`)?.value)  || 0;
-  const cargoRate = parseFloat(document.getElementById(`${p}-cargo-rate`)?.value) || CARGO_PER_100G_DEFAULT;
-  const resultEl  = document.getElementById(`${p}-calc-result`);
+  const cny      = parseFloat(document.getElementById(`${p}-cny`)?.value)     || 0;
+  const weight   = parseFloat(document.getElementById(`${p}-weight`)?.value)  || 0;
+  const markup   = parseFloat(document.getElementById(`${p}-markup`)?.value)  || 0;
+  const insurance= parseFloat(document.getElementById(`${p}-insurance`)?.value)|| 0;
+  const resultEl = document.getElementById(`${p}-calc-result`);
   if (!resultEl) return;
 
   if (!cny && !weight) { resultEl.style.display = 'none'; return; }
 
   const productPrice = Math.round(cny * CNY_RATE);
-  const cargoPrice   = Math.round((weight / 100) * cargoRate);
+  const cargoPrice   = Math.round((weight / 100) * CARGO_PER_100G);
   const total        = productPrice + cargoPrice + markup + insurance;
 
   document.getElementById(`${p}-cr-product`).textContent  = fmt(productPrice);
