@@ -90,9 +90,16 @@ def init_db():
             sold         INTEGER NOT NULL DEFAULT 0,
             style        TEXT    NOT NULL DEFAULT '',
             source_links TEXT    NOT NULL DEFAULT '[]',
-            created_at   INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+            created_at   INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+            added_by     TEXT    NOT NULL DEFAULT ''
         )
     """)
+    # Migration: add added_by if missing
+    try:
+        conn.execute("ALTER TABLE products ADD COLUMN added_by TEXT NOT NULL DEFAULT ''")
+        conn.commit()
+    except Exception:
+        pass
 
     # Styles
     conn.execute("""
@@ -684,8 +691,8 @@ def create_product(body: ProductCreate, x_init_data: Optional[str] = Header(None
     conn = get_db()
     cur = conn.execute("""
         INSERT INTO products
-          (name,cat,brand,style,emoji,photos,price,old_price,sizes,colors,variations,desc,is_new,is_sale,is_preorder,quality,source_links)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          (name,cat,brand,style,emoji,photos,price,old_price,sizes,colors,variations,desc,is_new,is_sale,is_preorder,quality,source_links,added_by)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     """, (
         body.name, body.cat, body.brand, body.style, body.emoji,
         json.dumps(body.photos, ensure_ascii=False),
@@ -696,6 +703,7 @@ def create_product(body: ProductCreate, x_init_data: Optional[str] = Header(None
         body.desc, int(body.is_new), 1 if body.old_price else 0,
         int(body.is_preorder), body.quality,
         json.dumps([l.dict() for l in body.source_links], ensure_ascii=False),
+        user["username"],
     ))
     new_id = cur.lastrowid
     conn.commit()
@@ -1167,6 +1175,30 @@ def admin_log(x_init_data: Optional[str] = Header(None), limit: int = 50):
     conn.close()
     return [{"id": r["id"], "admin": r["admin"], "action": r["action"],
              "target": r["target"], "details": r["details"], "ts": r["created_at"]} for r in rows]
+
+@app.get("/admins/products")
+def admin_products_stats(x_init_data: Optional[str] = Header(None)):
+    """Returns per-admin product counts with product list. Superadmin only."""
+    user = require_admin(x_init_data, "admins")
+    conn = get_db()
+    # Get all admins
+    admins = conn.execute("SELECT username, role FROM admin_roles ORDER BY added_at").fetchall()
+    result = []
+    for a in admins:
+        uname = a["username"]
+        rows = conn.execute(
+            """SELECT id, name, cat, price, created_at FROM products
+               WHERE added_by = ? ORDER BY created_at DESC""",
+            (uname,)
+        ).fetchall()
+        result.append({
+            "username": uname,
+            "role": a["role"],
+            "count": len(rows),
+            "products": [{"id": r["id"], "name": r["name"], "cat": r["cat"], "price": r["price"]} for r in rows]
+        })
+    conn.close()
+    return result
 
 @app.get("/admin/stats")
 def admin_stats(x_init_data: Optional[str] = Header(None)):
