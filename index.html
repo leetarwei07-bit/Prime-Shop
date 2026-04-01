@@ -317,12 +317,12 @@ body {
   z-index:2;
   animation:badgePop .3s var(--spring) both;
 }
-.autoplay-wrap { position:relative;width:100%;height:100%;overflow:hidden }
-.autoplay-slide { position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .5s ease }
+.autoplay-wrap { position:absolute;inset:0;overflow:hidden }
+.autoplay-slide { position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .6s ease }
 .autoplay-slide.active { opacity:1 }
-.autoplay-dots { position:absolute;bottom:6px;left:50%;transform:translateX(-50%);display:flex;gap:4px;z-index:3 }
-.autoplay-dot { width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.4);transition:background .3s }
-.autoplay-dot.on { background:#fff }
+.autoplay-dots { position:absolute;bottom:6px;left:50%;transform:translateX(-50%);display:flex;gap:4px;z-index:3;pointer-events:none }
+.autoplay-dot { width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.35);transition:background .3s }
+.autoplay-dot.on { background:#fff;width:12px;border-radius:3px }
 .vscroll-sentinel { height:1px;grid-column:1/-1 }
 .prod-sale-badge {
   position:absolute;top:8px;left:8px;
@@ -2364,7 +2364,7 @@ function cardHTML(p, idx = 0, autoplay = false) {
   let imgHtml;
   if (autoplay && photos && photos.length > 1) {
     const slides = photos.map((src, si) =>
-      `<img src="${src}" class="autoplay-slide${si===0?' active':''}" loading="${idx<4?'eager':'lazy'}" alt="${p.name}" onload="this.classList.add('img-loaded')" onerror="this.style.display='none'/>`
+      `<img src="${src}" class="autoplay-slide${si===0?' active':''}" loading="${idx<4?'eager':'lazy'}" alt="${p.name}" onload="this.classList.add('img-loaded')" onerror="this.style.display='none'">`
     ).join('');
     imgHtml = `<div class="autoplay-wrap" data-pid="${p.id}" data-cur="0" data-total="${photos.length}">
       ${slides}
