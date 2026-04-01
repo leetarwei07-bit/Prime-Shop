@@ -271,12 +271,12 @@ body {
   background:var(--s2);position:relative;overflow:hidden;
   display:flex;align-items:center;justify-content:center;font-size:52px;
 }
-.prod-img img:not(.autoplay-slide) {
+.prod-img img {
   width:100%;height:100%;object-fit:cover;position:absolute;inset:0;
   transition:transform .3s ease, opacity .45s ease;
   opacity:0;
 }
-.prod-img img.img-loaded:not(.autoplay-slide) { opacity:1 }
+.prod-img img.img-loaded { opacity:1 }
 .prod-card:active .prod-img img { transform:scale(1.03) }
 .prod-heart {
   position:absolute;top:8px;right:8px;width:28px;height:28px;border-radius:50%;
@@ -317,12 +317,6 @@ body {
   z-index:2;
   animation:badgePop .3s var(--spring) both;
 }
-.autoplay-wrap { position:absolute;inset:0;overflow:hidden }
-.autoplay-slide { position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .5s ease }
-.autoplay-slide.active { opacity:1 !important }
-.autoplay-dots { position:absolute;bottom:6px;left:50%;transform:translateX(-50%);display:flex;gap:4px;z-index:3;pointer-events:none }
-.autoplay-dot { width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.35);transition:background .3s }
-.autoplay-dot.on { background:#fff;width:12px;border-radius:3px }
 .vscroll-sentinel { height:1px;grid-column:1/-1 }
 .prod-sale-badge {
   position:absolute;top:8px;left:8px;
@@ -2166,7 +2160,6 @@ async function loadProducts() {
     hideSplash(); // скрываем сплэш как только товары готовы
     loadBrands();
     loadRecommendations();
-    setTimeout(startAutoplayAll, 800);
     // Грузим ссылки отдельно (только для админов, бэкенд проверяет роль)
     loadProductLinks();
   } catch(e) {
@@ -2344,10 +2337,9 @@ function statusPill(s) {
 /* ═══════════════════════════════════════════════
    PRODUCT CARDS
 ═══════════════════════════════════════════════ */
-function cardHTML(p, idx = 0, autoplay = false) {
+function cardHTML(p, idx = 0) {
   const disc = (p.old && p.old > p.price) ? Math.round((1 - p.price/p.old)*100) : 0;
-  const photos = (p.photos && p.photos.length) ? p.photos : null;
-  const photo  = photos ? photos[0] : null;
+  const photo = p.photos && p.photos.length ? p.photos[0] : null;
 
   const delay = idx < 2 ? 0 : Math.min((idx - 2) * 0.06, 0.5);
 
@@ -2361,21 +2353,10 @@ function cardHTML(p, idx = 0, autoplay = false) {
         до 12 дней · Бесплатно
       </div>`;
 
-  // Автоплей-слайдер для первых 4 карточек, обычное фото для остальных
-  let imgHtml;
-  if (autoplay && photos && photos.length > 1) {
-    const slides = photos.map((src, si) =>
-      `<img src="${src}" class="autoplay-slide${si===0?' active':''}" loading="${idx<4?'eager':'lazy'}" alt="${p.name}" onload="this.classList.add('img-loaded')" onerror="this.style.display='none'">`
-    ).join('');
-    imgHtml = `<div class="autoplay-wrap" data-pid="${p.id}" data-cur="0" data-total="${photos.length}">
-      ${slides}
-      <div class="autoplay-dots">${photos.map((_,si)=>`<span class="autoplay-dot${si===0?' on':''}"></span>`).join('')}</div>
-    </div>`;
-  } else if (photo) {
-    imgHtml = `<img src="${photo}" loading="${idx<4?'eager':'lazy'}" fetchpriority="${idx<2?'high':'auto'}" alt="${p.name}" onload="this.classList.add('img-loaded')" onerror="this.style.display='none'"/>`;
-  } else {
-    imgHtml = `<span>${p.emoji||'📦'}</span>`;
-  }
+  // Фото появляется плавно через onload
+  const imgHtml = photo
+    ? `<img src="${photo}" loading="${idx < 4 ? 'eager' : 'lazy'}" fetchpriority="${idx < 2 ? 'high' : 'auto'}" alt="${p.name}" onload="this.classList.add('img-loaded')" onerror="this.style.display='none'">`
+    : `<span>${p.emoji||'📦'}</span>`;
 
   return `<div class="prod-card" onclick="openProduct(${p.id})" style="animation-delay:${delay}s">
     <div class="prod-img">
@@ -3634,8 +3615,7 @@ function renderRecentlyViewed() {
     const products = ids.map(id => PRODUCTS.find(p => p.id === id)).filter(Boolean).slice(0, 4);
     if (!products.length) { sec.style.display = 'none'; return; }
     sec.style.display = 'block';
-    grid.innerHTML = products.map((p, i) => cardHTML(p, i, true)).join('');
-    stopAllAutoplay(); setTimeout(startAutoplayAll, 100);
+    grid.innerHTML = products.map((p, i) => cardHTML(p, i)).join('');
   } catch(e) { sec.style.display = 'none'; }
 }
 
@@ -4619,8 +4599,7 @@ function loadRecommendations(lastViewed = null) {
     const allLabel = document.getElementById('home-section-label-all');
     if (allLabel) allLabel.style.display = 'block';
 
-    grid.innerHTML = recs.map((x, i) => cardHTML(x.product, i, true)).join('');
-    stopAllAutoplay(); setTimeout(startAutoplayAll, 100);
+    grid.innerHTML = recs.map((x, i) => cardHTML(x.product, i)).join('');
 
     // Лента: остальные товары по убыванию релевантности
     const inRecs = new Set(recs.map(x => x.product.id));
@@ -4650,7 +4629,7 @@ function renderHomeSorted(inRecs, scoreMap) {
     return Math.random() - 0.5; // близкие score — перемешиваем
   });
 
-  renderGrid('home-grid', list, true);
+  renderGrid('home-grid', list);
 }
 
 // Показывает рекомендации на странице товара
@@ -4827,41 +4806,6 @@ async function bulkPrice(action, inputId) {
     input.value = '';
     await loadProducts();
   } catch(e) { showToast('Ошибка: ' + (e.message || 'неизвестная')); }
-}
-
-// ── AUTOPLAY ENGINE ─────────────────────────────────────────────────────
-const autoplayTimers = new Map();
-
-function startAutoplayAll() {
-  document.querySelectorAll('.autoplay-wrap').forEach(wrap => {
-    const pid = wrap.dataset.pid;
-    if (!pid || autoplayTimers.has(pid)) return;
-    const slides = wrap.querySelectorAll('.autoplay-slide');
-    const dots   = wrap.querySelectorAll('.autoplay-dot');
-    if (slides.length < 2) return;
-    // Сброс: первый слайд активен, остальные скрыты
-    slides.forEach((s, i) => { s.classList.toggle('active', i === 0); });
-    dots.forEach((d, i) => { d.classList.toggle('on', i === 0); });
-    let cur = 0;
-    const timer = setInterval(() => {
-      slides[cur].classList.remove('active');
-      if (dots[cur]) dots[cur].classList.remove('on');
-      cur = (cur + 1) % slides.length;
-      slides[cur].classList.add('active');
-      if (dots[cur]) dots[cur].classList.add('on');
-    }, 3000);
-    autoplayTimers.set(pid, timer);
-  });
-}
-
-function stopAllAutoplay() {
-  autoplayTimers.forEach(t => clearInterval(t));
-  autoplayTimers.clear();
-}
-
-function initAutoplayObserver() {
-  // Запускаем после загрузки DOM
-  setTimeout(startAutoplayAll, 600);
 }
 
 async function loadPendingCount() {
@@ -5369,9 +5313,6 @@ try {
 
 // Жёсткий fallback — скрываем сплэш максимум через 3 секунды в любом случае
 const _splashKill = setTimeout(hideSplash, 3000);
-
-// Запускаем автоплей observer
-initAutoplayObserver();
 
 Promise.all([
   loadProducts(),
