@@ -317,6 +317,16 @@ body {
   z-index:2;
   animation:badgePop .3s var(--spring) both;
 }
+.prod-sale-badge {
+  position:absolute;top:8px;left:8px;
+  background:rgba(239,68,68,.92);
+  color:#fff;font-size:9px;font-weight:700;
+  padding:3px 8px;border-radius:20px;
+  letter-spacing:.6px;text-transform:uppercase;
+  backdrop-filter:blur(4px);
+  z-index:2;
+  animation:badgePop .3s var(--spring) both;
+}
 @keyframes badgePop { from{opacity:0;transform:scale(.7)} to{opacity:1;transform:scale(1)} }
 .empty-state {
   grid-column:1/-1;display:flex;flex-direction:column;align-items:center;
@@ -1296,6 +1306,10 @@ body {
         <div class="menu-badge" id="orders-badge">0</div>
       </div>
     </div>
+    <div id="recently-viewed-section" style="display:none;padding:0 16px;margin-top:14px">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:10px">Недавно просмотрено</div>
+      <div id="recently-viewed-grid" class="prod-grid" style="padding:0"></div>
+    </div>
     <div style="height:20px"></div>
   </div>
 </div>
@@ -1327,6 +1341,7 @@ body {
     <button class="admin-tab" id="tab-admins" onclick="switchTab('admins',this)">Команда</button>
     <button class="admin-tab" id="tab-brands" onclick="switchTab('brands',this)">Бренды</button>
     <button class="admin-tab" onclick="switchTab('templates',this)">📋 Шаблоны</button>
+    <button class="admin-tab" onclick="switchTab('prices',this)">💰 Цены</button>
 
   </div>
   <div class="scroll">
@@ -1577,6 +1592,66 @@ body {
       <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Мои шаблоны</div>
       <div id="templates-list"></div>
     </div>
+
+    <!-- PRICES PANEL -->
+    <div class="admin-panel" id="panel-prices">
+      <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:16px">Массовое изменение цен</div>
+
+      <div style="background:var(--s2);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="font-size:20px">📈</span>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:#fff">Повысить цены</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:1px">Прибавить сумму ко всем товарам</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <input id="bulk-increase-amount" type="number" min="1" placeholder="Сумма (сум)"
+            style="flex:1;background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none"/>
+          <button onclick="bulkPrice('increase','bulk-increase-amount')"
+            style="padding:10px 18px;background:#fff;color:#000;border:none;border-radius:10px;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">
+            Применить
+          </button>
+        </div>
+      </div>
+
+      <div style="background:var(--s2);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="font-size:20px">📉</span>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:#fff">Снизить цены</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:1px">Вычесть сумму из всех товаров</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <input id="bulk-decrease-amount" type="number" min="1" placeholder="Сумма (сум)"
+            style="flex:1;background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none"/>
+          <button onclick="bulkPrice('decrease','bulk-decrease-amount')"
+            style="padding:10px 18px;background:#fff;color:#000;border:none;border-radius:10px;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">
+            Применить
+          </button>
+        </div>
+      </div>
+
+      <div style="background:var(--s2);border:1px solid var(--border);border-radius:14px;padding:16px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="font-size:20px">🏷️</span>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:#fff">Поставить скидку</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:1px">Старая цена сохранится — на карточке появится бейдж SALE</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <input id="bulk-discount-amount" type="number" min="1" placeholder="Размер скидки (сум)"
+            style="flex:1;background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none"/>
+          <button onclick="bulkPrice('discount','bulk-discount-amount')"
+            style="padding:10px 18px;background:var(--orange);color:#fff;border:none;border-radius:10px;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">
+            Скидка
+          </button>
+        </div>
+      </div>
+    </div>
+
     </div>
   </div>
 </div>
@@ -2281,6 +2356,7 @@ function cardHTML(p, idx = 0) {
     <div class="prod-img">
       ${imgHtml}
       ${p.isPreorder ? `<div class="prod-preorder-badge">Под заказ</div>` : ''}
+      ${p.isSale && !p.isPreorder ? `<div class="prod-sale-badge">SALE</div>` : ''}
       <button class="prod-heart ${wishlist.has(p.id)?'liked':''}" onclick="toggleWish(event,${p.id})">
         <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
       </button>
@@ -3471,6 +3547,20 @@ function renderProfile() {
   } else if (ami) { ami.remove(); }
 
   updateStats();
+  renderRecentlyViewed();
+}
+
+function renderRecentlyViewed() {
+  const sec  = document.getElementById('recently-viewed-section');
+  const grid = document.getElementById('recently-viewed-grid');
+  if (!sec || !grid) return;
+  try {
+    const ids = JSON.parse(localStorage.getItem('recentlyViewed') || '[]');
+    const products = ids.map(id => PRODUCTS.find(p => p.id === id)).filter(Boolean).slice(0, 8);
+    if (!products.length) { sec.style.display = 'none'; return; }
+    sec.style.display = 'block';
+    grid.innerHTML = products.map((p, i) => cardHTML(p, i)).join('');
+  } catch(e) { sec.style.display = 'none'; }
 }
 
 function updateStats() {
@@ -3506,6 +3596,20 @@ function switchTab(tab, btn) {
   if (tab === 'brands')    { renderBrandsList(); }
   if (tab === 'add')       { resetAddForm(); }
   if (tab === 'templates') { loadDescTemplates(); }
+}
+
+async function bulkPrice(action, inputId) {
+  const input = document.getElementById(inputId);
+  const amount = parseInt(input?.value);
+  if (!amount || amount <= 0) { showToast('Введите сумму больше 0'); return; }
+  const labels = { increase: 'повысить', decrease: 'снизить', discount: 'поставить скидку' };
+  if (!confirm(`Применить "${labels[action]}" на ${amount.toLocaleString()} сум ко всем товарам?`)) return;
+  try {
+    const res = await apiFetch('/products/bulk-price', { method: 'POST', body: { action, amount } });
+    showToast('✅ Обновлено товаров: ' + res.updated);
+    input.value = '';
+    await loadProducts();
+  } catch(e) { showToast('Ошибка: ' + (e.message || 'неизвестная')); }
 }
 
 function showProductLinks(e, pid) {
@@ -4445,7 +4549,7 @@ function loadRecommendations(lastViewed = null) {
   if (lastViewed) {
     // Есть anchor — показываем только реально связанные товары (score > 0)
     const scored = scoreProducts(lastViewed, PRODUCTS);
-    const recs = scored.filter(x => x.score > 0).slice(0, 8);
+    const recs = scored.filter(x => x.score > 0).slice(0, 4);
 
     sec.style.display = 'block';
     const allLabel = document.getElementById('home-section-label-all');
@@ -4510,7 +4614,16 @@ function showProductRecs(product) {
 function trackView(productId) {
   // Сохраняем последний просмотренный товар для рекомендаций
   const p = PRODUCTS.find(x => x.id === productId);
-  if (p) lastViewedProduct = p;
+  if (p) {
+    lastViewedProduct = p;
+    try {
+      let viewed = JSON.parse(localStorage.getItem('recentlyViewed') || '[]');
+      viewed = viewed.filter(id => id !== productId);
+      viewed.unshift(productId);
+      if (viewed.length > 20) viewed = viewed.slice(0, 20);
+      localStorage.setItem('recentlyViewed', JSON.stringify(viewed));
+    } catch(e) {}
+  }
   if (!TG_USER) return;
   apiFetch('/events', {
     method: 'POST',
