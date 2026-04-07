@@ -5057,12 +5057,17 @@ function wishLogRow(r) {
   const imgEl = r.photo
     ? `<img src="${r.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:10px"/>`
     : `<span style="font-size:18px">${r.emoji}</span>`;
-  const userLabel = r.username ? '@' + r.username : 'id' + r.user_id;
+  // Показываем имя + username если есть, иначе Telegram ID
+  const displayName = r.first_name || (r.username ? '@' + r.username : '');
+  const handle = r.username ? '@' + r.username : ('id' + r.user_id);
+  const userLine = displayName
+    ? `<span style="color:#fff">${displayName}</span> <span style="color:var(--text3)">${handle}</span>`
+    : `<span style="color:var(--orange)">${handle}</span>`;
   return `<div onclick="openProduct(${r.product_id})" style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer;-webkit-tap-highlight-color:transparent" ontouchstart="this.style.opacity='.6'" ontouchend="this.style.opacity='1'" onmousedown="this.style.opacity='.6'" onmouseup="this.style.opacity='1'">
     <div style="width:44px;height:44px;border-radius:10px;background:var(--s2);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden">${imgEl}</div>
     <div style="flex:1;min-width:0">
       <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.product_name}</div>
-      <div style="font-size:11px;color:var(--orange);margin-top:2px;font-weight:500">${userLabel}</div>
+      <div style="font-size:11px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${userLine}</div>
     </div>
     <div style="font-size:11px;color:var(--text3);flex-shrink:0;text-align:right">${date}</div>
   </div>`;
