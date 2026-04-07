@@ -4640,7 +4640,7 @@ function loadRecommendations(lastViewed = null) {
     // Лента: остальные товары по убыванию релевантности
     const inRecs = new Set(recs.map(x => x.product.id));
     const scoreMap = new Map(scored.map(x => [x.product.id, x.score]));
-    renderHomeSorted(inRecs, scoreMap);
+    renderHomeSorted(inRecs);
   } else {
     // Нет истории — скрываем «Для вас», лента по новизне (дефолт)
     sec.style.display = 'none';
@@ -4648,7 +4648,7 @@ function loadRecommendations(lastViewed = null) {
   }
 }
 
-function renderHomeSorted(inRecs, scoreMap) {
+function renderHomeSorted(inRecs) {
   const q = (document.getElementById('home-search-input')?.value||'').trim().toLowerCase();
   let list = [...PRODUCTS];
   if (homeCat !== 'Все') list = list.filter(p => p.cat === homeCat);
@@ -4657,13 +4657,11 @@ function renderHomeSorted(inRecs, scoreMap) {
   // Убираем товары из «Для вас»
   list = list.filter(p => !inRecs.has(p.id));
 
-  // Сортируем: релевантные сверху, нулевые — в случайном порядке
-  list.sort((a, b) => {
-    const sa = scoreMap.get(a.id) || 0;
-    const sb = scoreMap.get(b.id) || 0;
-    if (Math.abs(sb - sa) > 3) return sb - sa; // значимая разница — сортируем строго
-    return Math.random() - 0.5; // близкие score — перемешиваем
-  });
+  // Все товары идут в случайном порядке — независимо от рекомендаций
+  for (let i = list.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [list[i], list[j]] = [list[j], list[i]];
+  }
 
   renderGrid('home-grid', list);
 }
@@ -4832,25 +4830,25 @@ function renderTemplatesList() {
 async function bulkPrice(action, inputId) {
   const input = document.getElementById(inputId);
   const amount = parseFloat(input?.value);
-  if (!amount || amount <= 0) { showToast('Введите значение больше 0'); return; }
-  if (action === 'discount' && amount >= 100) { showToast('Скидка должна быть меньше 100%'); return; }
+  if (!amount || amount <= 0) { toast('Введите значение больше 0'); return; }
+  if (action === 'discount' && amount >= 100) { toast('Скидка должна быть меньше 100%'); return; }
   const labels = { increase: `повысить на ${amount.toLocaleString()} сум`, decrease: `снизить на ${amount.toLocaleString()} сум`, discount: `поставить скидку ${amount}%` };
   if (!confirm(`Применить ко всем товарам: ${labels[action]}?`)) return;
   try {
     const res = await apiFetch('/products/bulk-price', { method: 'POST', body: { action, amount } });
-    showToast('✅ Обновлено товаров: ' + res.updated);
+    toast('✅ Обновлено товаров: ' + res.updated);
     input.value = '';
     await loadProducts();
-  } catch(e) { showToast('Ошибка: ' + (e.message || 'неизвестная')); }
+  } catch(e) { toast('Ошибка: ' + (e.message || 'неизвестная')); }
 }
 
 async function clearAllDiscounts() {
   if (!confirm('Убрать скидки со всех товаров? Цена станет равна текущей «старой» цене.')) return;
   try {
     const res = await apiFetch('/products/bulk-price', { method: 'POST', body: { action: 'clear_discounts', amount: 0 } });
-    showToast('✅ Скидки аннулированы: ' + res.updated + ' товаров');
+    toast('✅ Скидки аннулированы: ' + res.updated + ' товаров');
     await loadProducts();
-  } catch(e) { showToast('Ошибка: ' + (e.message || 'неизвестная')); }
+  } catch(e) { toast('Ошибка: ' + (e.message || 'неизвестная')); }
 }
 
 async function loadPendingCount() {
