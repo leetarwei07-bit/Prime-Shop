@@ -172,7 +172,18 @@ def init_db():
             user_id    TEXT    NOT NULL,
             product_id INTEGER NOT NULL,
             event_type TEXT    NOT NULL,  -- 'view' | 'purchase' | 'wish'
-            created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+            created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+            UNIQUE(user_id, product_id, event_type)
+        )
+    """)
+
+    # Wishlist — persistent per user
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS wishlists (
+            user_id    TEXT    NOT NULL,
+            product_id INTEGER NOT NULL,
+            created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+            PRIMARY KEY (user_id, product_id)
         )
     """)
 
@@ -966,15 +977,135 @@ def delete_desc_template(tid: int, x_init_data: Optional[str] = Header(None)):
 
 @app.post("/events", status_code=204)
 def track_event(body: UserEvent, x_init_data: Optional[str] = Header(None)):
-    """Track user interaction for recommendation engine."""
+    """Track user interaction for recommendation engine. Each user counted once per product+event."""
     user = get_user(x_init_data)
     uid = str(user["id"]) if user else "guest"
     if body.event_type not in ("view", "wish", "purchase"):
         raise HTTPException(400, "Invalid event_type")
     conn = get_db()
+    # INSERT OR IGNORE enforces the UNIQUE(user_id, product_id, event_type) constraint
     conn.execute(
-        "INSERT INTO user_events (user_id,product_id,event_type) VALUES (?,?,?)",
+        "INSERT OR IGNORE INTO user_events (user_id,product_id,event_type) VALUES (?,?,?)",
         (uid, body.product_id, body.event_type)
+    )
+    conn.commit(); conn.close()
+
+@app.get("/admin/product-events")
+def admin_product_events(x_init_data: Optional[str] = Header(None), limit: int = 20):
+    """
+    Топ товаров по просмотрам и добавлениям в избранное.
+    Только для администраторов.
+    """
+    require_admin(x_init_data, "orders")
+    conn = get_db()
+
+    # Топ просмотров
+    views = conn.execute("""
+        SELECT e.product_id, p.name, p.emoji,
+               COUNT(*) as cnt,
+               COUNT(DISTINCT e.user_id) as unique_users
+        FROM user_events e
+        LEFT JOIN products p ON p.id = e.product_id
+        WHERE e.event_type = 'view'
+        GROUP BY e.product_id
+        ORDER BY cnt DESC
+        LIMIT ?
+    """, (limit,)).fetchall()
+
+    # Топ избранного
+    wishes = conn.execute("""
+        SELECT e.product_id, p.name, p.emoji,
+               COUNT(*) as cnt,
+               COUNT(DISTINCT e.user_id) as unique_users
+        FROM user_events e
+        LEFT JOIN products p ON p.id = e.product_id
+        WHERE e.event_type = 'wish'
+        GROUP BY e.product_id
+        ORDER BY cnt DESC
+        LIMIT ?
+    """, (limit,)).fetchall()
+
+    # Кто добавлял в избранное (последние 50 событий) с именами из orders
+    wish_log = conn.execute("""
+        SELECT e.user_id, p.name as product_name, p.emoji,
+               e.created_at
+        FROM user_events e
+        LEFT JOIN products p ON p.id = e.product_id
+        WHERE e.event_type = 'wish'
+        ORDER BY e.id DESC
+        LIMIT 50
+    """).fetchall()
+
+    conn.close()
+
+    def row_to_dict(r, keys):
+        return {k: r[k] for k in keys}
+
+    return {
+        "top_views": [
+            {"product_id": r["product_id"], "name": r["name"] or "Удалён", "emoji": r["emoji"] or "📦",
+             "views": r["cnt"], "unique_users": r["unique_users"]}
+            for r in views
+        ],
+        "top_wishes": [
+            {"product_id": r["product_id"], "name": r["name"] or "Удалён", "emoji": r["emoji"] or "📦",
+             "wishes": r["cnt"], "unique_users": r["unique_users"]}
+            for r in wishes
+        ],
+        "wish_log": [
+            {"user_id": r["user_id"], "product_name": r["product_name"] or "Удалён",
+             "emoji": r["emoji"] or "📦", "at": r["created_at"] or 0}
+            for r in wish_log
+        ],
+    }
+
+# ═══════════════════════════════════════════════
+# ROUTES — WISHLIST
+# ═══════════════════════════════════════════════
+
+@app.get("/wishlist")
+def get_wishlist(x_init_data: Optional[str] = Header(None)):
+    """Get current user's wishlist product IDs."""
+    user = get_user(x_init_data)
+    if not user:
+        return {"ids": []}
+    uid = str(user["id"])
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT product_id FROM wishlists WHERE user_id=? ORDER BY created_at DESC", (uid,)
+    ).fetchall()
+    conn.close()
+    return {"ids": [r["product_id"] for r in rows]}
+
+@app.post("/wishlist/{product_id}", status_code=204)
+def add_to_wishlist(product_id: int, x_init_data: Optional[str] = Header(None)):
+    """Add product to wishlist."""
+    user = get_user(x_init_data)
+    if not user:
+        raise HTTPException(401, "Unauthorized")
+    uid = str(user["id"])
+    conn = get_db()
+    conn.execute(
+        "INSERT OR IGNORE INTO wishlists (user_id, product_id) VALUES (?,?)",
+        (uid, product_id)
+    )
+    # Also track as wish event (unique per user)
+    conn.execute(
+        "INSERT OR IGNORE INTO user_events (user_id,product_id,event_type) VALUES (?,?,?)",
+        (uid, product_id, "wish")
+    )
+    conn.commit(); conn.close()
+
+@app.delete("/wishlist/{product_id}", status_code=204)
+def remove_from_wishlist(product_id: int, x_init_data: Optional[str] = Header(None)):
+    """Remove product from wishlist."""
+    user = get_user(x_init_data)
+    if not user:
+        raise HTTPException(401, "Unauthorized")
+    uid = str(user["id"])
+    conn = get_db()
+    conn.execute(
+        "DELETE FROM wishlists WHERE user_id=? AND product_id=?", (uid, product_id)
     )
     conn.commit(); conn.close()
 
