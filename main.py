@@ -56,6 +56,14 @@ app.add_middleware(
 # ═══════════════════════════════════════════════
 # DATABASE
 # ═══════════════════════════════════════════════
+def parse_photo(photos_str: str):
+    """Parse first photo URL from JSON array string."""
+    try:
+        arr = json.loads(photos_str) if photos_str else []
+        return arr[0] if arr else None
+    except Exception:
+        return None
+
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -237,10 +245,12 @@ def init_db():
             launches   INTEGER NOT NULL DEFAULT 1
         )
     """)
-    # Migrate: add launches column if missing
+    # Migrate: add missing columns
     ses_cols = [r[1] for r in conn.execute("PRAGMA table_info(user_sessions)").fetchall()]
     if ses_cols and 'launches' not in ses_cols:
         conn.execute("ALTER TABLE user_sessions ADD COLUMN launches INTEGER NOT NULL DEFAULT 1")
+    if ses_cols and 'is_vip' not in ses_cols:
+        conn.execute("ALTER TABLE user_sessions ADD COLUMN is_vip INTEGER NOT NULL DEFAULT 0")
 
     # Payments table
     conn.execute("""
@@ -710,8 +720,9 @@ def admin_users(x_init_data: Optional[str] = Header(None)):
     conn = get_db()
     users = conn.execute("""
         SELECT user_id, username, first_name, last_name,
-               first_seen, last_seen, launches
-        FROM user_sessions ORDER BY last_seen DESC
+               first_seen, last_seen, launches,
+               COALESCE(is_vip, 0) as is_vip
+        FROM user_sessions ORDER BY is_vip DESC, last_seen DESC
     """).fetchall()
     activity_rows = conn.execute("""
         SELECT user_id, event_type, COUNT(*) as cnt
@@ -753,6 +764,7 @@ def admin_users(x_init_data: Optional[str] = Header(None)):
             "purchases":  act.get("purchase", 0),
             "orders":     ord_["cnt"],
             "spent":      ord_["total"] or 0,
+            "is_vip":     bool(u["is_vip"]),
         })
     return {"users": result}
 
@@ -793,7 +805,7 @@ def create_brand(body: BrandCreate, x_init_data: Optional[str] = Header(None)):
         conn.close()
         log_action(user["username"], "brand_create", name)
         return {"id": bid, "name": name, "styles": body.styles}
-    except:
+    except Exception:
         conn.close()
         raise HTTPException(409, "Brand already exists")
 
@@ -1033,7 +1045,7 @@ def create_style(body: StyleCreate, x_init_data: Optional[str] = Header(None)):
         sid = cur.lastrowid; conn.close()
         log_action(user["username"], "style_create", name)
         return {"id": sid, "name": name}
-    except:
+    except Exception:
         conn.close(); raise HTTPException(409, "Style already exists")
 
 @app.delete("/styles/{sid}", status_code=204)
@@ -1172,14 +1184,6 @@ def admin_product_events(x_init_data: Optional[str] = Header(None), limit: int =
 
     conn.close()
 
-    import json as _json
-
-    def parse_photo(photos_str):
-        try:
-            arr = _json.loads(photos_str) if photos_str else []
-            return arr[0] if arr else None
-        except Exception:
-            return None
 
     return {
         "top_views": [
@@ -1226,10 +1230,10 @@ def admin_product_stats(product_id: int, x_init_data: Optional[str] = Header(Non
                COALESCE(o.recipient, '') as first_name
         FROM user_events e
         LEFT JOIN (
-            SELECT user_id, username, recipient,
-                   ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) as rn
+            SELECT user_id, username, recipient
             FROM orders
-        ) o ON o.user_id = e.user_id AND o.rn = 1
+            WHERE id IN (SELECT MAX(id) FROM orders GROUP BY user_id)
+        ) o ON o.user_id = e.user_id
         WHERE e.event_type = 'view' AND e.product_id = ?
         ORDER BY e.created_at DESC
     """, (product_id,)).fetchall()
@@ -1244,10 +1248,9 @@ def admin_product_stats(product_id: int, x_init_data: Optional[str] = Header(Non
 
     conn.close()
 
-    import json as _json
     photos = []
     if prod:
-        try: photos = _json.loads(prod["photos"]) if prod["photos"] else []
+        try: photos = json.loads(prod["photos"]) if prod["photos"] else []
         except: pass
 
     def fmt_user(user_id, username, first_name):
@@ -1273,11 +1276,6 @@ def admin_user_detail(user_id: str, x_init_data: Optional[str] = Header(None)):
     require_admin(x_init_data, "orders")
     conn = get_db()
 
-    import json as _json
-
-    def parse_photo(s):
-        try: arr = _json.loads(s) if s else []; return arr[0] if arr else None
-        except: return None
 
     # Что смотрел (из user_events)
     viewed = conn.execute("""
@@ -1322,10 +1320,95 @@ def admin_user_detail(user_id: str, x_init_data: Optional[str] = Header(None)):
         "wished": [prod_item(r) for r in wished],
         "orders": [
             {"id": o["id"], "total": o["total"], "status": o["status"],
-             "date": o["date_str"], "items_count": len(_json.loads(o["items"] or "[]"))}
+             "date": o["date_str"], "items_count": len(json.loads(o["items"] or "[]"))}
             for o in orders
         ],
     }
+
+@app.post("/admin/vip-by-username", status_code=200)
+def vip_by_username(body: dict, x_init_data: Optional[str] = Header(None)):
+    """Выдать или снять VIP по @username."""
+    admin = require_admin(x_init_data, "orders")
+    username = (body.get("username") or "").strip().lstrip("@").lower()
+    action   = body.get("action", "grant")  # "grant" | "revoke"
+    if not username:
+        raise HTTPException(400, "username required")
+    conn = get_db()
+    row = conn.execute(
+        "SELECT user_id, is_vip FROM user_sessions WHERE LOWER(username)=?", (username,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, f"Пользователь @{username} не найден в системе")
+    new_vip = 1 if action == "grant" else 0
+    conn.execute("UPDATE user_sessions SET is_vip=? WHERE user_id=?", (new_vip, row["user_id"]))
+    conn.commit(); conn.close()
+    log_action(admin["username"], "vip_by_username", username, "action="+action)
+    return {"user_id": row["user_id"], "is_vip": bool(new_vip)}
+
+@app.get("/admin/vip-list")
+def get_vip_list(x_init_data: Optional[str] = Header(None)):
+    """Список всех VIP-пользователей."""
+    require_admin(x_init_data, "orders")
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT user_id, username, first_name, last_name, last_seen
+        FROM user_sessions WHERE is_vip=1 ORDER BY last_seen DESC
+    """).fetchall()
+    conn.close()
+    return {"vips": [
+        {"user_id": r["user_id"],
+         "username": r["username"] or "",
+         "first_name": r["first_name"] or "",
+         "last_name": r["last_name"] or "",
+         "display": " ".join(filter(None,[r["first_name"],r["last_name"]])) or r["username"] or "id"+r["user_id"],
+         "handle": ("@"+r["username"]) if r["username"] else "id"+r["user_id"],
+         "last_seen": r["last_seen"]}
+        for r in rows
+    ]}
+
+@app.post("/admin/users/{user_id}/vip", status_code=204)
+def toggle_vip(user_id: str, x_init_data: Optional[str] = Header(None)):
+    """Выдать или снять VIP-статус пользователя."""
+    admin = require_admin(x_init_data, "orders")
+    conn = get_db()
+    row = conn.execute("SELECT is_vip FROM user_sessions WHERE user_id=?", (user_id,)).fetchone()
+    if not row:
+        conn.close(); raise HTTPException(404, "User not found")
+    new_vip = 0 if row["is_vip"] else 1
+    conn.execute("UPDATE user_sessions SET is_vip=? WHERE user_id=?", (new_vip, user_id))
+    conn.commit(); conn.close()
+    log_action(admin["username"], "vip_toggle", user_id, "vip="+str(new_vip))
+
+@app.get("/me")
+def get_me(x_init_data: Optional[str] = Header(None)):
+    """Возвращает данные текущего пользователя включая VIP-статус."""
+    user = get_user(x_init_data)
+    if not user:
+        return {"is_vip": False}
+    uid = str(user["id"])
+    conn = get_db()
+    row = conn.execute("SELECT is_vip FROM user_sessions WHERE user_id=?", (uid,)).fetchone()
+    conn.close()
+    return {"is_vip": bool(row["is_vip"]) if row else False}
+
+@app.delete("/admin/views", status_code=204)
+def clear_all_views(x_init_data: Optional[str] = Header(None)):
+    """Обнулить все просмотры товаров."""
+    user = require_admin(x_init_data, "orders")
+    conn = get_db()
+    conn.execute("DELETE FROM user_events WHERE event_type='view'")
+    conn.commit(); conn.close()
+    log_action(user["username"], "clear_views", "all")
+
+@app.delete("/admin/views/{user_id}", status_code=204)
+def clear_user_views(user_id: str, x_init_data: Optional[str] = Header(None)):
+    """Обнулить просмотры конкретного пользователя."""
+    user = require_admin(x_init_data, "orders")
+    conn = get_db()
+    conn.execute("DELETE FROM user_events WHERE event_type='view' AND user_id=?", (user_id,))
+    conn.commit(); conn.close()
+    log_action(user["username"], "clear_user_views", user_id)
 
 # ═══════════════════════════════════════════════
 # ROUTES — WISHLIST
