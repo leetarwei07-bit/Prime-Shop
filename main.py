@@ -1025,15 +1025,14 @@ def admin_product_events(x_init_data: Optional[str] = Header(None), limit: int =
         LIMIT ?
     """, (limit,)).fetchall()
 
-    # Кто добавлял в избранное (последние 50 событий) с именами из orders
+    # Кто сейчас держит товар в избранном (из wishlists — отражает реальное состояние)
     wish_log = conn.execute("""
-        SELECT e.user_id, p.name as product_name, p.emoji,
-               e.created_at
-        FROM user_events e
-        LEFT JOIN products p ON p.id = e.product_id
-        WHERE e.event_type = 'wish'
-        ORDER BY e.id DESC
-        LIMIT 50
+        SELECT w.user_id, p.name as product_name, p.emoji, p.photos,
+               w.created_at
+        FROM wishlists w
+        LEFT JOIN products p ON p.id = w.product_id
+        ORDER BY w.created_at DESC
+        LIMIT 100
     """).fetchall()
 
     conn.close()
@@ -1054,7 +1053,9 @@ def admin_product_events(x_init_data: Optional[str] = Header(None), limit: int =
         ],
         "wish_log": [
             {"user_id": r["user_id"], "product_name": r["product_name"] or "Удалён",
-             "emoji": r["emoji"] or "📦", "at": r["created_at"] or 0}
+             "emoji": r["emoji"] or "📦",
+             "photo": (__import__('json').loads(r["photos"])[0] if r["photos"] else None),
+             "at": r["created_at"] or 0}
             for r in wish_log
         ],
     }
