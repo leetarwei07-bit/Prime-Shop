@@ -66,8 +66,8 @@ body {
   transition:opacity .5s ease,transform .5s ease;
 }
 #splash.hide { opacity:0;transform:scale(1.04);pointer-events:none }
-#splash { animation:splashAutohide 1.5s linear 1.5s both }
-@keyframes splashAutohide { to { opacity:0; pointer-events:none } }
+#splash { animation:splashAutohide 1.5s ease 1.5s both }
+@keyframes splashAutohide { to { opacity:0; pointer-events:none; visibility:hidden } }
 .splash-logo {
   font-family:'Unbounded',sans-serif;font-size:28px;font-weight:700;letter-spacing:12px;
   animation:pulse 1.6s ease-in-out infinite alternate;
@@ -2320,15 +2320,17 @@ function hideSplash() {
   if (s._hidden) return;
   s._hidden = true;
   if (hideSplash._cleanup) hideSplash._cleanup();
-  s.style.animation = 'none'; // cancel CSS auto-hide, do it via JS
+  s.style.animation = 'none';
+  s.style.transition = 'opacity .35s ease, transform .35s ease';
   s.style.opacity = '0';
   s.style.transform = 'scale(1.04)';
   s.style.pointerEvents = 'none';
-  s.style.transition = 'opacity .4s ease, transform .4s ease';
+  s.style.visibility = 'hidden';
+  s.style.zIndex = '-1';
   setTimeout(() => {
     s.style.display = 'none';
     if (s.parentNode) s.parentNode.removeChild(s);
-  }, 420);
+  }, 380);
 }
 
 async function loadProducts() {
@@ -2341,6 +2343,7 @@ async function loadProducts() {
       [data[i], data[j]] = [data[j], data[i]];
     }
     data.forEach(p => PRODUCTS.push(p));
+    window._prodError = false; // products loaded OK
     renderHome(true); // instant=true — без skeleton, сразу карточки
     applySearch();
     hideSplash(); // скрываем сплэш как только товары готовы
@@ -6345,6 +6348,22 @@ loadMyOrders();
 loadAdmins();
 checkPendingOrder();
 loadDescTemplates();
+
+// Debug: show API error visibly if products fail
+window._prodError = true;
+setTimeout(() => {
+  if (!window._prodError) return;
+  const s = document.getElementById('splash');
+  if (!s || s._hidden) return;
+  let errEl = document.getElementById('splash-err');
+  if (!errEl) {
+    errEl = document.createElement('div');
+    errEl.id = 'splash-err';
+    errEl.style.cssText = 'font-size:11px;color:rgba(255,255,255,.4);text-align:center;max-width:260px;line-height:1.5;padding:0 20px';
+    s.appendChild(errEl);
+  }
+  errEl.textContent = 'Сервер не отвечает. Проверь интернет или нажми «Обновить».';
+}, 6000);
 </script>
 </body>
 </html>
