@@ -166,26 +166,64 @@ def init_db():
     """)
 
     # User events for recommendations (views, purchases)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS user_events (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id    TEXT    NOT NULL,
-            product_id INTEGER NOT NULL,
-            event_type TEXT    NOT NULL,  -- 'view' | 'purchase' | 'wish'
-            created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
-            UNIQUE(user_id, product_id, event_type)
-        )
-    """)
+    # Миграция: пересоздаём таблицу с UNIQUE constraint если его нет
+    existing_cols = [r[1] for r in conn.execute("PRAGMA table_info(user_events)").fetchall()]
+    if existing_cols:
+        # Таблица уже есть — проверяем есть ли уже UNIQUE index
+        indexes = conn.execute("PRAGMA index_list(user_events)").fetchall()
+        has_unique = any(idx[2] for idx in indexes)  # idx[2] = unique flag
+        if not has_unique:
+            # Удаляем дубли (оставляем строку с минимальным id)
+            conn.execute("""
+                DELETE FROM user_events WHERE id NOT IN (
+                    SELECT MIN(id) FROM user_events
+                    GROUP BY user_id, product_id, event_type
+                )
+            """)
+            # Пересоздаём таблицу с UNIQUE constraint
+            conn.execute("""
+                CREATE TABLE user_events_new (
+                    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id    TEXT    NOT NULL,
+                    product_id INTEGER NOT NULL,
+                    event_type TEXT    NOT NULL,
+                    created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+                    UNIQUE(user_id, product_id, event_type)
+                )
+            """)
+            conn.execute("INSERT INTO user_events_new SELECT * FROM user_events")
+            conn.execute("DROP TABLE user_events")
+            conn.execute("ALTER TABLE user_events_new RENAME TO user_events")
+            conn.commit()
+    else:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_events (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id    TEXT    NOT NULL,
+                product_id INTEGER NOT NULL,
+                event_type TEXT    NOT NULL,  -- 'view' | 'purchase' | 'wish'
+                created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+                UNIQUE(user_id, product_id, event_type)
+            )
+        """)
 
     # Wishlist — persistent per user
     conn.execute("""
         CREATE TABLE IF NOT EXISTS wishlists (
             user_id    TEXT    NOT NULL,
             product_id INTEGER NOT NULL,
+            username   TEXT    NOT NULL DEFAULT '',
+            first_name TEXT    NOT NULL DEFAULT '',
             created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
             PRIMARY KEY (user_id, product_id)
         )
     """)
+    # Миграция: добавляем колонки username/first_name если их нет
+    wish_cols = [r[1] for r in conn.execute("PRAGMA table_info(wishlists)").fetchall()]
+    if 'username' not in wish_cols:
+        conn.execute("ALTER TABLE wishlists ADD COLUMN username TEXT NOT NULL DEFAULT ''")
+    if 'first_name' not in wish_cols:
+        conn.execute("ALTER TABLE wishlists ADD COLUMN first_name TEXT NOT NULL DEFAULT ''")
 
     # Payments table
     conn.execute("""
@@ -1025,12 +1063,11 @@ def admin_product_events(x_init_data: Optional[str] = Header(None), limit: int =
         LIMIT ?
     """, (limit,)).fetchall()
 
-    # Кто сейчас держит товар в избранном — джойним username из orders
+    # Кто сейчас держит товар в избранном — username хранится прямо в wishlists
     wish_log = conn.execute("""
-        SELECT w.user_id, w.product_id,
+        SELECT w.user_id, w.product_id, w.username, w.first_name,
                p.name as product_name, p.emoji, p.photos,
-               w.created_at,
-               (SELECT username FROM orders WHERE user_id = w.user_id LIMIT 1) as username
+               w.created_at
         FROM wishlists w
         LEFT JOIN products p ON p.id = w.product_id
         ORDER BY w.created_at DESC
@@ -1067,7 +1104,8 @@ def admin_product_events(x_init_data: Optional[str] = Header(None), limit: int =
              "product_name": r["product_name"] or "Удалён",
              "emoji": r["emoji"] or "📦",
              "photo": parse_photo(r["photos"]),
-             "username": r["username"] or None,
+             "username": r["username"] or "",
+             "first_name": r["first_name"] or "",
              "at": r["created_at"] or 0}
             for r in wish_log
         ],
@@ -1098,10 +1136,13 @@ def add_to_wishlist(product_id: int, x_init_data: Optional[str] = Header(None)):
     if not user:
         raise HTTPException(401, "Unauthorized")
     uid = str(user["id"])
+    uname = user.get("username") or ""
+    fname = user.get("first_name") or ""
     conn = get_db()
+    # INSERT OR REPLACE чтобы обновить username/first_name если изменились
     conn.execute(
-        "INSERT OR IGNORE INTO wishlists (user_id, product_id) VALUES (?,?)",
-        (uid, product_id)
+        "INSERT OR REPLACE INTO wishlists (user_id, product_id, username, first_name) VALUES (?,?,?,?)",
+        (uid, product_id, uname, fname)
     )
     # Also track as wish event (unique per user)
     conn.execute(
@@ -1210,7 +1251,7 @@ def create_order(body: OrderCreate, x_init_data: Optional[str] = Header(None)):
             try:
                 conn2 = get_db()
                 conn2.execute(
-                    "INSERT INTO user_events (user_id,product_id,event_type) VALUES (?,?,?)",
+                    "INSERT OR IGNORE INTO user_events (user_id,product_id,event_type) VALUES (?,?,?)",
                     (uid, pid, "purchase")
                 )
                 conn2.commit(); conn2.close()
