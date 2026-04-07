@@ -1357,6 +1357,7 @@ body {
     <button class="admin-tab" onclick="switchTab('templates',this)">📋 Шаблоны</button>
     <button class="admin-tab" onclick="switchTab('prices',this)">💰 Цены</button>
     <button class="admin-tab" onclick="switchTab('analytics',this)">📊 Аналитика</button>
+    <button class="admin-tab" onclick="switchTab('users',this)">👥 Пользователи</button>
 
   </div>
   <!-- Pull-to-refresh indicator -->
@@ -1709,6 +1710,11 @@ body {
     <!-- ANALYTICS PANEL -->
     <div class="admin-panel" id="panel-analytics">
       <div id="analytics-content"><div style="text-align:center;padding:40px 0;color:var(--text3);font-size:13px">Загрузка...</div></div>
+    </div>
+
+    <!-- USERS PANEL -->
+    <div class="admin-panel" id="panel-users">
+      <div id="users-content"><div style="text-align:center;padding:40px 0;color:var(--text3);font-size:13px">Загрузка...</div></div>
     </div>
 
     <!-- MODERATION PANEL -->
@@ -3783,6 +3789,7 @@ function switchTab(tab, btn) {
   if (tab === 'templates') { loadDescTemplates(); }
   if (tab === 'moderation') { loadPendingProducts(); }
   if (tab === 'analytics')  { loadAnalytics(); }
+  if (tab === 'users')      { loadUsers(); }
 }
 
 function showProductLinks(e, pid) {
@@ -5032,24 +5039,129 @@ function analyticsRow(p, rank, type) {
   const color = type === 'wish' ? 'var(--red)' : 'var(--orange)';
   const icon  = type === 'wish' ? '❤️' : '👁';
   const count = type === 'wish' ? p.wishes : p.views;
-  // Photo: prefer backend data, fallback to PRODUCTS cache
   const prod = PRODUCTS.find(x => x.id === p.product_id);
   const photoSrc = p.photo || prod?.photos?.[0] || null;
   const imgEl = photoSrc
-    ? `<img src="${photoSrc}" style="width:100%;height:100%;object-fit:cover;border-radius:8px"/>`
+    ? `<img src="${photoSrc}" style="width:100%;height:100%;object-fit:cover;border-radius:10px"/>`
     : `<span style="font-size:18px">${p.emoji}</span>`;
-  return `<div onclick="openProduct(${p.product_id})" style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer;-webkit-tap-highlight-color:transparent" ontouchstart="this.style.opacity='.6'" ontouchend="this.style.opacity='1'" onmousedown="this.style.opacity='.6'" onmouseup="this.style.opacity='1'">
+  return `<div onclick="showProductStats(${p.product_id},'${type}')" style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer;-webkit-tap-highlight-color:transparent;active:opacity:.6">
     <div style="width:22px;text-align:center;font-size:11px;font-weight:700;color:var(--text3);flex-shrink:0">${rank}</div>
     <div style="width:44px;height:44px;border-radius:10px;background:var(--s2);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden">${imgEl}</div>
     <div style="flex:1;min-width:0">
       <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
-      <div style="font-size:11px;color:var(--text3);margin-top:2px">${p.unique_users} чел.</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px">${p.unique_users} чел. · нажмите для деталей</div>
     </div>
     <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
       <span style="font-size:12px">${icon}</span>
       <span style="font-size:14px;font-weight:700;color:${color}">${count}</span>
     </div>
   </div>`;
+}
+
+async function showProductStats(productId, focusTab) {
+  // Создаём попап поверх аналитики
+  const old = document.getElementById('product-stats-popup');
+  if (old) old.remove();
+
+  const popup = document.createElement('div');
+  popup.id = 'product-stats-popup';
+  popup.style.cssText = `
+    position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.7);
+    display:flex;align-items:flex-end;justify-content:center;
+    animation:fadeIn .18s ease;
+  `;
+  popup.innerHTML = `
+    <div style="background:var(--s1);border-radius:20px 20px 0 0;width:100%;max-height:80vh;
+      display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,0px);
+      animation:slideUp .22s var(--easing)">
+      <div style="width:36px;height:4px;background:var(--border2);border-radius:2px;margin:12px auto 0"></div>
+      <div id="pstats-content" style="overflow-y:auto;padding:16px 16px 24px;flex:1">
+        <div style="display:flex;justify-content:center;padding:32px 0">
+          <div style="width:22px;height:22px;border-radius:50%;border:2px solid var(--border2);border-top-color:#fff;animation:spin .7s linear infinite"></div>
+        </div>
+      </div>
+    </div>`;
+  popup.addEventListener('click', e => { if (e.target === popup) popup.remove(); });
+  document.body.appendChild(popup);
+
+  try {
+    const data = await apiFetch('/admin/product-stats/' + productId);
+    const p = data.product;
+    const viewers = data.viewers;
+    const wishers = data.wishers;
+
+    const photoHtml = p.photo
+      ? `<img src="${p.photo}" style="width:100%;height:180px;object-fit:cover;border-radius:12px;margin-bottom:12px"/>`
+      : `<div style="font-size:48px;text-align:center;margin-bottom:12px">${p.emoji}</div>`;
+
+    const userRow = u => {
+      const name = u.first_name || '';
+      const handle = u.username ? '@' + u.username : 'id' + u.user_id;
+      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="width:32px;height:32px;border-radius:50%;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--text2);flex-shrink:0">
+          ${name ? name[0].toUpperCase() : '?'}
+        </div>
+        <div style="flex:1;min-width:0">
+          ${name ? `<div style="font-size:13px;font-weight:500">${name}</div>` : ''}
+          <div style="font-size:11px;color:var(--orange)">${handle}</div>
+        </div>
+      </div>`;
+    };
+
+    const activeTab = focusTab || 'view';
+
+    document.getElementById('pstats-content').innerHTML = `
+      ${photoHtml}
+      <div style="font-size:15px;font-weight:600;margin-bottom:16px">${p.name}</div>
+
+      <!-- tabs -->
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <button id="pstab-view" onclick="pstatsTab('view')"
+          style="flex:1;padding:8px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;
+          border:1px solid var(--border);font-family:'Inter',sans-serif;
+          background:${activeTab==='view'?'#fff':'var(--s2)'};color:${activeTab==='view'?'#000':'var(--text2)'}">
+          👁 Просмотры (${viewers.length})
+        </button>
+        <button id="pstab-wish" onclick="pstatsTab('wish')"
+          style="flex:1;padding:8px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;
+          border:1px solid var(--border);font-family:'Inter',sans-serif;
+          background:${activeTab==='wish'?'var(--red)':'var(--s2)'};color:${activeTab==='wish'?'#fff':'var(--text2)'}">
+          ❤️ Избранное (${wishers.length})
+        </button>
+      </div>
+
+      <div id="pstats-view-list" style="display:${activeTab==='view'?'block':'none'}">
+        ${viewers.length ? viewers.map(userRow).join('') : '<div style="color:var(--text3);font-size:13px;padding:12px 0">Никто не смотрел</div>'}
+      </div>
+      <div id="pstats-wish-list" style="display:${activeTab==='wish'?'block':'none'}">
+        ${wishers.length ? wishers.map(userRow).join('') : '<div style="color:var(--text3);font-size:13px;padding:12px 0">Никто не добавил</div>'}
+      </div>`;
+
+    // Store data for tab switching
+    popup._viewers = viewers;
+    popup._wishers = wishers;
+    popup._userRow = userRow;
+  } catch(e) {
+    document.getElementById('pstats-content').innerHTML = `<div style="color:var(--red);text-align:center;padding:32px 0">Ошибка загрузки</div>`;
+  }
+}
+
+function pstatsTab(tab) {
+  const popup = document.getElementById('product-stats-popup');
+  if (!popup) return;
+  const vBtn = document.getElementById('pstab-view');
+  const wBtn = document.getElementById('pstab-wish');
+  const vList = document.getElementById('pstats-view-list');
+  const wList = document.getElementById('pstats-wish-list');
+  if (tab === 'view') {
+    vBtn.style.background = '#fff'; vBtn.style.color = '#000';
+    wBtn.style.background = 'var(--s2)'; wBtn.style.color = 'var(--text2)';
+    vList.style.display = 'block'; wList.style.display = 'none';
+  } else {
+    wBtn.style.background = 'var(--red)'; wBtn.style.color = '#fff';
+    vBtn.style.background = 'var(--s2)'; vBtn.style.color = 'var(--text2)';
+    wList.style.display = 'block'; vList.style.display = 'none';
+  }
 }
 
 function wishLogRow(r) {
@@ -5071,6 +5183,120 @@ function wishLogRow(r) {
     </div>
     <div style="font-size:11px;color:var(--text3);flex-shrink:0;text-align:right">${date}</div>
   </div>`;
+}
+
+async function loadUsers() {
+  const el = document.getElementById('users-content');
+  if (!el) return;
+  el.innerHTML = '<div style="display:flex;justify-content:center;padding:48px 0"><div style="width:22px;height:22px;border-radius:50%;border:2px solid var(--border2);border-top-color:#fff;animation:spin .7s linear infinite"></div></div>';
+  try {
+    const data = await apiFetch('/admin/users');
+    const users = data.users || [];
+    if (!users.length) {
+      el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--text3);font-size:13px">Нет данных</div>';
+      return;
+    }
+
+    // Summary
+    const totalLaunches = users.reduce((s,u) => s+u.launches, 0);
+    const totalSpent    = users.reduce((s,u) => s+u.spent, 0);
+
+    el.innerHTML = `
+      <div class="stat-grid" style="margin-bottom:20px">
+        <div class="stat-card"><div class="stat-val">${users.length}</div><div class="stat-label">Пользователей</div></div>
+        <div class="stat-card"><div class="stat-val">${totalLaunches}</div><div class="stat-label">Запусков</div></div>
+        <div class="stat-card"><div class="stat-val">${fmtK(totalSpent)}</div><div class="stat-label">Потрачено</div></div>
+      </div>
+      <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Все пользователи</div>
+      ${users.map(u => userRow(u)).join('')}`;
+  } catch(e) {
+    el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--red);font-size:13px">Ошибка загрузки</div>';
+    console.error(e);
+  }
+}
+
+function userRow(u) {
+  const lastSeen = u.last_seen
+    ? new Date(u.last_seen * 1000).toLocaleDateString('ru', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'})
+    : '—';
+  const initial = (u.display || u.handle || '?')[0].toUpperCase();
+  const badges = [
+    u.orders  ? `<span style="background:var(--s3);color:var(--orange);font-size:10px;font-weight:600;padding:2px 6px;border-radius:6px">🛍 ${u.orders}</span>` : '',
+    u.wishes  ? `<span style="background:var(--s3);color:var(--red);font-size:10px;font-weight:600;padding:2px 6px;border-radius:6px">❤️ ${u.wishes}</span>` : '',
+    u.views   ? `<span style="background:var(--s3);color:var(--text2);font-size:10px;font-weight:600;padding:2px 6px;border-radius:6px">👁 ${u.views}</span>` : '',
+  ].filter(Boolean).join(' ');
+  return `<div onclick="showUserDetail(${JSON.stringify(u).replace(/"/g,'&quot;')})" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;-webkit-tap-highlight-color:transparent">
+    <div style="width:38px;height:38px;border-radius:50%;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--text2);flex-shrink:0">${initial}</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.display}</div>
+      <div style="font-size:11px;color:var(--orange);margin-top:1px">${u.handle}</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">${badges}</div>
+    </div>
+    <div style="text-align:right;flex-shrink:0">
+      <div style="font-size:10px;color:var(--text3)">${u.launches}× запусков</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:2px">${lastSeen}</div>
+    </div>
+  </div>`;
+}
+
+function showUserDetail(u) {
+  if (typeof u === 'string') { try { u = JSON.parse(u); } catch(e) { return; } }
+  const old = document.getElementById('user-detail-popup');
+  if (old) old.remove();
+
+  const firstSeen = u.first_seen
+    ? new Date(u.first_seen * 1000).toLocaleDateString('ru', {day:'numeric', month:'long', year:'numeric'})
+    : '—';
+  const lastSeen = u.last_seen
+    ? new Date(u.last_seen * 1000).toLocaleDateString('ru', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'})
+    : '—';
+  const initial = (u.display || u.handle || '?')[0].toUpperCase();
+
+  const popup = document.createElement('div');
+  popup.id = 'user-detail-popup';
+  popup.style.cssText = 'position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.7);display:flex;align-items:flex-end;justify-content:center;animation:fadeIn .18s ease';
+  popup.innerHTML = `
+    <div style="background:var(--s1);border-radius:20px 20px 0 0;width:100%;
+      padding:0 0 env(safe-area-inset-bottom,16px);
+      animation:slideUp .22s var(--easing)">
+      <div style="width:36px;height:4px;background:var(--border2);border-radius:2px;margin:12px auto 0"></div>
+      <div style="padding:16px 16px 24px">
+        <!-- Header -->
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+          <div style="width:52px;height:52px;border-radius:50%;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:var(--text2);flex-shrink:0">${initial}</div>
+          <div>
+            <div style="font-size:16px;font-weight:600">${u.display}</div>
+            <div style="font-size:12px;color:var(--orange);margin-top:2px">${u.handle}</div>
+          </div>
+        </div>
+        <!-- Stats grid -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
+          ${[
+            ['🚀', u.launches, 'Запусков'],
+            ['👁', u.views,    'Просмотров'],
+            ['❤️', u.wishes,   'Избранных'],
+            ['🛍', u.orders,   'Заказов'],
+            ['💰', fmtK(u.spent), 'Потрачено'],
+          ].map(([icon,val,label]) => `
+            <div style="background:var(--s2);border:1px solid var(--border);border-radius:12px;padding:10px 8px;text-align:center">
+              <div style="font-size:16px">${icon}</div>
+              <div style="font-size:14px;font-weight:700;margin-top:4px">${val}</div>
+              <div style="font-size:10px;color:var(--text3);margin-top:2px">${label}</div>
+            </div>`).join('')}
+        </div>
+        <!-- Dates -->
+        <div style="background:var(--s2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;font-size:12px;color:var(--text3)">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span>Первый визит</span><span style="color:var(--text)">${firstSeen}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between">
+            <span>Последний визит</span><span style="color:var(--text)">${lastSeen}</span>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  popup.addEventListener('click', e => { if (e.target === popup) popup.remove(); });
+  document.body.appendChild(popup);
 }
 
 async function bulkPrice(action, inputId) {
@@ -5669,6 +5895,7 @@ function toast(msg) {
         templates: () => loadDescTemplates(),
         moderation: () => loadPendingProducts(),
         analytics: () => loadAnalytics(),
+        users:     () => loadUsers(),
       };
       const fn = activeTab && refreshFn[activeTab];
       (fn ? Promise.resolve(fn()) : Promise.resolve()).finally(() => {
@@ -5766,6 +5993,9 @@ try {
 
 // Жёсткий fallback — скрываем сплэш максимум через 3 секунды в любом случае
 const _splashKill = setTimeout(hideSplash, 3000);
+
+// Трекаем сессию пользователя (fire-and-forget)
+if (TG_USER) apiFetch('/session', { method: 'POST' }).catch(() => {});
 
 Promise.all([
   loadProducts(),
