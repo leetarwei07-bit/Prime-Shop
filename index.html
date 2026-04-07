@@ -1512,7 +1512,6 @@ body {
           <label>Ссылки на источники <span style="color:var(--orange)">🔒 Только для админов</span></label>
           <div id="a-link-chips"></div>
           <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
-            <input id="a-link-label" class="var-add-input" type="text" placeholder="Название: Taobao, 1688, Poizon..."/>
             <input id="a-link-url" class="var-add-input" type="text" placeholder="Вставьте ссылку сюда"/>
             <button class="var-add-btn" onclick="addLink('add')" style="width:100%;padding:10px;text-align:center;background:var(--s2);border:1px solid var(--border);border-radius:9px;color:#fff;font-size:13px;font-weight:600;cursor:pointer">+ Добавить ссылку</button>
           </div>
@@ -1649,6 +1648,20 @@ body {
             style="padding:10px 18px;background:var(--orange);color:#fff;border:none;border-radius:10px;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">Скидка</button>
         </div>
         <div style="font-size:11px;color:var(--text3);margin-top:6px">Введите число от 1 до 99 — например 20 означает скидку 20%</div>
+      </div>
+
+      <div style="background:var(--s2);border:1px solid var(--red);border-radius:14px;padding:16px;margin-top:12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="font-size:20px">❌</span>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--red)">Аннулировать скидки</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:1px">Убрать все скидки — цена станет равна текущей «старой» цене</div>
+          </div>
+        </div>
+        <button onclick="clearAllDiscounts()"
+          style="width:100%;padding:10px 18px;background:var(--red);color:#fff;border:none;border-radius:10px;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;cursor:pointer">
+          Убрать все скидки
+        </button>
       </div>
     </div>
 
@@ -1954,7 +1967,6 @@ body {
         <label>Ссылки на источники <span style="color:var(--orange)">🔒 Только для админов</span></label>
         <div id="e-link-chips"></div>
         <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
-          <input id="e-link-label" class="var-add-input" type="text" placeholder="Название (Taobao, 1688...)"/>
           <input id="e-link-url" class="var-add-input" type="url" placeholder="https://..." style="width:100%"/>
           <button class="var-add-btn" onclick="addLink('edit')" style="width:100%;padding:10px;text-align:center">+ Добавить ссылку</button>
         </div>
@@ -3777,7 +3789,9 @@ function renderAdminProducts() {
   const el = document.getElementById('admin-products-list');
   if (!el) return;
   if (!PRODUCTS.length) { el.innerHTML = `<div style="text-align:center;padding:40px 0;color:var(--text3);font-size:13px">Товаров пока нет</div>`; return; }
-  el.innerHTML = PRODUCTS.map(p => {
+  // Показываем в порядке добавления (по ID), не перемешиваем
+  const sorted = [...PRODUCTS].sort((a, b) => a.id - b.id);
+  el.innerHTML = sorted.map(p => {
     const img = p.photos&&p.photos.length
       ? `<div class="admin-prod-img"><img src="${p.photos[0]}" alt=""/></div>`
       : `<div class="admin-prod-img">${p.emoji}</div>`;
@@ -4184,15 +4198,19 @@ async function removeAdmin(u) {
 ═══════════════════════════════════════════════ */
 function addLink(ctx) {
   const prefix = ctx === 'add' ? 'a' : 'e';
-  const labelEl = document.getElementById(`${prefix}-link-label`);
-  const urlEl   = document.getElementById(`${prefix}-link-url`);
-  const label = (labelEl?.value||'').trim();
+  const urlEl = document.getElementById(`${prefix}-link-url`);
   const url   = (urlEl?.value||'').trim();
-  if (!label || !url) { toast('Введите название и ссылку'); return; }
+  if (!url) { toast('Вставьте ссылку'); return; }
   if (!url.startsWith('http')) { toast('Ссылка должна начинаться с http'); return; }
+  // Автоматически берём название из домена
+  let label = url;
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, '');
+    label = host.split('.')[0]; // taobao, 1688, poizon и т.д.
+    label = label.charAt(0).toUpperCase() + label.slice(1);
+  } catch(e) {}
   varState[ctx].links.push({ label, url });
-  if (labelEl) labelEl.value = '';
-  if (urlEl)   urlEl.value   = '';
+  if (urlEl) urlEl.value = '';
   renderLinkChips(ctx);
 }
 
@@ -4822,6 +4840,15 @@ async function bulkPrice(action, inputId) {
     const res = await apiFetch('/products/bulk-price', { method: 'POST', body: { action, amount } });
     showToast('✅ Обновлено товаров: ' + res.updated);
     input.value = '';
+    await loadProducts();
+  } catch(e) { showToast('Ошибка: ' + (e.message || 'неизвестная')); }
+}
+
+async function clearAllDiscounts() {
+  if (!confirm('Убрать скидки со всех товаров? Цена станет равна текущей «старой» цене.')) return;
+  try {
+    const res = await apiFetch('/products/bulk-price', { method: 'POST', body: { action: 'clear_discounts', amount: 0 } });
+    showToast('✅ Скидки аннулированы: ' + res.updated + ' товаров');
     await loadProducts();
   } catch(e) { showToast('Ошибка: ' + (e.message || 'неизвестная')); }
 }
