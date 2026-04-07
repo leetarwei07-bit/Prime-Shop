@@ -2088,6 +2088,7 @@ let wishlist = new Set();
 let cart = [];
 
 let currentProduct = null;
+let homeFeedScrollTop = 0; // сохраняем позицию ленты перед открытием карточки
 let selColor = null, selSize = null, selVariation = null, detailQty = 1;
 let sliderIdx = 0, sliderPhotos = [], touchX = 0, touchStartX = 0, touchStartY = 0, touchStartTime = 0;
 
@@ -2224,6 +2225,13 @@ async function loadAllOrders() {
 ═══════════════════════════════════════════════ */
 function navigate(id, btn) {
   if (id === 'admin' && !isAdmin()) { toast('Доступ запрещён'); return; }
+  // Если уже на главной и нажали кнопку Главная — только scroll to top, без перерендера
+  const alreadyHome = id === 'home' && document.getElementById('page-home').classList.contains('active');
+  if (alreadyHome) {
+    const scroll = document.getElementById('home-scroll');
+    if (scroll) scroll.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
   // close product if open
   if (document.getElementById('page-product').classList.contains('open')) closeProduct();
   closeCat();
@@ -2612,6 +2620,9 @@ function filterWish() {
 function openProduct(id) {
   const p = PRODUCTS.find(x => x.id === id);
   if (!p) return;
+  // Запоминаем позицию ленты чтобы восстановить при закрытии
+  const homeScroll = document.getElementById('home-scroll');
+  if (homeScroll) homeFeedScrollTop = homeScroll.scrollTop;
   currentProduct = p; detailQty = 1;
   trackView(id);
   selColor = (p.colors&&p.colors.length) ? p.colors[0] : null;
@@ -2734,15 +2745,22 @@ function closeProduct() {
     if (wishSearch) wishSearch.style.display = 'block';
   }
 
-  // Обновляем ленту с рекомендациями на основе просмотренного товара
+  // Обновляем рекомендации, затем восстанавливаем позицию ленты
   const viewed = currentProduct;
   currentProduct = null;
   if (viewed) {
     lastViewedProduct = viewed;
-    loadRecommendations(viewed); // обновляем рекомендации без перезагрузки каталога
+    loadRecommendations(viewed);
   } else {
     loadRecommendations(lastViewedProduct);
   }
+  // Восстанавливаем позицию скролла ленты
+  requestAnimationFrame(() => {
+    const homeScroll = document.getElementById('home-scroll');
+    if (homeScroll && homeFeedScrollTop > 0) {
+      homeScroll.scrollTop = homeFeedScrollTop;
+    }
+  });
 }
 
 function searchByTag(type, value) {
