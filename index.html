@@ -31,6 +31,12 @@
   --safe-b:   env(safe-area-inset-bottom, 0px);
   --easing:   cubic-bezier(.32,.72,0,1);
   --spring:   cubic-bezier(.34,1.56,.64,1);
+  --vip-a:    #f59e0b;
+  --vip-b:    #ef4444;
+  --blue:     #60a5fa;
+  --radius:   12px;
+  --radius-lg:18px;
+  --radius-xl:20px;
 }
 * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent }
 html {
@@ -127,6 +133,8 @@ body {
 .nav-btn.active::after { content:'';position:absolute;bottom:2px;width:4px;height:4px;border-radius:50%;background:#fff;animation:dotPop .3s var(--spring) }
 @keyframes dotPop { from{transform:scale(0)} to{transform:scale(1)} }
 .nav-btn { position:relative;overflow:hidden }
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+@keyframes slideUpIn { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
 
 /* ═══════════════════════════════════════════════
    HOME
@@ -767,10 +775,90 @@ body {
 .admin-tab { flex-shrink:0;padding:12px 16px;font-size:12px;font-weight:500;color:var(--text3);border-bottom:2px solid transparent;cursor:pointer;transition:color .18s,border-color .18s,transform .12s var(--spring);background:none;border-left:none;border-right:none;border-top:none;font-family:'Inter',sans-serif }
 .admin-tab:active { transform:scale(.93) }
 .admin-tab.on { color:#fff;border-bottom-color:#fff }
-.admin-panel { padding:16px;padding-bottom:calc(var(--nav-h) + var(--safe-b) + 40px);display:none }
+/* Universal section label used in panels */
+.section-label {
+  font-size:10px;color:var(--text3);font-weight:600;
+  text-transform:uppercase;letter-spacing:.8px;
+  margin-bottom:10px;
+}
+/* Universal card row - used in analytics, users, etc */
+.card-row {
+  display:flex;align-items:center;gap:10px;
+  padding:10px 0;border-bottom:1px solid var(--border);
+  transition:opacity .15s;cursor:pointer;border-radius:6px;
+}
+.card-row:active { opacity:.6 }
+.card-row:last-child { border-bottom:none }
+/* Avatar circle */
+.avatar {
+  width:38px;height:38px;border-radius:50%;
+  background:var(--s3);display:flex;align-items:center;
+  justify-content:center;font-size:15px;font-weight:700;
+  color:var(--text2);flex-shrink:0;
+  transition:transform .2s var(--spring);
+}
+.avatar.vip {
+  background:linear-gradient(135deg,var(--vip-a),var(--vip-b));
+  color:#fff;
+}
+/* VIP badge pill */
+.vip-pill {
+  display:inline-flex;align-items:center;gap:3px;
+  background:linear-gradient(135deg,var(--vip-a),var(--vip-b));
+  color:#fff;font-size:10px;font-weight:700;
+  padding:2px 8px;border-radius:20px;letter-spacing:.4px;
+  font-family:'Unbounded',sans-serif;
+  box-shadow:0 2px 8px rgba(245,158,11,.3);
+}
+/* Pill badge - generic */
+.pill {
+  display:inline-flex;align-items:center;gap:3px;
+  background:var(--s3);font-size:10px;font-weight:600;
+  padding:2px 7px;border-radius:6px;
+}
+/* Action button - danger style */
+.btn-danger {
+  padding:8px 14px;
+  background:rgba(239,68,68,.1);
+  border:1px solid rgba(239,68,68,.25);
+  border-radius:9px;color:var(--red);
+  font-family:'Inter',sans-serif;font-size:12px;font-weight:600;
+  cursor:pointer;white-space:nowrap;transition:opacity .15s;
+}
+.btn-danger:active { opacity:.6 }
+.admin-panel {
+  padding:16px;
+  padding-bottom:calc(var(--nav-h) + var(--safe-b) + 40px);
+  display:none;
+}
+.admin-panel.on { display:block;animation:slideUpIn .22s var(--easing) both }
 .admin-panel.on { display:block;animation:panelIn .22s var(--easing) both }
 @keyframes panelIn { from{opacity:0;transform:translateY(8px) scale(.99)} to{opacity:1;transform:none} }
 .stat-grid { display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px }
+.stat-card {
+  background:var(--s2);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  padding:14px 12px 12px;
+  display:flex;flex-direction:column;align-items:center;text-align:center;
+  position:relative;overflow:hidden;
+  transition:border-color .2s,transform .15s var(--spring);
+}
+.stat-card::before {
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,var(--vip-a),var(--vip-b));
+  opacity:0;transition:opacity .2s;
+}
+.stat-card:active { transform:scale(.97) }
+.stat-val {
+  font-family:'Unbounded',sans-serif;
+  font-size:20px;font-weight:700;letter-spacing:-.5px;
+  color:var(--text);line-height:1.1;
+}
+.stat-label {
+  font-size:10px;font-weight:500;color:var(--text3);
+  margin-top:4px;letter-spacing:.3px;text-transform:uppercase;
+}
 .stat-card {
   background:var(--s1);border:1px solid var(--border);border-radius:16px;padding:14px;
   animation:cardIn .35s var(--easing) both;
@@ -787,7 +875,14 @@ body {
 .admin-order-id { font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700 }
 .admin-order-meta { font-size:11px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
 .admin-order-total { font-size:13px;font-weight:600;flex-shrink:0 }
-.admin-prod-row { display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);animation:slideUp .28s var(--easing) both }
+.admin-prod-row {
+  display:flex;align-items:center;gap:12px;padding:12px 0;
+  border-bottom:1px solid var(--border);
+  animation:slideUpIn .28s var(--easing) both;
+  cursor:pointer;border-radius:8px;
+  transition:opacity .15s;
+}
+.admin-prod-row:active { opacity:.6 }
 @keyframes slideUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
 .admin-prod-img { width:44px;height:44px;border-radius:10px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;overflow:hidden }
 .admin-prod-img img { width:100%;height:100%;object-fit:cover }
@@ -1581,6 +1676,20 @@ body {
       </div>
       <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Команда</div>
       <div id="admin-list"></div>
+
+      <div style="height:1px;background:var(--border);margin:20px 0"></div>
+
+      <!-- VIP раздел -->
+      <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px">♛ VIP покупатели</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <input id="vip-username-input" type="text" placeholder="@username"
+          style="flex:1;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-family:'Inter',sans-serif;font-size:14px;color:#fff;outline:none"/>
+        <button onclick="grantVipByUsername()"
+          style="padding:11px 16px;background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff;border:none;border-radius:10px;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">
+          Выдать
+        </button>
+      </div>
+      <div id="vip-list" style="margin-top:8px"></div>
     </div>
 
     <!-- BRANDS & STYLES -->
@@ -2154,6 +2263,7 @@ let cart = [];
 let currentProduct = null;
 let homeFeedScrollTop = 0; // сохраняем позицию ленты перед открытием карточки
 let openedFromRec = false;  // открыт ли товар из блока «Для вас»
+let IS_VIP = false;              // VIP-статус текущего пользователя
 let selColor = null, selSize = null, selVariation = null, detailQty = 1;
 let sliderIdx = 0, sliderPhotos = [], touchX = 0, touchStartX = 0, touchStartY = 0, touchStartTime = 0;
 
@@ -2693,7 +2803,7 @@ function toggleWish(e, id) {
   } else {
     wishlist.add(id); btn.classList.add('liked');
     toast('Добавлено в избранное ❤️');
-    if (TG_USER) apiPost('/wishlist/' + id).catch(() => {});
+    if (TG_USER) apiFetch('/wishlist/' + id, { method: 'POST' }).catch(() => {});
   }
   updateStats();
   if (document.getElementById('page-wishlist').classList.contains('active')) filterWish();
@@ -2923,7 +3033,7 @@ function toggleDetailWish() {
     if (TG_USER) apiDel('/wishlist/' + id).catch(() => {});
   } else {
     wishlist.add(id); btn.classList.add('liked'); toast('Добавлено ❤️');
-    if (TG_USER) apiPost('/wishlist/' + id).catch(() => {});
+    if (TG_USER) apiFetch('/wishlist/' + id, { method: 'POST' }).catch(() => {});
   }
   updateStats();
 }
@@ -3713,6 +3823,18 @@ function renderProfile() {
   const rav = document.getElementById('rec-self-av');
   if(rav) rav.innerHTML = photo ? `<img src="${photo}" alt="av" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>` : '🧑';
 
+  // VIP badge (shown to user themselves)
+  let vipBadgeEl = document.getElementById('vip-badge');
+  if (IS_VIP) {
+    if (!vipBadgeEl) {
+      vipBadgeEl = document.createElement('div');
+      vipBadgeEl.id = 'vip-badge';
+      vipBadgeEl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;margin-top:4px;background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;letter-spacing:.5px;font-family:'Unbounded',sans-serif';
+      vipBadgeEl.textContent = '♛ VIP';
+      document.getElementById('profile-user').after(vipBadgeEl);
+    }
+  } else if (vipBadgeEl) { vipBadgeEl.remove(); }
+
   // admin badge
   let badge = document.getElementById('admin-badge');
   if (admin) {
@@ -3783,7 +3905,7 @@ function switchTab(tab, btn) {
   if (tab === 'stats')     { loadAllOrders().then(renderAdminStats); }
   if (tab === 'orders')    { loadAllOrders(); }
   if (tab === 'products')  { renderAdminProducts(); }
-  if (tab === 'admins')    { renderAdminList(); }
+  if (tab === 'admins')    { renderAdminList(); loadVipList(); }
   if (tab === 'brands')    { renderBrandsList(); }
   if (tab === 'add')       { resetAddForm(); }
   if (tab === 'templates') { loadDescTemplates(); }
@@ -4364,6 +4486,64 @@ async function removeAdmin(u) {
     renderAdminList();
     toast(`@${u} удалён`);
   } catch(e) { toast('Ошибка удаления ⚠️'); }
+}
+
+/* ═══════════════════════════════════════════════
+   VIP MANAGEMENT
+═══════════════════════════════════════════════ */
+async function grantVipByUsername() {
+  const inp = document.getElementById('vip-username-input');
+  const raw = (inp?.value || '').trim();
+  if (!raw) { toast('Введите @username'); return; }
+  const username = raw.replace(/^@/, '');
+  try {
+    const res = await apiPost('/admin/vip-by-username', { username, action: 'grant' });
+    inp.value = '';
+    toast(`♛ VIP выдан @${username}`);
+    loadVipList();
+  } catch(e) {
+    const msg = e.message || '';
+    toast(msg.includes('не найден') ? `@${username} не найден в системе` : 'Ошибка ⚠️');
+  }
+}
+
+async function revokeVip(userId, handle) {
+  if (!confirm(`Снять VIP у ${handle}?`)) return;
+  try {
+    await apiFetch('/admin/users/' + userId + '/vip', { method: 'POST' });
+    toast(`VIP снят у ${handle}`);
+    loadVipList();
+    loadUsers(); // refresh users panel if open
+  } catch(e) { toast('Ошибка ⚠️'); }
+}
+
+async function loadVipList() {
+  const el = document.getElementById('vip-list');
+  if (!el) return;
+  try {
+    const data = await apiFetch('/admin/vip-list');
+    const vips = data.vips || [];
+    if (!vips.length) {
+      el.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:8px 0">VIP-пользователей пока нет</div>';
+      return;
+    }
+    el.innerHTML = vips.map(u => {
+      const initial = (u.display || u.handle)[0].toUpperCase();
+      const lastSeen = u.last_seen
+        ? new Date(u.last_seen * 1000).toLocaleDateString('ru', {day:'numeric', month:'short'})
+        : '';
+      return `<div class="card-row">
+        <div class="avatar vip" style="width:34px;height:34px;font-size:13px">${initial}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.display}</div>
+          <div style="font-size:11px;color:var(--orange);margin-top:1px">${u.handle}${lastSeen ? ' · '+lastSeen : ''}</div>
+        </div>
+        <button onclick="revokeVip('${u.user_id}','${u.handle}')" class="btn-danger">Снять</button>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:8px 0">Ошибка загрузки</div>';
+  }
 }
 
 /* ═══════════════════════════════════════════════
@@ -5026,9 +5206,14 @@ async function loadAnalytics() {
       </div>
 
       <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">📋 Кто добавлял в избранное</div>
-      <div>
+      <div style="margin-bottom:24px">
         ${data.wish_log.length ? data.wish_log.map(r => wishLogRow(r)).join('') : '<div style="color:var(--text3);font-size:13px;padding:8px 0">Нет данных</div>'}
-      </div>`;
+      </div>
+
+      <div style="height:1px;background:var(--border);margin-bottom:16px"></div>
+      <button onclick="clearAllViews()" style="width:100%;padding:11px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:10px;color:var(--red);font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;cursor:pointer">
+        🗑 Обнулить все просмотры
+      </button>`;
   } catch(e) {
     el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--red);font-size:13px">Ошибка загрузки</div>';
     console.error(e);
@@ -5044,16 +5229,16 @@ function analyticsRow(p, rank, type) {
   const imgEl = photoSrc
     ? `<img src="${photoSrc}" style="width:100%;height:100%;object-fit:cover;border-radius:10px"/>`
     : `<span style="font-size:18px">${p.emoji}</span>`;
-  return `<div onclick="showProductStats(${p.product_id},'${type}')" style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer;-webkit-tap-highlight-color:transparent;active:opacity:.6">
-    <div style="width:22px;text-align:center;font-size:11px;font-weight:700;color:var(--text3);flex-shrink:0">${rank}</div>
-    <div style="width:44px;height:44px;border-radius:10px;background:var(--s2);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden">${imgEl}</div>
+  return `<div class="card-row" onclick="showProductStats(${p.product_id},'${type}')">
+    <div style="width:20px;text-align:center;font-size:11px;font-weight:700;color:var(--text3);flex-shrink:0;font-family:'Unbounded',sans-serif">${rank}</div>
+    <div style="width:44px;height:44px;border-radius:10px;background:var(--s2);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;border:1px solid var(--border)">${imgEl}</div>
     <div style="flex:1;min-width:0">
       <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
-      <div style="font-size:11px;color:var(--text3);margin-top:2px">${p.unique_users} чел. · нажмите для деталей</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px">${p.unique_users} чел.</div>
     </div>
-    <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
-      <span style="font-size:12px">${icon}</span>
-      <span style="font-size:14px;font-weight:700;color:${color}">${count}</span>
+    <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:4px 8px">
+      <span style="font-size:11px">${icon}</span>
+      <span style="font-size:13px;font-weight:700;color:${color};font-family:'Unbounded',sans-serif">${count}</span>
     </div>
   </div>`;
 }
@@ -5220,21 +5405,25 @@ function userRow(u) {
     ? new Date(u.last_seen * 1000).toLocaleDateString('ru', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'})
     : '—';
   const initial = (u.display || u.handle || '?')[0].toUpperCase();
+  const vipBadge = u.is_vip ? `<span class="vip-pill">♛ VIP</span>` : '';
   const badges = [
-    u.orders  ? `<span style="background:var(--s3);color:var(--orange);font-size:10px;font-weight:600;padding:2px 6px;border-radius:6px">🛍 ${u.orders}</span>` : '',
-    u.wishes  ? `<span style="background:var(--s3);color:var(--red);font-size:10px;font-weight:600;padding:2px 6px;border-radius:6px">❤️ ${u.wishes}</span>` : '',
-    u.views   ? `<span style="background:var(--s3);color:var(--text2);font-size:10px;font-weight:600;padding:2px 6px;border-radius:6px">👁 ${u.views}</span>` : '',
-  ].filter(Boolean).join(' ');
-  return `<div onclick="showUserDetail(${JSON.stringify(u).replace(/"/g,'&quot;')})" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;-webkit-tap-highlight-color:transparent">
-    <div style="width:38px;height:38px;border-radius:50%;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--text2);flex-shrink:0">${initial}</div>
+    u.orders  ? `<span class="pill" style="color:var(--orange)">🛍 ${u.orders}</span>` : '',
+    u.wishes  ? `<span class="pill" style="color:var(--red)">❤️ ${u.wishes}</span>` : '',
+    u.views   ? `<span class="pill" style="color:var(--text2)">👁 ${u.views}</span>` : '',
+  ].filter(Boolean).join('');
+  return `<div class="card-row" onclick="showUserDetail(${JSON.stringify(u).replace(/"/g,'&quot;')})">
+    <div class="avatar ${u.is_vip ? 'vip' : ''}">${initial}</div>
     <div style="flex:1;min-width:0">
-      <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.display}</div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px">${u.display}</span>
+        ${vipBadge}
+      </div>
       <div style="font-size:11px;color:var(--orange);margin-top:1px">${u.handle}</div>
-      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">${badges}</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px">${badges}</div>
     </div>
     <div style="text-align:right;flex-shrink:0">
-      <div style="font-size:10px;color:var(--text3)">${u.launches}× запусков</div>
-      <div style="font-size:10px;color:var(--text3);margin-top:2px">${lastSeen}</div>
+      <div style="font-size:10px;color:var(--text3);font-weight:500">${u.launches}× запусков</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:3px">${lastSeen}</div>
     </div>
   </div>`;
 }
@@ -5282,6 +5471,14 @@ async function showUserDetail(u) {
           <button id="udtab-wish" onclick="udTab('wish')" style="flex:1;padding:7px;border-radius:9px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border);font-family:'Inter',sans-serif;background:var(--s2);color:var(--text2)">❤️ Избранное</button>
           <button id="udtab-orders" onclick="udTab('orders')" style="flex:1;padding:7px;border-radius:9px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border);font-family:'Inter',sans-serif;background:var(--s2);color:var(--text2)">🛍 Заказы</button>
         </div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <button id="ud-vip-btn" onclick="toggleVip()" style="flex:1;padding:9px;background:linear-gradient(135deg,rgba(245,158,11,.15),rgba(239,68,68,.15));border:1px solid rgba(245,158,11,.4);border-radius:9px;color:#f59e0b;font-family:'Inter',sans-serif;font-size:12px;font-weight:700;cursor:pointer">
+            ♛ VIP
+          </button>
+          <button id="ud-clear-btn" onclick="clearUserViews()" style="flex:1;padding:9px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:9px;color:var(--red);font-family:'Inter',sans-serif;font-size:12px;font-weight:600;cursor:pointer">
+            🗑 Стереть просмотры
+          </button>
+        </div>
         <div id="ud-body">
           <div style="display:flex;justify-content:center;padding:28px 0">
             <div style="width:20px;height:20px;border-radius:50%;border:2px solid var(--border2);border-top-color:#fff;animation:spin .7s linear infinite"></div>
@@ -5290,7 +5487,15 @@ async function showUserDetail(u) {
       </div>
     </div>`;
   popup.addEventListener('click', e => { if (e.target === popup) popup.remove(); });
+  popup._userId = u.user_id;
+  popup._isVip = !!u.is_vip;
   document.body.appendChild(popup);
+  // Update VIP button label
+  const vipBtn = document.getElementById('ud-vip-btn');
+  if (vipBtn) {
+    vipBtn.textContent = u.is_vip ? '♛ Снять VIP' : '♛ Выдать VIP';
+    vipBtn.style.opacity = '1';
+  }
 
   // Load detail data
   try {
@@ -5356,6 +5561,49 @@ function udTab(tab) {
         </div>`).join('')
       : '<div style="color:var(--text3);font-size:13px;padding:16px 0;text-align:center">Заказов нет</div>';
   }
+}
+
+async function clearAllViews() {
+  if (!confirm('Обнулить все просмотры всех товаров? Это действие нельзя отменить.')) return;
+  try {
+    await apiDel('/admin/views');
+    toast('✅ Все просмотры удалены');
+    loadAnalytics();
+  } catch(e) { toast('Ошибка: ' + (e.message || 'неизвестная')); }
+}
+
+async function toggleVip() {
+  const popup = document.getElementById('user-detail-popup');
+  if (!popup || !popup._userId) return;
+  const uid = popup._userId;
+  const wasVip = popup._isVip;
+  const btn = document.getElementById('ud-vip-btn');
+  if (btn) { btn.disabled = true; btn.style.opacity = '.5'; }
+  try {
+    await apiFetch('/admin/users/' + uid + '/vip', { method: 'POST' });
+    popup._isVip = !wasVip;
+    const label = popup._isVip ? '♛ Снять VIP' : '♛ Выдать VIP';
+    if (btn) { btn.textContent = label; btn.disabled = false; btn.style.opacity = '1'; }
+    toast(popup._isVip ? '♛ VIP выдан' : 'VIP снят');
+    // Refresh users list in background
+    loadUsers();
+  } catch(e) {
+    toast('Ошибка: ' + (e.message || 'неизвестная'));
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+  }
+}
+
+async function clearUserViews() {
+  const popup = document.getElementById('user-detail-popup');
+  if (!popup || !popup._userId) return;
+  const uid = popup._userId;
+  if (!confirm('Стереть все просмотры этого пользователя?')) return;
+  try {
+    await apiDel('/admin/views/' + uid);
+    toast('✅ Просмотры пользователя удалены');
+    // Refresh tab
+    if (popup._ud) { popup._ud.viewed = []; udTab('view'); }
+  } catch(e) { toast('Ошибка: ' + (e.message || 'неизвестная')); }
 }
 
 async function bulkPrice(action, inputId) {
@@ -6053,8 +6301,14 @@ try {
 // Жёсткий fallback — скрываем сплэш максимум через 3 секунды в любом случае
 const _splashKill = setTimeout(hideSplash, 3000);
 
-// Трекаем сессию пользователя (fire-and-forget)
-if (TG_USER) apiFetch('/session', { method: 'POST' }).catch(() => {});
+// Трекаем сессию и загружаем VIP-статус
+if (TG_USER) {
+  apiFetch('/session', { method: 'POST' }).catch(() => {});
+  apiFetch('/me').then(d => {
+    IS_VIP = !!d.is_vip;
+    if (IS_VIP) document.body.setAttribute('data-vip','1');
+  }).catch(() => {});
+}
 
 Promise.all([
   loadProducts(),
