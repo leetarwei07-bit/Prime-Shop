@@ -715,8 +715,14 @@ def admin_users(x_init_data: Optional[str] = Header(None)):
     """).fetchall()
     activity_rows = conn.execute("""
         SELECT user_id, event_type, COUNT(*) as cnt
-        FROM user_events GROUP BY user_id, event_type
+        FROM user_events WHERE event_type != 'wish'
+        GROUP BY user_id, event_type
     """).fetchall()
+    # Избранное берём из wishlists (актуально — учитывает удаление)
+    wish_counts = conn.execute("""
+        SELECT user_id, COUNT(*) as cnt FROM wishlists GROUP BY user_id
+    """).fetchall()
+    wish_map = {r["user_id"]: r["cnt"] for r in wish_counts}
     order_rows = conn.execute("""
         SELECT user_id, COUNT(*) as cnt, COALESCE(SUM(total),0) as total
         FROM orders GROUP BY user_id
@@ -743,7 +749,7 @@ def admin_users(x_init_data: Optional[str] = Header(None)):
             "last_seen":  u["last_seen"],
             "launches":   u["launches"],
             "views":      act.get("view", 0),
-            "wishes":     act.get("wish", 0),
+            "wishes":     wish_map.get(uid, 0),
             "purchases":  act.get("purchase", 0),
             "orders":     ord_["cnt"],
             "spent":      ord_["total"] or 0,
@@ -1259,6 +1265,66 @@ def admin_product_stats(product_id: int, x_init_data: Optional[str] = Header(Non
         },
         "viewers": [fmt_user(r["user_id"], r["username"], r["first_name"]) for r in viewers],
         "wishers": [fmt_user(r["user_id"], r["username"], r["first_name"]) for r in wishers],
+    }
+
+@app.get("/admin/user-detail/{user_id}")
+def admin_user_detail(user_id: str, x_init_data: Optional[str] = Header(None)):
+    """Детальная история конкретного пользователя: что смотрел, что в избранном."""
+    require_admin(x_init_data, "orders")
+    conn = get_db()
+
+    import json as _json
+
+    def parse_photo(s):
+        try: arr = _json.loads(s) if s else []; return arr[0] if arr else None
+        except: return None
+
+    # Что смотрел (из user_events)
+    viewed = conn.execute("""
+        SELECT e.product_id, e.created_at,
+               p.name, p.emoji, p.photos
+        FROM user_events e
+        LEFT JOIN products p ON p.id = e.product_id
+        WHERE e.user_id = ? AND e.event_type = 'view'
+        ORDER BY e.created_at DESC
+    """, (user_id,)).fetchall()
+
+    # Что сейчас в избранном (из wishlists — актуально)
+    wished = conn.execute("""
+        SELECT w.product_id, w.created_at,
+               p.name, p.emoji, p.photos
+        FROM wishlists w
+        LEFT JOIN products p ON p.id = w.product_id
+        WHERE w.user_id = ?
+        ORDER BY w.created_at DESC
+    """, (user_id,)).fetchall()
+
+    # Заказы пользователя
+    orders = conn.execute("""
+        SELECT id, total, status, date_str, items
+        FROM orders WHERE user_id = ?
+        ORDER BY created_at DESC
+    """, (user_id,)).fetchall()
+
+    conn.close()
+
+    def prod_item(r):
+        return {
+            "product_id": r["product_id"],
+            "name":       r["name"] or "Удалён",
+            "emoji":      r["emoji"] or "📦",
+            "photo":      parse_photo(r["photos"]),
+            "at":         r["created_at"] or 0,
+        }
+
+    return {
+        "viewed": [prod_item(r) for r in viewed],
+        "wished": [prod_item(r) for r in wished],
+        "orders": [
+            {"id": o["id"], "total": o["total"], "status": o["status"],
+             "date": o["date_str"], "items_count": len(_json.loads(o["items"] or "[]"))}
+            for o in orders
+        ],
     }
 
 # ═══════════════════════════════════════════════
