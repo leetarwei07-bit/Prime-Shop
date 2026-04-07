@@ -1355,6 +1355,21 @@ body {
         <div class="stat-card"><div class="stat-val" id="a-products">0</div><div class="stat-label">Товаров</div></div>
         <div class="stat-card"><div class="stat-val" id="a-active">0</div><div class="stat-label">В обработке</div></div>
       </div>
+      <!-- Топ просмотров -->
+      <div style="margin-top:20px">
+        <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">🔥 Топ просмотров</div>
+        <div id="stats-top-views"><div style="text-align:center;padding:20px 0;color:var(--text3);font-size:12px">Загрузка...</div></div>
+      </div>
+      <!-- Топ избранного -->
+      <div style="margin-top:20px">
+        <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">❤️ Топ избранного</div>
+        <div id="stats-top-wishes"><div style="text-align:center;padding:20px 0;color:var(--text3);font-size:12px">Загрузка...</div></div>
+      </div>
+      <!-- Лог избранного -->
+      <div style="margin-top:20px;margin-bottom:8px">
+        <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">📋 Последние добавления в избранное</div>
+        <div id="stats-wish-log"><div style="text-align:center;padding:20px 0;color:var(--text3);font-size:12px">Загрузка...</div></div>
+      </div>
     </div>
     <!-- ORDERS -->
     <div class="admin-panel" id="panel-orders">
@@ -2101,6 +2116,7 @@ let cart = [];
 
 let currentProduct = null;
 let homeFeedScrollTop = 0; // сохраняем позицию ленты перед открытием карточки
+let openedFromRec = false;  // открыт ли товар из блока «Для вас»
 let selColor = null, selSize = null, selVariation = null, detailQty = 1;
 let sliderIdx = 0, sliderPhotos = [], touchX = 0, touchStartX = 0, touchStartY = 0, touchStartTime = 0;
 
@@ -2237,11 +2253,25 @@ async function loadAllOrders() {
 ═══════════════════════════════════════════════ */
 function navigate(id, btn) {
   if (id === 'admin' && !isAdmin()) { toast('Доступ запрещён'); return; }
-  // Если уже на главной и нажали кнопку Главная — только scroll to top, без перерендера
+  // Если уже на главной — анимация + перемешать ленту + scroll to top
   const alreadyHome = id === 'home' && document.getElementById('page-home').classList.contains('active');
   if (alreadyHome) {
+    const grid = document.getElementById('home-grid');
     const scroll = document.getElementById('home-scroll');
-    if (scroll) scroll.scrollTo({ top: 0, behavior: 'smooth' });
+    // Fade-out
+    if (grid) { grid.style.transition = 'opacity .18s ease'; grid.style.opacity = '0'; }
+    setTimeout(() => {
+      // Scroll top мгновенно пока невидимо
+      if (scroll) scroll.scrollTop = 0;
+      // Перемешиваем ленту
+      renderHome(true);
+      loadRecommendations(lastViewedProduct);
+      // Fade-in
+      requestAnimationFrame(() => {
+        if (grid) { grid.style.opacity = '1'; }
+        setTimeout(() => { if (grid) grid.style.transition = ''; }, 220);
+      });
+    }, 190);
     return;
   }
   // close product if open
@@ -2357,7 +2387,7 @@ function statusPill(s) {
 /* ═══════════════════════════════════════════════
    PRODUCT CARDS
 ═══════════════════════════════════════════════ */
-function cardHTML(p, idx = 0) {
+function cardHTML(p, idx = 0, fromRec = false) {
   const disc = (p.old && p.old > p.price) ? Math.round((1 - p.price/p.old)*100) : 0;
   const photo = p.photos && p.photos.length ? p.photos[0] : null;
 
@@ -2378,7 +2408,7 @@ function cardHTML(p, idx = 0) {
     ? `<img src="${photo}" loading="${idx < 4 ? 'eager' : 'lazy'}" fetchpriority="${idx < 2 ? 'high' : 'auto'}" alt="${p.name}" onload="this.classList.add('img-loaded')" onerror="this.style.display='none'">`
     : `<span>${p.emoji||'📦'}</span>`;
 
-  return `<div class="prod-card" onclick="openProduct(${p.id})" style="animation-delay:${delay}s">
+  return `<div class="prod-card" onclick="openProduct(${p.id},${fromRec})" style="animation-delay:${delay}s">
     <div class="prod-img">
       ${imgHtml}
       ${p.isPreorder ? `<div class="prod-preorder-badge">Под заказ</div>` : ''}
@@ -2629,9 +2659,10 @@ function filterWish() {
 /* ═══════════════════════════════════════════════
    PRODUCT DETAIL
 ═══════════════════════════════════════════════ */
-function openProduct(id) {
+function openProduct(id, fromRec = false) {
   const p = PRODUCTS.find(x => x.id === id);
   if (!p) return;
+  openedFromRec = !!fromRec;
   // Запоминаем позицию ленты чтобы восстановить при закрытии
   const homeScroll = document.getElementById('home-scroll');
   if (homeScroll) homeFeedScrollTop = homeScroll.scrollTop;
@@ -2757,21 +2788,28 @@ function closeProduct() {
     if (wishSearch) wishSearch.style.display = 'block';
   }
 
-  // Обновляем рекомендации, затем восстанавливаем позицию ленты
   const viewed = currentProduct;
+  const wasFromRec = openedFromRec;
   currentProduct = null;
+  openedFromRec = false;
+
+  if (wasFromRec) {
+    // Открыт из «Для вас» — ничего не обновляем, позицию не трогаем
+    if (viewed) lastViewedProduct = viewed;
+    return;
+  }
+
+  // Открыт из обычной ленты — рефреш + scroll to top
   if (viewed) {
     lastViewedProduct = viewed;
     loadRecommendations(viewed);
   } else {
     loadRecommendations(lastViewedProduct);
   }
-  // Восстанавливаем позицию скролла ленты
+  // Скролл наверх после рендера
   requestAnimationFrame(() => {
     const homeScroll = document.getElementById('home-scroll');
-    if (homeScroll && homeFeedScrollTop > 0) {
-      homeScroll.scrollTop = homeFeedScrollTop;
-    }
+    if (homeScroll) homeScroll.scrollTo({ top: 0, behavior: 'smooth' });
   });
 }
 
@@ -3755,6 +3793,72 @@ function renderAdminStats() {
   document.getElementById('a-revenue').textContent = fmtK(rev);
   document.getElementById('a-products').textContent = PRODUCTS.length;
   document.getElementById('a-active').textContent = act;
+  loadProductEvents();
+}
+
+async function loadProductEvents() {
+  const elViews  = document.getElementById('stats-top-views');
+  const elWishes = document.getElementById('stats-top-wishes');
+  const elLog    = document.getElementById('stats-wish-log');
+  if (!elViews || !elWishes || !elLog) return;
+
+  try {
+    const data = await apiFetch('/admin/product-events?limit=15');
+
+    // Топ просмотров
+    if (!data.top_views.length) {
+      elViews.innerHTML = '<div style="text-align:center;padding:16px 0;color:var(--text3);font-size:12px">Нет данных</div>';
+    } else {
+      elViews.innerHTML = data.top_views.map((r, i) => `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;color:var(--text3);width:18px;text-align:right">${i+1}</div>
+          <div style="font-size:18px;width:28px;text-align:center">${r.emoji}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.name}</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:1px">${r.unique_users} польз.</div>
+          </div>
+          <div style="font-size:13px;font-weight:700;color:var(--orange)">${r.views} <span style="font-size:10px;font-weight:400;color:var(--text3)">просм.</span></div>
+        </div>`).join('');
+    }
+
+    // Топ избранного
+    if (!data.top_wishes.length) {
+      elWishes.innerHTML = '<div style="text-align:center;padding:16px 0;color:var(--text3);font-size:12px">Нет данных</div>';
+    } else {
+      elWishes.innerHTML = data.top_wishes.map((r, i) => `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;color:var(--text3);width:18px;text-align:right">${i+1}</div>
+          <div style="font-size:18px;width:28px;text-align:center">${r.emoji}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.name}</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:1px">${r.unique_users} польз.</div>
+          </div>
+          <div style="font-size:13px;font-weight:700;color:#e879a0">${r.wishes} <span style="font-size:10px;font-weight:400;color:var(--text3)">❤️</span></div>
+        </div>`).join('');
+    }
+
+    // Лог добавлений в избранное
+    if (!data.wish_log.length) {
+      elLog.innerHTML = '<div style="text-align:center;padding:16px 0;color:var(--text3);font-size:12px">Нет данных</div>';
+    } else {
+      elLog.innerHTML = data.wish_log.map(r => {
+        const dt = r.at ? new Date(r.at * 1000).toLocaleString('ru', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+        return `
+        <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
+          <div style="font-size:16px;width:24px;text-align:center">${r.emoji}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.product_name}</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:1px">@${r.user_id}</div>
+          </div>
+          <div style="font-size:10px;color:var(--text3);white-space:nowrap">${dt}</div>
+        </div>`;
+      }).join('');
+    }
+
+  } catch(e) {
+    const msg = '<div style="text-align:center;padding:12px 0;color:var(--text3);font-size:12px">Ошибка загрузки</div>';
+    elViews.innerHTML = msg; elWishes.innerHTML = msg; elLog.innerHTML = msg;
+  }
 }
 
 function renderAdminOrders() {
@@ -4635,7 +4739,7 @@ function loadRecommendations(lastViewed = null) {
     const allLabel = document.getElementById('home-section-label-all');
     if (allLabel) allLabel.style.display = 'block';
 
-    grid.innerHTML = recs.map((x, i) => cardHTML(x.product, i)).join('');
+    grid.innerHTML = recs.map((x, i) => cardHTML(x.product, i, true)).join('');
 
     // Лента: остальные товары по убыванию релевантности
     const inRecs = new Set(recs.map(x => x.product.id));
