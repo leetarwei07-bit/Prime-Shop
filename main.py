@@ -798,44 +798,58 @@ def update_product(pid: int, body: ProductUpdate, x_init_data: Optional[str] = H
     return row_to_product(row, include_links=True)
 
 class BulkPriceBody(BaseModel):
-    action: str    # "increase" | "decrease" | "discount"
-    amount: float  # сум для increase/decrease, процент (1-99) для discount
+    action: str    # "increase" | "decrease" | "discount" | "clear_discounts"
+    amount: float  # сум для increase/decrease, процент (1-99) для discount, 0 для clear_discounts
 
 @app.post("/products/bulk-price")
 def bulk_price(body: BulkPriceBody, x_init_data: Optional[str] = Header(None)):
     """
     Массовое изменение цен:
-    - increase : price += amount
-    - decrease : price -= amount (минимум 1)
-    - discount : old_price = price, price = round(price * (1 - amount/100)), is_sale = 1
-                 Пример: amount=20 → скидка 20%
+    - increase        : price += amount
+    - decrease        : price -= amount (минимум 1)
+    - discount        : old_price = price, price = round(price * (1 - amount/100)), is_sale = 1
+    - clear_discounts : price = old_price, old_price = NULL, is_sale = 0
     """
     user = require_admin(x_init_data, "products")
-    if body.action not in ("increase", "decrease", "discount"):
+    if body.action not in ("increase", "decrease", "discount", "clear_discounts"):
         raise HTTPException(400, "Invalid action")
-    if body.amount <= 0:
-        raise HTTPException(400, "amount must be > 0")
-    if body.action == "discount" and body.amount >= 100:
-        raise HTTPException(400, "discount percent must be < 100")
+    if body.action != "clear_discounts":
+        if body.amount <= 0:
+            raise HTTPException(400, "amount must be > 0")
+        if body.action == "discount" and body.amount >= 100:
+            raise HTTPException(400, "discount percent must be < 100")
 
     conn = get_db()
-    rows = conn.execute("SELECT id, price FROM products").fetchall()
     updated = 0
-    for row in rows:
-        pid_  = row["id"]
-        price = row["price"]
-        if body.action == "increase":
-            conn.execute("UPDATE products SET price=? WHERE id=?", (price + int(body.amount), pid_))
-        elif body.action == "decrease":
-            conn.execute("UPDATE products SET price=? WHERE id=?", (max(1, price - int(body.amount)), pid_))
-        elif body.action == "discount":
-            new_price = max(1, round(price * (1 - body.amount / 100)))
-            if new_price < price:
-                conn.execute(
-                    "UPDATE products SET old_price=?, price=?, is_sale=1 WHERE id=?",
-                    (price, new_price, pid_)
-                )
-        updated += 1
+
+    if body.action == "clear_discounts":
+        rows = conn.execute(
+            "SELECT id, old_price FROM products WHERE old_price IS NOT NULL AND old_price > 0"
+        ).fetchall()
+        for row in rows:
+            conn.execute(
+                "UPDATE products SET price=?, old_price=NULL, is_sale=0 WHERE id=?",
+                (row["old_price"], row["id"])
+            )
+            updated += 1
+    else:
+        rows = conn.execute("SELECT id, price FROM products").fetchall()
+        for row in rows:
+            pid_  = row["id"]
+            price = row["price"]
+            if body.action == "increase":
+                conn.execute("UPDATE products SET price=? WHERE id=?", (price + int(body.amount), pid_))
+            elif body.action == "decrease":
+                conn.execute("UPDATE products SET price=? WHERE id=?", (max(1, price - int(body.amount)), pid_))
+            elif body.action == "discount":
+                new_price = max(1, round(price * (1 - body.amount / 100)))
+                if new_price < price:
+                    conn.execute(
+                        "UPDATE products SET old_price=?, price=?, is_sale=1 WHERE id=?",
+                        (price, new_price, pid_)
+                    )
+            updated += 1
+
     conn.commit()
     conn.close()
     log_action(user["username"], f"bulk_price_{body.action}", f"amount={body.amount}, products={updated}")
