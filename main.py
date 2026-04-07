@@ -225,6 +225,23 @@ def init_db():
     if 'first_name' not in wish_cols:
         conn.execute("ALTER TABLE wishlists ADD COLUMN first_name TEXT NOT NULL DEFAULT ''")
 
+    # User sessions — кто и когда запускал приложение
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_sessions (
+            user_id    TEXT    PRIMARY KEY,
+            username   TEXT    NOT NULL DEFAULT '',
+            first_name TEXT    NOT NULL DEFAULT '',
+            last_name  TEXT    NOT NULL DEFAULT '',
+            first_seen INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+            last_seen  INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+            launches   INTEGER NOT NULL DEFAULT 1
+        )
+    """)
+    # Migrate: add launches column if missing
+    ses_cols = [r[1] for r in conn.execute("PRAGMA table_info(user_sessions)").fetchall()]
+    if ses_cols and 'launches' not in ses_cols:
+        conn.execute("ALTER TABLE user_sessions ADD COLUMN launches INTEGER NOT NULL DEFAULT 1")
+
     # Payments table
     conn.execute("""
         CREATE TABLE IF NOT EXISTS payments (
@@ -659,6 +676,79 @@ def root(): return {"status": "ok", "version": "2.0"}
 
 @app.get("/health")
 def health(): return {"status": "ok", "ts": int(time.time())}
+
+@app.post("/session", status_code=204)
+def track_session(x_init_data: Optional[str] = Header(None)):
+    """Записывает запуск приложения пользователем."""
+    user = get_user(x_init_data)
+    if not user:
+        return
+    uid        = str(user["id"])
+    username   = user.get("username")   or ""
+    first_name = user.get("first_name") or ""
+    last_name  = user.get("last_name")  or ""
+    conn = get_db()
+    existing = conn.execute("SELECT launches FROM user_sessions WHERE user_id=?", (uid,)).fetchone()
+    if existing:
+        conn.execute("""
+            UPDATE user_sessions
+            SET username=?, first_name=?, last_name=?, last_seen=strftime('%s','now'),
+                launches=launches+1
+            WHERE user_id=?
+        """, (username, first_name, last_name, uid))
+    else:
+        conn.execute("""
+            INSERT INTO user_sessions (user_id, username, first_name, last_name)
+            VALUES (?,?,?,?)
+        """, (uid, username, first_name, last_name))
+    conn.commit(); conn.close()
+
+@app.get("/admin/users")
+def admin_users(x_init_data: Optional[str] = Header(None)):
+    """Список всех пользователей и их активность. Только для админов."""
+    require_admin(x_init_data, "orders")
+    conn = get_db()
+    users = conn.execute("""
+        SELECT user_id, username, first_name, last_name,
+               first_seen, last_seen, launches
+        FROM user_sessions ORDER BY last_seen DESC
+    """).fetchall()
+    activity_rows = conn.execute("""
+        SELECT user_id, event_type, COUNT(*) as cnt
+        FROM user_events GROUP BY user_id, event_type
+    """).fetchall()
+    order_rows = conn.execute("""
+        SELECT user_id, COUNT(*) as cnt, COALESCE(SUM(total),0) as total
+        FROM orders GROUP BY user_id
+    """).fetchall()
+    conn.close()
+    act_map = {}
+    for r in activity_rows:
+        act_map.setdefault(r["user_id"], {})[r["event_type"]] = r["cnt"]
+    ord_map = {r["user_id"]: {"cnt": r["cnt"], "total": r["total"]} for r in order_rows}
+    result = []
+    for u in users:
+        uid = u["user_id"]
+        act = act_map.get(uid, {})
+        ord_ = ord_map.get(uid, {"cnt": 0, "total": 0})
+        fname = u["first_name"] or ""
+        lname = u["last_name"]  or ""
+        uname = u["username"]   or ""
+        result.append({
+            "user_id":    uid,
+            "username":   uname,
+            "display":    " ".join(filter(None, [fname, lname])) or uname or "id"+uid,
+            "handle":     ("@"+uname) if uname else ("id"+uid),
+            "first_seen": u["first_seen"],
+            "last_seen":  u["last_seen"],
+            "launches":   u["launches"],
+            "views":      act.get("view", 0),
+            "wishes":     act.get("wish", 0),
+            "purchases":  act.get("purchase", 0),
+            "orders":     ord_["cnt"],
+            "spent":      ord_["total"] or 0,
+        })
+    return {"users": result}
 
 # ═══════════════════════════════════════════════
 # ROUTES — BRANDS
@@ -1109,6 +1199,66 @@ def admin_product_events(x_init_data: Optional[str] = Header(None), limit: int =
              "at": r["created_at"] or 0}
             for r in wish_log
         ],
+    }
+
+@app.get("/admin/product-stats/{product_id}")
+def admin_product_stats(product_id: int, x_init_data: Optional[str] = Header(None)):
+    """
+    Детальная статистика по конкретному товару:
+    список кто смотрел и кто добавил в избранное.
+    """
+    require_admin(x_init_data, "orders")
+    conn = get_db()
+
+    # Товар
+    prod = conn.execute("SELECT * FROM products WHERE id=?", (product_id,)).fetchone()
+
+    # Кто смотрел — джойним с orders чтобы получить username/first_name
+    viewers = conn.execute("""
+        SELECT e.user_id, e.created_at,
+               COALESCE(o.username, '') as username,
+               COALESCE(o.recipient, '') as first_name
+        FROM user_events e
+        LEFT JOIN (
+            SELECT user_id, username, recipient,
+                   ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) as rn
+            FROM orders
+        ) o ON o.user_id = e.user_id AND o.rn = 1
+        WHERE e.event_type = 'view' AND e.product_id = ?
+        ORDER BY e.created_at DESC
+    """, (product_id,)).fetchall()
+
+    # Кто в избранном (из wishlists — актуально)
+    wishers = conn.execute("""
+        SELECT user_id, username, first_name, created_at
+        FROM wishlists
+        WHERE product_id = ?
+        ORDER BY created_at DESC
+    """, (product_id,)).fetchall()
+
+    conn.close()
+
+    import json as _json
+    photos = []
+    if prod:
+        try: photos = _json.loads(prod["photos"]) if prod["photos"] else []
+        except: pass
+
+    def fmt_user(user_id, username, first_name):
+        uname = (username or "").strip()
+        fname = (first_name or "").strip()
+        handle = ('@' + uname) if uname else ('id' + str(user_id))
+        return {"user_id": user_id, "username": uname, "first_name": fname, "handle": handle}
+
+    return {
+        "product": {
+            "id": product_id,
+            "name": prod["name"] if prod else "Удалён",
+            "emoji": (prod["emoji"] if prod else "📦") or "📦",
+            "photo": photos[0] if photos else None,
+        },
+        "viewers": [fmt_user(r["user_id"], r["username"], r["first_name"]) for r in viewers],
+        "wishers": [fmt_user(r["user_id"], r["username"], r["first_name"]) for r in wishers],
     }
 
 # ═══════════════════════════════════════════════
