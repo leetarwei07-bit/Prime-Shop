@@ -66,6 +66,8 @@ body {
   transition:opacity .5s ease,transform .5s ease;
 }
 #splash.hide { opacity:0;transform:scale(1.04);pointer-events:none }
+#splash { animation:splashAutohide 1.5s linear 1.5s both }
+@keyframes splashAutohide { to { opacity:0; pointer-events:none } }
 .splash-logo {
   font-family:'Unbounded',sans-serif;font-size:28px;font-weight:700;letter-spacing:12px;
   animation:pulse 1.6s ease-in-out infinite alternate;
@@ -2288,7 +2290,7 @@ async function apiFetch(path, opts = {}) {
   }
   // Таймаут 10 секунд — если API не отвечает, не висим вечно
   const controller = new AbortController();
-  const tid = setTimeout(() => controller.abort(), 10000);
+  const tid = setTimeout(() => controller.abort(), 6000);
   try {
     const r = await fetch(API + path, { ...opts, headers, signal: controller.signal });
     clearTimeout(tid);
@@ -2314,11 +2316,19 @@ const apiDel = (path) => apiFetch(path, { method:'DELETE' });
 ═══════════════════════════════════════════════ */
 function hideSplash() {
   const s = document.getElementById('splash');
-  if (!s) return; // уже удалён
-  if (s._hidden) return; // уже скрывается
+  if (!s) return;
+  if (s._hidden) return;
   s._hidden = true;
-  s.classList.add('hide');
-  setTimeout(() => { if (s.parentNode) s.parentNode.removeChild(s); }, 540);
+  if (hideSplash._cleanup) hideSplash._cleanup();
+  s.style.animation = 'none'; // cancel CSS auto-hide, do it via JS
+  s.style.opacity = '0';
+  s.style.transform = 'scale(1.04)';
+  s.style.pointerEvents = 'none';
+  s.style.transition = 'opacity .4s ease, transform .4s ease';
+  setTimeout(() => {
+    s.style.display = 'none';
+    if (s.parentNode) s.parentNode.removeChild(s);
+  }, 420);
 }
 
 async function loadProducts() {
@@ -6298,28 +6308,43 @@ try {
   }
 } catch(e) {}
 
-// Жёсткий fallback — скрываем сплэш максимум через 3 секунды в любом случае
-const _splashKill = setTimeout(hideSplash, 3000);
+// Жёсткий fallback — скрываем сплэш максимум через 1.5 секунды в любом случае
+const _splashKill = setTimeout(hideSplash, 800);
+// Показываем кнопку повтора если сервер не отвечает за 5 секунд (cold start)
+const _splashRetry = setTimeout(() => {
+  const splash = document.getElementById('splash');
+  if (!splash || splash._hidden) return;
+  const existing = document.getElementById('splash-retry');
+  if (existing) return;
+  const btn = document.createElement('button');
+  btn.id = 'splash-retry';
+  btn.textContent = 'Обновить';
+  btn.style.cssText = 'margin-top:8px;padding:8px 24px;background:none;border:1px solid rgba(255,255,255,.2);border-radius:20px;color:rgba(255,255,255,.5);font-family:Inter,sans-serif;font-size:12px;cursor:pointer;letter-spacing:.5px';
+  btn.onclick = () => location.reload();
+  splash.appendChild(btn);
+}, 5000);
+hideSplash._cleanup = () => { clearTimeout(_splashRetry); };
 
-// Трекаем сессию и загружаем VIP-статус
+// Трекаем сессию и загружаем VIP-статус (fire-and-forget)
 if (TG_USER) {
   apiFetch('/session', { method: 'POST' }).catch(() => {});
   apiFetch('/me').then(d => {
     IS_VIP = !!d.is_vip;
     if (IS_VIP) document.body.setAttribute('data-vip','1');
+    renderProfile();
   }).catch(() => {});
 }
 
-Promise.all([
-  loadProducts(),
-  loadMyOrders(),
-  loadAdmins(),
-  checkPendingOrder(),
-  loadDescTemplates(),
-]).finally(() => {
+// Только loadProducts() блокирует сплэш — остальное грузим параллельно в фоне
+loadProducts().finally(() => {
   clearTimeout(_splashKill);
   hideSplash();
 });
+// Фоновые загрузки — не блокируют сплэш
+loadMyOrders();
+loadAdmins();
+checkPendingOrder();
+loadDescTemplates();
 </script>
 </body>
 </html>
