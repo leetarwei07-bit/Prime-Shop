@@ -2201,6 +2201,7 @@ async function loadProducts() {
     hideSplash(); // скрываем сплэш как только товары готовы
     loadBrands();
     loadRecommendations();
+    loadWishlist();
     // Грузим ссылки отдельно (только для админов, бэкенд проверяет роль)
     loadProductLinks();
   } catch(e) {
@@ -2208,6 +2209,24 @@ async function loadProducts() {
     hideSplash();
     toast('Ошибка загрузки каталога ⚠️');
   }
+}
+
+async function loadWishlist() {
+  if (!TG_USER) return;
+  try {
+    const data = await apiFetch('/wishlist');
+    wishlist.clear();
+    (data.ids || []).forEach(id => wishlist.add(id));
+    updateStats();
+    // Refresh heart buttons in feed
+    document.querySelectorAll('.prod-heart').forEach(btn => {
+      const card = btn.closest('[onclick]');
+      if (!card) return;
+      const m = (card.getAttribute('onclick')||'').match(/openProduct\((\d+)/);
+      if (m) btn.classList.toggle('liked', wishlist.has(+m[1]));
+    });
+    if (document.getElementById('page-wishlist')?.classList.contains('active')) filterWish();
+  } catch(e) { console.error('[wishlist] load error:', e); }
 }
 
 async function loadProductLinks() {
@@ -2645,10 +2664,11 @@ function toggleWish(e, id) {
   if (wishlist.has(id)) {
     wishlist.delete(id); btn.classList.remove('liked');
     toast('Убрано из избранного');
+    if (TG_USER) apiDel('/wishlist/' + id).catch(() => {});
   } else {
     wishlist.add(id); btn.classList.add('liked');
     toast('Добавлено в избранное ❤️');
-    trackWish(id);
+    if (TG_USER) apiPost('/wishlist/' + id).catch(() => {});
   }
   updateStats();
   if (document.getElementById('page-wishlist').classList.contains('active')) filterWish();
@@ -2873,8 +2893,13 @@ function toggleDetailWish() {
   if (!currentProduct) return;
   const id = currentProduct.id;
   const btn = document.getElementById('detail-wish');
-  if (wishlist.has(id)) { wishlist.delete(id); btn.classList.remove('liked'); }
-  else { wishlist.add(id); btn.classList.add('liked'); toast('Добавлено ❤️'); }
+  if (wishlist.has(id)) {
+    wishlist.delete(id); btn.classList.remove('liked');
+    if (TG_USER) apiDel('/wishlist/' + id).catch(() => {});
+  } else {
+    wishlist.add(id); btn.classList.add('liked'); toast('Добавлено ❤️');
+    if (TG_USER) apiPost('/wishlist/' + id).catch(() => {});
+  }
   updateStats();
 }
 
