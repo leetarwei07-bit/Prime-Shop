@@ -1108,14 +1108,13 @@ body {
   <div id="ptr-indicator" style="
     display:flex;align-items:center;justify-content:center;
     height:0;overflow:hidden;
-    transition:height .2s ease;
-    background:var(--bg);
+    transition:height .25s cubic-bezier(.32,.72,0,1);
+    background:var(--bg);will-change:height;
   ">
     <div id="ptr-spinner" style="
       width:22px;height:22px;border-radius:50%;
       border:2px solid var(--border2);border-top-color:#fff;
-      animation:spin .7s linear infinite;opacity:0;
-      transition:opacity .2s;
+      opacity:0;transition:opacity .2s;will-change:transform,opacity;
     "></div>
   </div>
   <div class="scroll" id="home-scroll" style="padding-top:calc(44px + var(--safe-t))">
@@ -5364,90 +5363,93 @@ function toast(msg) {
    PULL-TO-REFRESH + RUBBER BAND
 ═══════════════════════════════════════════════ */
 (function() {
-  const TRIGGER = 80;   // px to pull before refresh triggers
-  const MAX     = 110;  // max rubber band stretch px
+  const TRIGGER = 72;   // px to pull before refresh triggers
+  const MAX     = 100;  // max rubber band stretch px
 
-  let startY = 0, pulling = false, triggered = false;
+  let startY = 0, pulling = false, triggered = false, refreshing = false;
 
-  function getHomeScroll() {
-    return document.getElementById('home-scroll');
+  function getHomeScroll() { return document.getElementById('home-scroll'); }
+  function getPTR()        { return document.getElementById('ptr-indicator'); }
+  function getSpinner()    { return document.getElementById('ptr-spinner'); }
+
+  function setPtr(h, instant) {
+    const ptr = getPTR();
+    if (!ptr) return;
+    if (instant) ptr.style.transition = 'none';
+    else ptr.style.transition = 'height .28s cubic-bezier(.32,.72,0,1)';
+    ptr.style.height = h + 'px';
   }
 
-  function getPTR() {
-    return document.getElementById('ptr-indicator');
-  }
-
-  function getSpinner() {
-    return document.getElementById('ptr-spinner');
+  function resetPtr() {
+    const spinner = getSpinner();
+    setPtr(0, false);
+    setTimeout(() => {
+      if (spinner) { spinner.style.opacity = '0'; spinner.style.animation = ''; spinner.style.transform = 'rotate(0deg)'; }
+      refreshing = false;
+    }, 320);
   }
 
   document.addEventListener('touchstart', (e) => {
+    if (refreshing) return;
     const scroll = getHomeScroll();
-    if (!scroll || !scroll.closest('.page.active')) return;
+    if (!scroll || !document.getElementById('page-home')?.classList.contains('active')) return;
     if (!e.target.closest('#home-scroll')) return;
-    if (scroll.scrollTop > 0) return; // only pull when at top
+    if (scroll.scrollTop > 0) return;
     startY = e.touches[0].clientY;
     pulling = true;
     triggered = false;
   }, { passive: true });
 
   document.addEventListener('touchmove', (e) => {
-    if (!pulling) return;
+    if (!pulling || refreshing) return;
     const scroll = getHomeScroll();
     if (!scroll || scroll.scrollTop > 0) { pulling = false; return; }
 
     const dy = e.touches[0].clientY - startY;
-    if (dy <= 0) return;
+    if (dy <= 0) { setPtr(0, true); return; }
 
-    // Rubber band: slow down resistance as we pull further
-    const resistance = 0.4;
-    const pull = Math.min(dy * resistance, MAX);
-    const ptr = getPTR();
+    // Progressive resistance: feels heavy near MAX
+    const pull = Math.min(MAX * (1 - Math.exp(-dy / (MAX * 2.5))), MAX);
     const spinner = getSpinner();
 
-    if (ptr) ptr.style.height = pull + 'px';
+    setPtr(pull, true);
 
-    // Spinner appears + rotates as pull increases
     if (spinner) {
       const progress = Math.min(pull / TRIGGER, 1);
       spinner.style.opacity = String(progress);
-      spinner.style.transform = `rotate(${progress * 180}deg)`;
+      spinner.style.transform = `rotate(${Math.round(progress * 210)}deg)`;
+      spinner.style.animation = '';
     }
 
-    // Haptic when threshold reached
     if (pull >= TRIGGER && !triggered) {
       triggered = true;
-      if (window.Telegram?.WebApp?.HapticFeedback) {
-        window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
-      }
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
     }
   }, { passive: true });
 
   document.addEventListener('touchend', () => {
     if (!pulling) return;
     pulling = false;
+    if (refreshing) return;
 
-    const ptr = getPTR();
     const spinner = getSpinner();
 
     if (triggered) {
-      // Show loading state
-      if (ptr) ptr.style.height = '48px';
+      refreshing = true;
+      // Snap to 48px loading state
+      setPtr(48, false);
       if (spinner) {
         spinner.style.opacity = '1';
+        spinner.style.transform = 'rotate(0deg)';
         spinner.style.animation = 'spin .7s linear infinite';
       }
-      // Refresh
-      Promise.all([loadProducts(), loadAdmins()]).finally(() => {
-        setTimeout(() => {
-          if (ptr) ptr.style.height = '0';
-          if (spinner) spinner.style.opacity = '0';
-        }, 400);
+      // Only reload products — no second loader
+      loadProducts().finally(() => {
+        setTimeout(resetPtr, 300);
       });
     } else {
-      // Spring back
-      if (ptr) ptr.style.height = '0';
-      if (spinner) spinner.style.opacity = '0';
+      setPtr(0, false);
+      if (spinner) { spinner.style.opacity = '0'; spinner.style.transform = 'rotate(0deg)'; }
     }
   });
 
