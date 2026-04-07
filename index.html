@@ -1323,7 +1323,20 @@ body {
     </button>
     <div class="page-title">Мои заказы</div>
   </div>
-  <div class="scroll"><div id="orders-list" style="padding:0 0 20px"></div></div>
+  <!-- Pull-to-refresh indicator -->
+  <div id="orders-ptr-indicator" style="
+    display:flex;align-items:center;justify-content:center;
+    height:0;overflow:hidden;
+    transition:height .2s ease;
+    background:var(--bg);
+  ">
+    <div id="orders-ptr-spinner" style="
+      width:22px;height:22px;border-radius:50%;
+      border:2px solid var(--border2);border-top-color:#fff;
+      opacity:0;transition:opacity .2s;
+    "></div>
+  </div>
+  <div class="scroll" id="orders-scroll"><div id="orders-list" style="padding:0 0 20px"></div></div>
 </div>
 
 <!-- ADMIN -->
@@ -2799,18 +2812,23 @@ function closeProduct() {
     return;
   }
 
-  // Открыт из обычной ленты — рефреш + scroll to top
-  if (viewed) {
-    lastViewedProduct = viewed;
-    loadRecommendations(viewed);
-  } else {
-    loadRecommendations(lastViewedProduct);
-  }
-  // Скролл наверх после рендера
-  requestAnimationFrame(() => {
-    const homeScroll = document.getElementById('home-scroll');
-    if (homeScroll) homeScroll.scrollTo({ top: 0, behavior: 'smooth' });
-  });
+  // Открыт из обычной ленты — fade-out → scroll top + рефреш → fade-in
+  const grid = document.getElementById('home-grid');
+  const homeScroll = document.getElementById('home-scroll');
+  if (grid) { grid.style.transition = 'opacity .18s ease'; grid.style.opacity = '0'; }
+  setTimeout(() => {
+    if (homeScroll) homeScroll.scrollTop = 0;
+    if (viewed) {
+      lastViewedProduct = viewed;
+      loadRecommendations(viewed);
+    } else {
+      loadRecommendations(lastViewedProduct);
+    }
+    requestAnimationFrame(() => {
+      if (grid) { grid.style.opacity = '1'; }
+      setTimeout(() => { if (grid) grid.style.transition = ''; }, 220);
+    });
+  }, 190);
 }
 
 function searchByTag(type, value) {
@@ -5440,6 +5458,73 @@ function toast(msg) {
     if (scroll) lastScrollTop = scroll.scrollTop;
   }, { passive: true });
 
+})();
+
+/* ═══════════════════════════════════════════════
+   PULL-TO-REFRESH — МОИ ЗАКАЗЫ
+═══════════════════════════════════════════════ */
+(function() {
+  const TRIGGER = 80;
+  const MAX     = 110;
+  let startY = 0, pulling = false, triggered = false;
+
+  function getScroll()   { return document.getElementById('orders-scroll'); }
+  function getPtr()      { return document.getElementById('orders-ptr-indicator'); }
+  function getSpinner()  { return document.getElementById('orders-ptr-spinner'); }
+  function isOrdersActive() {
+    return document.getElementById('page-orders')?.classList.contains('active');
+  }
+
+  document.addEventListener('touchstart', (e) => {
+    if (!isOrdersActive()) return;
+    const scroll = getScroll();
+    if (!scroll || !e.target.closest('#orders-scroll')) return;
+    if (scroll.scrollTop > 0) return;
+    startY = e.touches[0].clientY;
+    pulling = true;
+    triggered = false;
+  }, { passive: true });
+
+  document.addEventListener('touchmove', (e) => {
+    if (!pulling) return;
+    const scroll = getScroll();
+    if (!scroll || scroll.scrollTop > 0) { pulling = false; return; }
+    const dy = e.touches[0].clientY - startY;
+    if (dy <= 0) return;
+    const pull = Math.min(dy * 0.4, MAX);
+    const ptr = getPtr();
+    const spinner = getSpinner();
+    if (ptr) ptr.style.height = pull + 'px';
+    if (spinner) {
+      const progress = Math.min(pull / TRIGGER, 1);
+      spinner.style.opacity = String(progress);
+      spinner.style.transform = `rotate(${progress * 180}deg)`;
+    }
+    if (pull >= TRIGGER && !triggered) {
+      triggered = true;
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchend', () => {
+    if (!pulling) return;
+    pulling = false;
+    const ptr = getPtr();
+    const spinner = getSpinner();
+    if (triggered) {
+      if (ptr) ptr.style.height = '48px';
+      if (spinner) { spinner.style.opacity = '1'; spinner.style.animation = 'spin .7s linear infinite'; }
+      loadMyOrders().finally(() => {
+        setTimeout(() => {
+          if (ptr) ptr.style.height = '0';
+          if (spinner) { spinner.style.opacity = '0'; spinner.style.animation = ''; }
+        }, 400);
+      });
+    } else {
+      if (ptr) ptr.style.height = '0';
+      if (spinner) spinner.style.opacity = '0';
+    }
+  });
 })();
 
 /* ═══════════════════════════════════════════════
