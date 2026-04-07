@@ -1001,7 +1001,7 @@ def admin_product_events(x_init_data: Optional[str] = Header(None), limit: int =
 
     # Топ просмотров
     views = conn.execute("""
-        SELECT e.product_id, p.name, p.emoji,
+        SELECT e.product_id, p.name, p.emoji, p.photos,
                COUNT(*) as cnt,
                COUNT(DISTINCT e.user_id) as unique_users
         FROM user_events e
@@ -1014,7 +1014,7 @@ def admin_product_events(x_init_data: Optional[str] = Header(None), limit: int =
 
     # Топ избранного
     wishes = conn.execute("""
-        SELECT e.product_id, p.name, p.emoji,
+        SELECT e.product_id, p.name, p.emoji, p.photos,
                COUNT(*) as cnt,
                COUNT(DISTINCT e.user_id) as unique_users
         FROM user_events e
@@ -1025,10 +1025,12 @@ def admin_product_events(x_init_data: Optional[str] = Header(None), limit: int =
         LIMIT ?
     """, (limit,)).fetchall()
 
-    # Кто сейчас держит товар в избранном (из wishlists — отражает реальное состояние)
+    # Кто сейчас держит товар в избранном — джойним username из orders
     wish_log = conn.execute("""
-        SELECT w.user_id, p.name as product_name, p.emoji, p.photos,
-               w.created_at
+        SELECT w.user_id, w.product_id,
+               p.name as product_name, p.emoji, p.photos,
+               w.created_at,
+               (SELECT username FROM orders WHERE user_id = w.user_id LIMIT 1) as username
         FROM wishlists w
         LEFT JOIN products p ON p.id = w.product_id
         ORDER BY w.created_at DESC
@@ -1037,24 +1039,35 @@ def admin_product_events(x_init_data: Optional[str] = Header(None), limit: int =
 
     conn.close()
 
-    def row_to_dict(r, keys):
-        return {k: r[k] for k in keys}
+    import json as _json
+
+    def parse_photo(photos_str):
+        try:
+            arr = _json.loads(photos_str) if photos_str else []
+            return arr[0] if arr else None
+        except Exception:
+            return None
 
     return {
         "top_views": [
             {"product_id": r["product_id"], "name": r["name"] or "Удалён", "emoji": r["emoji"] or "📦",
+             "photo": parse_photo(r["photos"] if "photos" in r.keys() else None),
              "views": r["cnt"], "unique_users": r["unique_users"]}
             for r in views
         ],
         "top_wishes": [
             {"product_id": r["product_id"], "name": r["name"] or "Удалён", "emoji": r["emoji"] or "📦",
+             "photo": parse_photo(r["photos"] if "photos" in r.keys() else None),
              "wishes": r["cnt"], "unique_users": r["unique_users"]}
             for r in wishes
         ],
         "wish_log": [
-            {"user_id": r["user_id"], "product_name": r["product_name"] or "Удалён",
+            {"user_id": r["user_id"],
+             "product_id": r["product_id"],
+             "product_name": r["product_name"] or "Удалён",
              "emoji": r["emoji"] or "📦",
-             "photo": (__import__('json').loads(r["photos"])[0] if r["photos"] else None),
+             "photo": parse_photo(r["photos"]),
+             "username": r["username"] or None,
              "at": r["created_at"] or 0}
             for r in wish_log
         ],
