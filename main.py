@@ -964,6 +964,7 @@ def delete_desc_template(tid: int, x_init_data: Optional[str] = Header(None)):
     log_action(user["username"], "template_delete", row["title"])
 
 
+@app.post("/events", status_code=204)
 def track_event(body: UserEvent, x_init_data: Optional[str] = Header(None)):
     """Track user interaction for recommendation engine."""
     user = get_user(x_init_data)
