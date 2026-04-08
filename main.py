@@ -1010,7 +1010,6 @@ def track_event(body: UserEvent, x_init_data: Optional[str] = Header(None)):
         raise HTTPException(400, "Invalid event_type")
     conn = get_db()
     if body.event_type == "view":
-        # 1 user = 1 view per product
         exists = conn.execute(
             "SELECT id FROM user_events WHERE user_id=? AND product_id=? AND event_type='view'",
             (uid, body.product_id)
@@ -1021,7 +1020,6 @@ def track_event(body: UserEvent, x_init_data: Optional[str] = Header(None)):
                 (uid, body.product_id, "view")
             )
     elif body.event_type == "wish":
-        # Toggle: if already wishlisted, remove; otherwise add
         exists = conn.execute(
             "SELECT id FROM user_events WHERE user_id=? AND product_id=? AND event_type='wish'",
             (uid, body.product_id)
@@ -1043,6 +1041,89 @@ def track_event(body: UserEvent, x_init_data: Optional[str] = Header(None)):
         )
     conn.commit()
     conn.close()
+
+@app.get("/user/wishlist")
+def get_user_wishlist(x_init_data: Optional[str] = Header(None)):
+    """Returns product_ids currently wishlisted by the user."""
+    user = get_user(x_init_data)
+    uid = str(user["id"]) if user else "guest"
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT product_id FROM user_events WHERE user_id=? AND event_type='wish'",
+        (uid,)
+    ).fetchall()
+    conn.close()
+    return {"wishlist": [r["product_id"] for r in rows]}
+
+@app.get("/admin/user-detail/{tg_id}")
+def admin_user_detail(tg_id: str, x_init_data: Optional[str] = Header(None)):
+    """Full activity detail for a specific user — admin only."""
+    require_admin(x_init_data, "orders")
+    conn = get_db()
+
+    u = conn.execute(
+        "SELECT tg_id, username, first_name, last_name, updated_at FROM tg_users WHERE tg_id=?",
+        (tg_id,)
+    ).fetchone()
+
+    # Wishlisted products
+    wish_rows = conn.execute("""
+        SELECT e.product_id, p.name, p.photos, p.price
+        FROM user_events e
+        LEFT JOIN products p ON p.id = e.product_id
+        WHERE e.user_id=? AND e.event_type='wish'
+        ORDER BY e.created_at DESC
+    """, (tg_id,)).fetchall()
+
+    # Viewed products
+    view_rows = conn.execute("""
+        SELECT e.product_id, p.name, p.photos, p.price, e.created_at
+        FROM user_events e
+        LEFT JOIN products p ON p.id = e.product_id
+        WHERE e.user_id=? AND e.event_type='view'
+        ORDER BY e.created_at DESC
+    """, (tg_id,)).fetchall()
+
+    def parse_photo(photos_raw):
+        try:
+            import json as _j
+            arr = _j.loads(photos_raw or "[]")
+            return arr[0] if arr else None
+        except Exception:
+            return None
+
+    conn.close()
+
+    display = f"#{tg_id}"
+    if u:
+        if u["username"] and u["first_name"]:
+            display = f"{u['first_name']} (@{u['username']})"
+        elif u["username"]:
+            display = f"@{u['username']}"
+        elif u["first_name"]:
+            display = u["first_name"] + (" " + u["last_name"] if u["last_name"] else "")
+
+    return {
+        "tg_id":   tg_id,
+        "display": display,
+        "wishlist": [{"product_id": r["product_id"], "name": r["name"] or f"Товар #{r['product_id']}",
+                      "photo": parse_photo(r["photos"]), "price": r["price"] or 0} for r in wish_rows],
+        "views":    [{"product_id": r["product_id"], "name": r["name"] or f"Товар #{r['product_id']}",
+                      "photo": parse_photo(r["photos"]), "price": r["price"] or 0,
+                      "ts": r["created_at"]} for r in view_rows],
+    }
+
+@app.delete("/admin/user-views/{tg_id}", status_code=204)
+def reset_user_views(tg_id: str, x_init_data: Optional[str] = Header(None)):
+    """Delete all view events for a specific user."""
+    user = require_admin(x_init_data, "orders")
+    conn = get_db()
+    conn.execute(
+        "DELETE FROM user_events WHERE user_id=? AND event_type='view'", (tg_id,)
+    )
+    conn.commit()
+    conn.close()
+    log_action(user["username"], "reset_user_views", tg_id)
 
 @app.get("/recommendations")
 def get_recommendations(x_init_data: Optional[str] = Header(None), limit: int = 10):
@@ -1332,7 +1413,9 @@ def admin_users(x_init_data: Optional[str] = Header(None)):
         ).fetchone()[0]
 
         display = ""
-        if u["username"]:
+        if u["username"] and u["first_name"]:
+            display = f"{u['first_name']} (@{u['username']})"
+        elif u["username"]:
             display = f"@{u['username']}"
         elif u["first_name"]:
             display = u["first_name"]
@@ -1359,7 +1442,7 @@ def admin_users(x_init_data: Optional[str] = Header(None)):
 @app.get("/admin/activity")
 def admin_activity(x_init_data: Optional[str] = Header(None), limit: int = 100):
     """Recent user_events log with user info — admin only."""
-    require_admin(x_init_data, "admins")
+    require_admin(x_init_data, "orders")
     conn = get_db()
 
     rows = conn.execute("""
@@ -1376,7 +1459,9 @@ def admin_activity(x_init_data: Optional[str] = Header(None), limit: int = 100):
 
     result = []
     for r in rows:
-        if r["username"]:
+        if r["username"] and r["first_name"]:
+            display = f"{r['first_name']} (@{r['username']})"
+        elif r["username"]:
             display = f"@{r['username']}"
         elif r["first_name"]:
             display = r["first_name"]
