@@ -128,7 +128,9 @@ body {
 @keyframes dotPop { from{transform:scale(0)} to{transform:scale(1)} }
 @keyframes homeFlash { 0%{opacity:1} 30%{opacity:.15} 100%{opacity:1} }
 .home-flash { animation:homeFlash .38s var(--easing) both }
-@keyframes feedRefresh {
+@keyframes closeFade { 0%{opacity:0} 40%{opacity:.55} 100%{opacity:0} }
+#close-fade { position:fixed;inset:0;z-index:199;background:var(--bg);opacity:0;pointer-events:none }
+#close-fade.active { animation:closeFade .46s cubic-bezier(.4,0,.2,1) forwards }
   0%   { opacity:0; transform:translateY(14px) scale(.99) }
   60%  { opacity:1; transform:translateY(-2px) scale(1.002) }
   100% { opacity:1; transform:none }
@@ -1233,6 +1235,7 @@ body {
   <div class="product-header-title">PRIME</div>
 </div>
 
+<div id="close-fade"></div>
 <div id="page-product">
   <div class="detail-slider" id="detail-slider">
     <button class="btn-back" onclick="closeProduct()">
@@ -1400,6 +1403,7 @@ body {
     <button class="admin-tab" onclick="switchTab('add',this)">+ Добавить</button>
     <button class="admin-tab" id="tab-moderation" onclick="switchTab('moderation',this)">🔍 Проверка <span id="moderation-badge" style="display:none;background:var(--red);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:3px">0</span></button>
     <button class="admin-tab" id="tab-admins" onclick="switchTab('admins',this)">Команда</button>
+    <button class="admin-tab" id="tab-users" onclick="switchTab('users',this)">👥 Пользователи</button>
     <button class="admin-tab" id="tab-brands" onclick="switchTab('brands',this)">Бренды</button>
     <button class="admin-tab" onclick="switchTab('templates',this)">📋 Шаблоны</button>
     <button class="admin-tab" onclick="switchTab('prices',this)">💰 Цены</button>
@@ -1643,24 +1647,16 @@ body {
       </div>
       <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Команда</div>
       <div id="admin-list"></div>
+    </div>
 
-      <!-- Пользователи -->
-      <div style="margin-top:24px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px">👥 Пользователи</div>
-          <div id="users-count" style="font-size:11px;color:var(--text3)"></div>
-        </div>
-        <div id="admin-users-list" style="background:var(--s2);border:1px solid var(--border);border-radius:14px;padding:0 14px">
-          <div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Загрузка...</div>
-        </div>
+    <!-- USERS -->
+    <div class="admin-panel" id="panel-users">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px">Все пользователи</div>
+        <div id="users-count" style="font-size:11px;color:var(--text3)"></div>
       </div>
-
-      <!-- Лента активности -->
-      <div style="margin-top:20px">
-        <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">📋 Активность</div>
-        <div id="admin-activity-list" style="background:var(--s2);border:1px solid var(--border);border-radius:14px;padding:0 14px">
-          <div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Загрузка...</div>
-        </div>
+      <div id="admin-users-list" style="background:var(--s2);border:1px solid var(--border);border-radius:14px;padding:0 14px">
+        <div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Загрузка...</div>
       </div>
     </div>
 
@@ -1810,6 +1806,18 @@ body {
     <div id="tpl-picker-empty" style="display:none;text-align:center;padding:30px 0;color:var(--text3);font-size:13px">
       Шаблонов пока нет.<br/>Создайте в разделе «Шаблоны»
     </div>
+  </div>
+</div>
+
+<!-- USER DETAIL OVERLAY -->
+<div class="overlay" id="user-detail-overlay" onclick="closeUserDetail(event)" style="z-index:800">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <div class="sheet-title" id="user-detail-title">Пользователь</div>
+      <button class="sheet-close" onclick="closeUserDetail()">×</button>
+    </div>
+    <div id="user-detail-body" style="padding-bottom:16px"></div>
   </div>
 </div>
 
@@ -2229,10 +2237,10 @@ const initData = () => tg?.initData || '';
    STATE
 ═══════════════════════════════════════════════ */
 let PRODUCTS = [];
-let myOrders = [];    // мои заказы (текущего пользователя)
-let allOrders = [];   // все заказы (только для админа)
+let myOrders = [];
+let allOrders = [];
 let wishlist = new Set();
-// Восстанавливаем избранное из localStorage при старте
+// Восстанавливаем избранное из localStorage при старте (быстрый кэш)
 try {
   const saved = JSON.parse(localStorage.getItem('wishlist') || '[]');
   saved.forEach(id => wishlist.add(id));
@@ -2328,11 +2336,36 @@ async function loadProductLinks() {
         if (local) local.source_links = p.source_links;
       }
     });
-    // Перерисовываем список товаров в админке если открыт
     const adminPanel = document.getElementById('panel-products');
     if (adminPanel && adminPanel.classList.contains('on')) renderAdminProducts();
   } catch(e) {
     console.error('[links] error:', e);
+  }
+}
+
+async function loadUserWishlist() {
+  if (!initData()) return; // гость — не синхронизируем
+  try {
+    const data = await apiFetch('/user/wishlist');
+    const serverIds = new Set(data.wishlist.map(id => Number(id)));
+    // Полностью заменяем wishlist данными с сервера
+    wishlist.clear();
+    serverIds.forEach(id => wishlist.add(id));
+    try { localStorage.setItem('wishlist', JSON.stringify([...wishlist])); } catch(e) {}
+    updateStats();
+    // Обновляем сердечки если лента уже отрисована
+    document.querySelectorAll('.prod-heart').forEach(btn => {
+      const card = btn.closest('.prod-card');
+      if (!card) return;
+      const onclick = card.getAttribute('onclick') || '';
+      const m = onclick.match(/openProduct\((\d+)/);
+      if (!m) return;
+      const pid = Number(m[1]);
+      btn.classList.toggle('liked', wishlist.has(pid));
+    });
+    if (document.getElementById('page-wishlist').classList.contains('active')) filterWish();
+  } catch(e) {
+    // Тихо — localStorage кэш уже загружен
   }
 }
 
@@ -2890,6 +2923,14 @@ function closeProduct() {
   document.getElementById('detail-action').classList.remove('open');
   const ph = document.getElementById('product-header');
   if (ph) ph.classList.remove('open');
+
+  // Плавный fade при закрытии
+  const fade = document.getElementById('close-fade');
+  if (fade) {
+    fade.classList.remove('active');
+    void fade.offsetWidth;
+    fade.classList.add('active');
+  }
 
   // Восстанавливаем нужную крышу в зависимости от активной страницы
   const activeId = document.querySelector('.page.active')?.id;
@@ -3835,7 +3876,8 @@ function switchTab(tab, btn) {
   if (tab === 'stats')     { loadAllOrders().then(renderAdminStats); loadProductEvents(); }
   if (tab === 'orders')    { loadAllOrders(); }
   if (tab === 'products')  { renderAdminProducts(); }
-  if (tab === 'admins')    { renderAdminList(); loadAdminUsers(); loadAdminActivity(); }
+  if (tab === 'admins')    { renderAdminList(); }
+  if (tab === 'users')     { loadAdminUsers(); }
   if (tab === 'brands')    { renderBrandsList(); }
   if (tab === 'add')       { resetAddForm(); }
   if (tab === 'templates') { loadDescTemplates(); }
@@ -4463,31 +4505,95 @@ async function loadAdminUsers() {
     }
     el.innerHTML = data.map(u => {
       const initial = (u.display.replace('@','')[0] || '?').toUpperCase();
-      return `<div class="au-row">
+      return `<div class="au-row" onclick="openUserDetail('${u.tg_id}')" style="cursor:pointer">
         <div class="au-avatar">${initial}</div>
         <div style="flex:1;min-width:0">
           <div class="au-name">${u.display}</div>
           <div class="au-meta">Был ${fmtTs(u.last_seen)}</div>
         </div>
         <div class="au-stats">
-          <div class="au-stat">
-            <div class="au-stat-val">${u.views}</div>
-            <div class="au-stat-lbl">👁</div>
-          </div>
-          <div class="au-stat">
-            <div class="au-stat-val">${u.wishes}</div>
-            <div class="au-stat-lbl">❤️</div>
-          </div>
-          <div class="au-stat">
-            <div class="au-stat-val">${u.purchases}</div>
-            <div class="au-stat-lbl">🛍</div>
-          </div>
+          <div class="au-stat"><div class="au-stat-val">${u.views}</div><div class="au-stat-lbl">👁</div></div>
+          <div class="au-stat"><div class="au-stat-val">${u.wishes}</div><div class="au-stat-lbl">❤️</div></div>
+          <div class="au-stat"><div class="au-stat-val">${u.purchases}</div><div class="au-stat-lbl">🛍</div></div>
         </div>
+        <div style="color:var(--text3);font-size:18px;margin-left:4px">›</div>
       </div>`;
     }).join('');
   } catch(e) {
     el.innerHTML = '<div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Ошибка загрузки</div>';
   }
+}
+
+async function openUserDetail(tgId) {
+  const overlay = document.getElementById('user-detail-overlay');
+  const body    = document.getElementById('user-detail-body');
+  const title   = document.getElementById('user-detail-title');
+  if (!overlay || !body) return;
+  body.innerHTML = '<div style="text-align:center;padding:32px 0;color:var(--text3);font-size:13px">Загрузка...</div>';
+  overlay.classList.add('open');
+  try {
+    const d = await apiFetch(`/admin/user-detail/${tgId}`);
+    title.textContent = d.display;
+
+    const productCard = (p) => `
+      <div onclick="openProduct(${p.product_id},false,true);closeUserDetail()"
+        style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer">
+        ${p.photo
+          ? `<img src="${p.photo}" style="width:40px;height:40px;border-radius:9px;object-fit:cover;flex-shrink:0"/>`
+          : `<div style="width:40px;height:40px;border-radius:9px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">📦</div>`}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:1px">${fmt(p.price)}</div>
+        </div>
+        <div style="color:var(--text3);font-size:16px">›</div>
+      </div>`;
+
+    const emptyMsg = (txt) => `<div style="text-align:center;padding:16px 0;color:var(--text3);font-size:13px">${txt}</div>`;
+
+    body.innerHTML = `
+      <div style="display:flex;gap:12px;margin-bottom:20px">
+        <div style="flex:1;background:var(--s2);border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center">
+          <div style="font-size:20px;font-weight:700">${d.views.length}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">👁 Просмотров</div>
+        </div>
+        <div style="flex:1;background:var(--s2);border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center">
+          <div style="font-size:20px;font-weight:700">${d.wishlist.length}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">❤️ Избранное</div>
+        </div>
+      </div>
+
+      <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">❤️ Избранное</div>
+      <div style="background:var(--s2);border:1px solid var(--border);border-radius:12px;padding:0 12px;margin-bottom:16px">
+        ${d.wishlist.length ? d.wishlist.map(productCard).join('') : emptyMsg('Ничего нет в избранном')}
+      </div>
+
+      <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">👁 Просматривал</div>
+      <div style="background:var(--s2);border:1px solid var(--border);border-radius:12px;padding:0 12px;margin-bottom:16px">
+        ${d.views.length ? d.views.map(productCard).join('') : emptyMsg('Нет просмотров')}
+      </div>
+
+      <button onclick="resetUserViews('${tgId}','${d.display}')"
+        style="width:100%;padding:12px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.25);border-radius:12px;color:var(--red);font-family:'Inter',sans-serif;font-size:13px;font-weight:600;cursor:pointer">
+        🗑 Сбросить просмотры этого пользователя
+      </button>`;
+  } catch(e) {
+    body.innerHTML = '<div style="text-align:center;padding:32px 0;color:var(--text3);font-size:13px">Ошибка загрузки</div>';
+  }
+}
+
+function closeUserDetail(e) {
+  if (e && e.target !== document.getElementById('user-detail-overlay')) return;
+  document.getElementById('user-detail-overlay').classList.remove('open');
+}
+
+async function resetUserViews(tgId, display) {
+  if (!confirm(`Сбросить просмотры пользователя ${display}?`)) return;
+  try {
+    await apiFetch(`/admin/user-views/${tgId}`, { method: 'DELETE' });
+    showToast(`✅ Просмотры ${display} сброшены`);
+    openUserDetail(tgId); // перезагружаем detail
+    loadAdminUsers();     // обновляем список
+  } catch(e) { showToast('Ошибка: ' + (e.message || '')); }
 }
 
 async function loadAdminActivity() {
@@ -5742,6 +5848,7 @@ Promise.all([
   loadAdmins(),
   checkPendingOrder(),
   loadDescTemplates(),
+  loadUserWishlist(),
 ]).finally(() => {
   clearTimeout(_splashKill);
   hideSplash();
