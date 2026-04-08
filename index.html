@@ -128,6 +128,8 @@ body {
 @keyframes dotPop { from{transform:scale(0)} to{transform:scale(1)} }
 @keyframes homeFlash { 0%{opacity:1} 30%{opacity:.15} 100%{opacity:1} }
 .home-flash { animation:homeFlash .38s var(--easing) both }
+@keyframes feedRefresh { 0%{opacity:0;transform:translateY(22px)} 100%{opacity:1;transform:none} }
+.feed-refresh { animation:feedRefresh .42s var(--easing) both }
 /* product event stats */
 .pe-row { display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border) }
 .pe-row:last-child { border-bottom:none }
@@ -145,6 +147,22 @@ body {
 .pe-detail-photo-ph { width:100%;aspect-ratio:1;border-radius:14px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:64px;margin-bottom:14px }
 .pe-user-tag { display:inline-flex;align-items:center;gap:6px;background:var(--s1);border:1px solid var(--border2);border-radius:20px;padding:6px 12px;font-size:13px;font-weight:500;color:var(--text);margin:3px 3px 0 0 }
 .pe-user-avatar { width:22px;height:22px;border-radius:50%;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text3);flex-shrink:0 }
+/* admin users & activity */
+.au-row { display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--border) }
+.au-row:last-child { border-bottom:none }
+.au-avatar { width:36px;height:36px;border-radius:50%;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--text2);flex-shrink:0 }
+.au-name { font-size:13px;font-weight:500;color:var(--text) }
+.au-meta { font-size:11px;color:var(--text3);margin-top:1px }
+.au-stats { display:flex;gap:8px;margin-left:auto;flex-shrink:0 }
+.au-stat { text-align:center }
+.au-stat-val { font-size:12px;font-weight:700;color:var(--text) }
+.au-stat-lbl { font-size:9px;color:var(--text3) }
+.act-row { display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border) }
+.act-row:last-child { border-bottom:none }
+.act-icon { font-size:18px;flex-shrink:0;margin-top:1px }
+.act-user { font-size:12px;font-weight:600;color:var(--text) }
+.act-product { font-size:12px;color:var(--text2);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+.act-time { font-size:10px;color:var(--text3);margin-top:2px }
 
 /* ═══════════════════════════════════════════════
    HOME
@@ -1598,6 +1616,25 @@ body {
       </div>
       <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Команда</div>
       <div id="admin-list"></div>
+
+      <!-- Пользователи -->
+      <div style="margin-top:24px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px">👥 Пользователи</div>
+          <div id="users-count" style="font-size:11px;color:var(--text3)"></div>
+        </div>
+        <div id="admin-users-list" style="background:var(--s2);border:1px solid var(--border);border-radius:14px;padding:0 14px">
+          <div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Загрузка...</div>
+        </div>
+      </div>
+
+      <!-- Лента активности -->
+      <div style="margin-top:20px">
+        <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">📋 Активность</div>
+        <div id="admin-activity-list" style="background:var(--s2);border:1px solid var(--border);border-radius:14px;padding:0 14px">
+          <div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Загрузка...</div>
+        </div>
+      </div>
     </div>
 
     <!-- BRANDS & STYLES -->
@@ -2324,14 +2361,16 @@ function navigate(id, btn) {
   if (id === 'wishlist') { document.getElementById('wish-input').value=''; filterWish(); }
   if (id === 'home') {
     const homeScroll = document.getElementById('home-scroll');
-    const homeGrid   = document.getElementById('home-grid');
-    // Вспышка-анимация на ленте
+    // Мгновенно наверх (без smooth — нет смысла анимировать скролл если лента перерисуется)
+    if (homeScroll) homeScroll.scrollTop = 0;
+    // Перемешиваем и обновляем ленту
+    loadRecommendations(lastViewedProduct);
+    const homeGrid = document.getElementById('home-grid');
     if (homeGrid) {
-      homeGrid.classList.remove('home-flash');
-      void homeGrid.offsetWidth; // reflow
-      homeGrid.classList.add('home-flash');
+      homeGrid.classList.remove('feed-refresh');
+      void homeGrid.offsetWidth;
+      homeGrid.classList.add('feed-refresh');
     }
-    if (homeScroll) homeScroll.scrollTo({ top: 0, behavior: 'smooth' });
   }
   if (id === 'admin') {
     pg.setAttribute('data-ok','1');
@@ -2841,21 +2880,23 @@ function closeProduct() {
   // Открыт из похожих товаров или из админки — ничего не трогаем
   if (wasFromRec || wasFromAdmin) return;
 
-  // Открыт из главной ленты — flash + scroll наверх + обновляем рекомендации
-  if (viewed) {
-    lastViewedProduct = viewed;
-    updateRecsOnly(viewed);
-  }
+  // Открыт из главной ленты — мгновенный возврат наверх + обновление ленты
+  if (viewed) lastViewedProduct = viewed;
+
+  // Пока page-product ещё закрывается (анимация .38s) — мгновенно сбрасываем скролл
   const homeScroll = document.getElementById('home-scroll');
-  const homeGrid   = document.getElementById('home-grid');
-  if (homeGrid) {
-    homeGrid.classList.remove('home-flash');
-    void homeGrid.offsetWidth;
-    homeGrid.classList.add('home-flash');
-  }
-  if (homeScroll) {
-    homeScroll.scrollTo({ top: 0, behavior: 'smooth' });
-  }
+  if (homeScroll) homeScroll.scrollTop = 0;
+
+  // После завершения анимации закрытия карточки — обновляем и анимируем ленту
+  setTimeout(() => {
+    loadRecommendations(lastViewedProduct);
+    const homeGrid = document.getElementById('home-grid');
+    if (homeGrid) {
+      homeGrid.classList.remove('feed-refresh');
+      void homeGrid.offsetWidth;
+      homeGrid.classList.add('feed-refresh');
+    }
+  }, 320);
 }
 
 function searchByTag(type, value) {
@@ -3761,7 +3802,7 @@ function switchTab(tab, btn) {
   if (tab === 'stats')     { loadAllOrders().then(renderAdminStats); loadProductEvents(); }
   if (tab === 'orders')    { loadAllOrders(); }
   if (tab === 'products')  { renderAdminProducts(); }
-  if (tab === 'admins')    { renderAdminList(); }
+  if (tab === 'admins')    { renderAdminList(); loadAdminUsers(); loadAdminActivity(); }
   if (tab === 'brands')    { renderBrandsList(); }
   if (tab === 'add')       { resetAddForm(); }
   if (tab === 'templates') { loadDescTemplates(); }
@@ -4358,6 +4399,86 @@ async function removeAdmin(u) {
     renderAdminList();
     toast(`@${u} удалён`);
   } catch(e) { toast('Ошибка удаления ⚠️'); }
+}
+
+function fmtTs(ts) {
+  if (!ts) return '';
+  const d = new Date(ts * 1000);
+  const now = Date.now();
+  const diff = now - d.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1)   return 'только что';
+  if (mins < 60)  return `${mins} мин. назад`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24)   return `${hrs} ч. назад`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7)   return `${days} д. назад`;
+  return d.toLocaleDateString('ru-RU', { day:'numeric', month:'short' });
+}
+
+async function loadAdminUsers() {
+  const el = document.getElementById('admin-users-list');
+  const cnt = document.getElementById('users-count');
+  if (!el) return;
+  el.innerHTML = '<div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Загрузка...</div>';
+  try {
+    const data = await apiFetch('/admin/users');
+    if (cnt) cnt.textContent = `${data.length} чел.`;
+    if (!data.length) {
+      el.innerHTML = '<div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Нет данных</div>';
+      return;
+    }
+    el.innerHTML = data.map(u => {
+      const initial = (u.display.replace('@','')[0] || '?').toUpperCase();
+      return `<div class="au-row">
+        <div class="au-avatar">${initial}</div>
+        <div style="flex:1;min-width:0">
+          <div class="au-name">${u.display}</div>
+          <div class="au-meta">Был ${fmtTs(u.last_seen)}</div>
+        </div>
+        <div class="au-stats">
+          <div class="au-stat">
+            <div class="au-stat-val">${u.views}</div>
+            <div class="au-stat-lbl">👁</div>
+          </div>
+          <div class="au-stat">
+            <div class="au-stat-val">${u.wishes}</div>
+            <div class="au-stat-lbl">❤️</div>
+          </div>
+          <div class="au-stat">
+            <div class="au-stat-val">${u.purchases}</div>
+            <div class="au-stat-lbl">🛍</div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Ошибка загрузки</div>';
+  }
+}
+
+async function loadAdminActivity() {
+  const el = document.getElementById('admin-activity-list');
+  if (!el) return;
+  el.innerHTML = '<div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Загрузка...</div>';
+  try {
+    const data = await apiFetch('/admin/activity');
+    if (!data.length) {
+      el.innerHTML = '<div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Нет активности</div>';
+      return;
+    }
+    el.innerHTML = data.map(a => `
+      <div class="act-row">
+        <div class="act-icon">${a.event_type === 'view' ? '👁' : a.event_type === 'wish' ? '❤️' : '🛍'}</div>
+        <div style="flex:1;min-width:0">
+          <div class="act-user">${a.user}</div>
+          <div class="act-product">${a.product_name}</div>
+          <div class="act-time">${fmtTs(a.ts)}</div>
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Ошибка загрузки</div>';
+  }
 }
 
 /* ═══════════════════════════════════════════════
