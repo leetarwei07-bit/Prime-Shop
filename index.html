@@ -4512,7 +4512,6 @@ async function loadAdminUsers() {
         <div class="au-stats">
           <div class="au-stat"><div class="au-stat-val">${u.views}</div><div class="au-stat-lbl">👁</div></div>
           <div class="au-stat"><div class="au-stat-val">${u.wishes}</div><div class="au-stat-lbl">❤️</div></div>
-          <div class="au-stat"><div class="au-stat-val">${u.purchases}</div><div class="au-stat-lbl">🛍</div></div>
         </div>
         <div style="color:var(--text3);font-size:18px;margin-left:4px">›</div>
       </div>`;
@@ -5069,7 +5068,7 @@ function loadRecommendations(lastViewed = null) {
   }
 }
 
-function renderHomeSorted(inRecs, scoreMap) {
+function renderHomeSorted(inRecs) {
   const q = (document.getElementById('home-search-input')?.value||'').trim().toLowerCase();
   let list = [...PRODUCTS];
   if (homeCat !== 'Все') list = list.filter(p => p.cat === homeCat);
@@ -5078,17 +5077,13 @@ function renderHomeSorted(inRecs, scoreMap) {
   // Убираем товары из «Для вас»
   list = list.filter(p => !inRecs.has(p.id));
 
-  // Разделяем: товары с ненулевым score сортируем по убыванию,
-  // товары с score=0 перемешиваем чистым Fisher-Yates (не sort)
-  const withScore = list.filter(p => (scoreMap.get(p.id) || 0) > 0)
-                        .sort((a, b) => (scoreMap.get(b.id) || 0) - (scoreMap.get(a.id) || 0));
-  const zeroScore = list.filter(p => (scoreMap.get(p.id) || 0) === 0);
-  for (let i = zeroScore.length - 1; i > 0; i--) {
+  // Все остальные товары — чистый Fisher-Yates shuffle, без сортировки по score
+  for (let i = list.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [zeroScore[i], zeroScore[j]] = [zeroScore[j], zeroScore[i]];
+    [list[i], list[j]] = [list[j], list[i]];
   }
 
-  renderGrid('home-grid', [...withScore, ...zeroScore]);
+  renderGrid('home-grid', list);
 }
 
 // Обновляет только блок «Для вас» — без перерисовки ленты
