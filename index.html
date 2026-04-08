@@ -351,9 +351,31 @@ body {
   font-size:10px;font-weight:500;color:var(--green);letter-spacing:.1px;
 }
 .prod-cargo svg { flex-shrink:0 }
+.prod-cargo.cargo-separate { color:var(--orange) }
 .prod-preorder {
   color:var(--orange) !important;
 }
+.prod-preorder-badge {
+  position:absolute;top:8px;left:8px;
+  background:rgba(245,158,11,.92);
+  color:#000;font-size:9px;font-weight:700;
+  padding:3px 8px;border-radius:20px;
+  letter-spacing:.4px;text-transform:uppercase;
+  backdrop-filter:blur(4px);
+  z-index:2;
+  animation:badgePop .3s var(--spring) both;
+}
+/* cargo detail block on product page */
+.cargo-detail-block {
+  background:var(--s2);border:1px solid var(--border);border-radius:12px;
+  padding:12px 14px;margin-bottom:14px;
+}
+.cargo-detail-row { display:flex;align-items:center;gap:10px }
+.cargo-detail-icon { font-size:18px;flex-shrink:0 }
+.cargo-detail-text { flex:1 }
+.cargo-detail-title { font-size:13px;font-weight:600 }
+.cargo-detail-sub { font-size:11px;color:var(--text3);margin-top:2px }
+.cargo-detail-price { font-size:14px;font-weight:700;flex-shrink:0 }
 .prod-preorder-badge {
   position:absolute;top:8px;left:8px;
   background:rgba(245,158,11,.92);
@@ -937,6 +959,23 @@ body {
   background:var(--orange);border-color:var(--orange);color:#000;
   animation:dotPop .25s var(--spring) both;
 }
+/* cargo-separate — yellow when active */
+.delivery-cargo.on {
+  border-color:rgba(234,179,8,.5);
+  background:rgba(234,179,8,.06);
+}
+.delivery-cargo.on .delivery-type-title { color:#eab308 }
+.delivery-cargo.on .delivery-type-sub   { color:#eab308;opacity:.75 }
+.delivery-cargo.on .delivery-type-check {
+  background:#eab308;border-color:#eab308;color:#000;
+  animation:dotPop .25s var(--spring) both;
+}
+/* cargo extra fields */
+.cargo-extra { margin-top:10px;display:flex;flex-direction:column;gap:8px;
+  animation:pageIn .2s ease both }
+.cargo-extra input { width:100%;background:var(--s1);border:1px solid var(--border);
+  border-radius:10px;padding:10px 12px;color:#fff;font-family:'Inter',sans-serif;
+  font-size:14px;outline:none }
 .vtype-btn { flex:1;padding:8px 4px;border-radius:9px;border:1px solid var(--border);background:none;color:var(--text3);font-family:'Inter',sans-serif;font-size:11px;font-weight:500;cursor:pointer;transition:all .15s;min-width:60px }
 .vtype-btn.on { border-color:#fff;color:#fff;background:rgba(255,255,255,.06) }
 .var-chips { display:flex;flex-direction:column;gap:6px;margin-bottom:8px }
@@ -1277,6 +1316,7 @@ body {
       </div>
     </div>
     <div class="detail-divider"></div>
+    <div id="d-cargo-block"></div>
     <div class="detail-sec">Описание</div>
     <div id="d-desc" class="detail-desc detail-desc-collapsed"></div>
     <button id="d-desc-toggle" class="desc-toggle" onclick="toggleDesc()" style="display:none">
@@ -1531,15 +1571,23 @@ body {
           </select>
         </div>
 
-        <!-- PREORDER TOGGLE -->
+        <!-- CARGO / TYPE TOGGLE -->
         <div class="field">
-          <label>Тип товара</label>
+          <label>Доставка и карго</label>
           <div style="display:flex;flex-direction:column;gap:8px">
             <button class="delivery-type-btn delivery-fast on" id="a-type-fast" onclick="setProductType('add','fast')">
-              <div class="delivery-type-icon">🚀</div>
+              <div class="delivery-type-icon">✅</div>
               <div class="delivery-type-text">
-                <div class="delivery-type-title">Быстрая доставка</div>
-                <div class="delivery-type-sub">До 12 дней · Бесплатно</div>
+                <div class="delivery-type-title">Карго включено</div>
+                <div class="delivery-type-sub">Стоимость карго уже в цене</div>
+              </div>
+              <div class="delivery-type-check">✓</div>
+            </button>
+            <button class="delivery-type-btn delivery-cargo" id="a-type-cargo" onclick="setProductType('add','cargo')">
+              <div class="delivery-type-icon">📦</div>
+              <div class="delivery-type-text">
+                <div class="delivery-type-title">Карго отдельно</div>
+                <div class="delivery-type-sub">Стоимость карго добавляется к цене</div>
               </div>
               <div class="delivery-type-check">✓</div>
             </button>
@@ -1551,6 +1599,11 @@ body {
               </div>
               <div class="delivery-type-check">✓</div>
             </button>
+          </div>
+          <!-- Доп. поля для карго отдельно -->
+          <div class="cargo-extra" id="a-cargo-extra" style="display:none">
+            <input id="a-cargo-weight" type="number" min="0" placeholder="Вес товара (граммы), 0 = неизвестно"/>
+            <input id="a-cargo-price" type="number" min="0" placeholder="Фиксированная стоимость карго (сум), 0 = авто"/>
           </div>
         </div>
 
@@ -2021,15 +2074,23 @@ body {
         </select>
       </div>
 
-      <!-- PREORDER TOGGLE -->
+      <!-- CARGO / TYPE TOGGLE -->
       <div class="field">
-        <label>Тип товара</label>
+        <label>Доставка и карго</label>
         <div style="display:flex;flex-direction:column;gap:8px">
           <button class="delivery-type-btn delivery-fast on" id="e-type-fast" onclick="setProductType('edit','fast')">
-            <div class="delivery-type-icon">🚀</div>
+            <div class="delivery-type-icon">✅</div>
             <div class="delivery-type-text">
-              <div class="delivery-type-title">Быстрая доставка</div>
-              <div class="delivery-type-sub">До 12 дней · Бесплатно</div>
+              <div class="delivery-type-title">Карго включено</div>
+              <div class="delivery-type-sub">Стоимость карго уже в цене</div>
+            </div>
+            <div class="delivery-type-check">✓</div>
+          </button>
+          <button class="delivery-type-btn delivery-cargo" id="e-type-cargo" onclick="setProductType('edit','cargo')">
+            <div class="delivery-type-icon">📦</div>
+            <div class="delivery-type-text">
+              <div class="delivery-type-title">Карго отдельно</div>
+              <div class="delivery-type-sub">Стоимость карго добавляется к цене</div>
             </div>
             <div class="delivery-type-check">✓</div>
           </button>
@@ -2041,6 +2102,11 @@ body {
             </div>
             <div class="delivery-type-check">✓</div>
           </button>
+        </div>
+        <!-- Доп. поля для карго отдельно -->
+        <div class="cargo-extra" id="e-cargo-extra" style="display:none">
+          <input id="e-cargo-weight" type="number" min="0" placeholder="Вес товара (граммы), 0 = неизвестно"/>
+          <input id="e-cargo-price" type="number" min="0" placeholder="Фиксированная стоимость карго (сум), 0 = авто"/>
         </div>
       </div>
 
@@ -2534,15 +2600,25 @@ function cardHTML(p, idx = 0, fromRec = false) {
 
   const delay = idx < 2 ? 0 : Math.min((idx - 2) * 0.06, 0.5);
 
-  const deliveryBadge = p.isPreorder
-    ? `<div class="prod-cargo prod-preorder">
-        <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        Под заказ
-      </div>`
-    : `<div class="prod-cargo">
-        <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 5v3h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-        до 12 дней · Бесплатно
-      </div>`;
+  const truckSvg = `<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 5v3h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>`;
+  const clockSvg = `<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
+
+  let deliveryBadge;
+  if (p.isPreorder) {
+    deliveryBadge = `<div class="prod-cargo prod-preorder">${clockSvg} Под заказ</div>`;
+  } else if (p.cargoType === 'separate') {
+    // вычисляем примерную стоимость карго
+    let cargoHint = '';
+    if (p.cargoPrice > 0) {
+      cargoHint = ` · +${fmt(p.cargoPrice)}`;
+    } else if (p.cargoWeight > 0) {
+      const est = Math.round((p.cargoWeight / 100) * CARGO_PER_100G);
+      cargoHint = ` · ~${fmt(est)}`;
+    }
+    deliveryBadge = `<div class="prod-cargo cargo-separate">${truckSvg} Карго отдельно${cargoHint}</div>`;
+  } else {
+    deliveryBadge = `<div class="prod-cargo">${truckSvg} Карго включено</div>`;
+  }
 
   // Фото появляется плавно через onload
   const imgHtml = photo
@@ -2896,6 +2972,7 @@ function openProduct(id, fromRec = false, fromAdmin = false) {
 
   // slider
   buildSlider(p.photos&&p.photos.length ? p.photos.map(s=>({src:s})) : [{emoji:p.emoji||'📦'}]);
+  renderCargoBlock(p);
   renderSourceLinks(p);
   showProductRecs(p);
 
@@ -3928,9 +4005,9 @@ function showProductLinks(e, pid) {
 }
 
 function resetAddForm() {
-  // Полный сброс формы добавления товара
   ['a-name','a-price','a-old-price','a-desc','a-emoji',
-   'a-cny','a-weight','a-markup','a-insurance','a-sizes-input'].forEach(id => {
+   'a-cny','a-weight','a-markup','a-insurance','a-sizes-input',
+   'a-cargo-weight','a-cargo-price'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   const cr = document.getElementById('a-calc-result');
@@ -4263,6 +4340,9 @@ async function adminAddProduct() {
     const quality = document.getElementById('a-quality')?.value || '';
     const varDataFinal = getVarData('add');
     const sizes = varState.add.sizes || [];
+    const cargoType   = productTypeState.add === 'cargo' ? 'separate' : productTypeState.add === 'preorder' ? 'included' : 'included';
+    const cargoWeight = productTypeState.add === 'cargo' ? (parseInt(document.getElementById('a-cargo-weight')?.value) || 0) : 0;
+    const cargoPrice  = productTypeState.add === 'cargo' ? (parseInt(document.getElementById('a-cargo-price')?.value) || 0) : 0;
     const product = await apiPost('/products', {
       name, cat, brand, style, emoji,
       photos: varState.add.photos,
@@ -4273,6 +4353,7 @@ async function adminAddProduct() {
       desc, is_new: true,
       is_preorder: productTypeState.add === 'preorder',
       quality,
+      cargo_type: cargoType, cargo_weight: cargoWeight, cargo_price: cargoPrice,
       source_links: varState.add.links,
     });
     PRODUCTS.unshift(product);
@@ -4350,10 +4431,14 @@ function openEdit(id) {
   setVT('edit', vtype);
   renderVarChips('edit');
 
-  // Тип товара (быстрая / под заказ)
-  const editType = p.isPreorder ? 'preorder' : 'fast';
+  // Тип товара (карго включено / карго отдельно / под заказ)
+  const editType = p.isPreorder ? 'preorder' : (p.cargoType === 'separate' ? 'cargo' : 'fast');
   productTypeState.edit = editType;
   setProductType('edit', editType);
+  if (editType === 'cargo') {
+    const ew = document.getElementById('e-cargo-weight'); if (ew) ew.value = p.cargoWeight || '';
+    const ep = document.getElementById('e-cargo-price');  if (ep) ep.value = p.cargoPrice || '';
+  }
 
   openOverlay('edit-overlay');
 }
@@ -4379,6 +4464,9 @@ async function saveEdit() {
     const quality = document.getElementById('e-quality')?.value || '';
     const varDataE = getVarData('edit');
     const sizes = varState.edit.sizes || [];
+    const cargoType   = productTypeState.edit === 'cargo' ? 'separate' : 'included';
+    const cargoWeight = productTypeState.edit === 'cargo' ? (parseInt(document.getElementById('e-cargo-weight')?.value) || 0) : 0;
+    const cargoPrice  = productTypeState.edit === 'cargo' ? (parseInt(document.getElementById('e-cargo-price')?.value) || 0) : 0;
     const updated = await apiPut(`/products/${id}`, {
       name, cat, brand, style, emoji,
       photos: varState.edit.photos,
@@ -4389,6 +4477,7 @@ async function saveEdit() {
       desc, is_new: false,
       is_preorder: productTypeState.edit === 'preorder',
       quality,
+      cargo_type: cargoType, cargo_weight: cargoWeight, cargo_price: cargoPrice,
       source_links: varState.edit.links,
     });
     const idx = PRODUCTS.findIndex(p => p.id===id);
@@ -4678,6 +4767,49 @@ function renderSourceLinks(product) {
         </a>`
       ).join('')}
     </div>`;
+}
+
+function renderCargoBlock(p) {
+  const el = document.getElementById('d-cargo-block');
+  if (!el) return;
+  if (p.isPreorder) { el.innerHTML = ''; return; }
+
+  if (p.cargoType === 'separate') {
+    let priceHtml = '';
+    let subText = '';
+    if (p.cargoPrice > 0) {
+      priceHtml = `<div class="cargo-detail-price" style="color:#eab308">+${fmt(p.cargoPrice)}</div>`;
+      subText = 'Фиксированная стоимость карго';
+    } else if (p.cargoWeight > 0) {
+      const est = Math.round((p.cargoWeight / 100) * CARGO_PER_100G);
+      priceHtml = `<div class="cargo-detail-price" style="color:#eab308">~${fmt(est)}</div>`;
+      subText = `Примерно · ${p.cargoWeight}г · 13 000 / 100г`;
+    } else {
+      subText = 'Стоимость карго уточняется';
+    }
+    el.innerHTML = `
+      <div class="cargo-detail-block" style="border-color:rgba(234,179,8,.3);background:rgba(234,179,8,.05);margin-bottom:14px">
+        <div class="cargo-detail-row">
+          <div class="cargo-detail-icon">📦</div>
+          <div class="cargo-detail-text">
+            <div class="cargo-detail-title" style="color:#eab308">Карго оплачивается отдельно</div>
+            <div class="cargo-detail-sub">${subText}</div>
+          </div>
+          ${priceHtml}
+        </div>
+      </div>`;
+  } else {
+    el.innerHTML = `
+      <div class="cargo-detail-block" style="border-color:rgba(34,197,94,.3);background:rgba(34,197,94,.05);margin-bottom:14px">
+        <div class="cargo-detail-row">
+          <div class="cargo-detail-icon">✅</div>
+          <div class="cargo-detail-text">
+            <div class="cargo-detail-title" style="color:var(--green)">Карго включено в цену</div>
+            <div class="cargo-detail-sub">Доставка до 12 дней · Бесплатно</div>
+          </div>
+        </div>
+      </div>`;
+  }
 }
 
 /* ═══════════════════════════════════════════════
@@ -5231,7 +5363,10 @@ function setProductType(ctx, type) {
   productTypeState[ctx] = type;
   const p = ctx === 'add' ? 'a' : 'e';
   document.getElementById(`${p}-type-fast`)?.classList.toggle('on', type === 'fast');
+  document.getElementById(`${p}-type-cargo`)?.classList.toggle('on', type === 'cargo');
   document.getElementById(`${p}-type-preorder`)?.classList.toggle('on', type === 'preorder');
+  const extra = document.getElementById(`${p}-cargo-extra`);
+  if (extra) extra.style.display = type === 'cargo' ? 'flex' : 'none';
 }
 
 /* ═══════════════════════════════════════════════
