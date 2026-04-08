@@ -215,6 +215,9 @@ def init_db():
         "ALTER TABLE products ADD COLUMN quality TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE products ADD COLUMN moderation_status TEXT NOT NULL DEFAULT 'active'",
         "ALTER TABLE products ADD COLUMN added_by TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE products ADD COLUMN cargo_type TEXT NOT NULL DEFAULT 'included'",
+        "ALTER TABLE products ADD COLUMN cargo_weight INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE products ADD COLUMN cargo_price INTEGER NOT NULL DEFAULT 0",
     ]
     for m in migrations:
         try: conn.execute(m)
@@ -519,6 +522,9 @@ def row_to_product(row, include_links=False) -> dict:
         "isSale":        bool(row["is_sale"]),
         "isPreorder":    bool(row["is_preorder"]) if "is_preorder" in cols else False,
         "quality":       row["quality"] if "quality" in cols else "",
+        "cargoType":     row["cargo_type"] if "cargo_type" in cols else "included",
+        "cargoWeight":   row["cargo_weight"] if "cargo_weight" in cols else 0,
+        "cargoPrice":    row["cargo_price"] if "cargo_price" in cols else 0,
         "modStatus":     row["moderation_status"] if "moderation_status" in cols else "active",
         "addedBy":       row["added_by"] if "added_by" in cols else "",
         "rating":     row["rating"],
@@ -573,6 +579,9 @@ class ProductCreate(BaseModel):
     is_new:       bool            = False
     is_preorder:  bool            = False
     quality:      str             = ""
+    cargo_type:   str             = "included"   # "included" | "separate" | "unknown"
+    cargo_weight: int             = 0             # граммы, 0 = неизвестно
+    cargo_price:  int             = 0             # сум, если задан вручную
     source_links: List[SourceLink] = []
 
 class ProductUpdate(BaseModel):
@@ -591,6 +600,9 @@ class ProductUpdate(BaseModel):
     is_new:       Optional[bool]            = None
     is_preorder:  Optional[bool]            = None
     quality:      Optional[str]             = None
+    cargo_type:   Optional[str]             = None
+    cargo_weight: Optional[int]             = None
+    cargo_price:  Optional[int]             = None
     source_links: Optional[List[SourceLink]] = None
 
 class OrderCreate(BaseModel):
@@ -773,8 +785,8 @@ def create_product(body: ProductCreate, x_init_data: Optional[str] = Header(None
     conn = get_db()
     cur = conn.execute("""
         INSERT INTO products
-          (name,cat,brand,style,emoji,photos,price,old_price,sizes,colors,variations,desc,is_new,is_sale,is_preorder,quality,source_links)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          (name,cat,brand,style,emoji,photos,price,old_price,sizes,colors,variations,desc,is_new,is_sale,is_preorder,quality,cargo_type,cargo_weight,cargo_price,source_links)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     """, (
         body.name, body.cat, body.brand, body.style, body.emoji,
         json.dumps(body.photos, ensure_ascii=False),
@@ -784,6 +796,7 @@ def create_product(body: ProductCreate, x_init_data: Optional[str] = Header(None
         json.dumps(body.variations, ensure_ascii=False),
         body.desc, int(body.is_new), 1 if body.old_price else 0,
         int(body.is_preorder), body.quality,
+        body.cargo_type, body.cargo_weight, body.cargo_price,
         json.dumps([l.dict() for l in body.source_links], ensure_ascii=False),
     ))
     new_id = cur.lastrowid
@@ -823,6 +836,9 @@ def update_product(pid: int, body: ProductUpdate, x_init_data: Optional[str] = H
     if body.is_new       is not None: add("is_new", int(body.is_new))
     if body.is_preorder  is not None: add("is_preorder", int(body.is_preorder))
     if body.quality      is not None: add("quality", body.quality)
+    if body.cargo_type   is not None: add("cargo_type", body.cargo_type)
+    if body.cargo_weight is not None: add("cargo_weight", body.cargo_weight)
+    if body.cargo_price  is not None: add("cargo_price", body.cargo_price)
     if body.source_links is not None:
         add("source_links", json.dumps([l.dict() for l in body.source_links], ensure_ascii=False))
     if fields:
