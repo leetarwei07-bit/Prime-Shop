@@ -1055,6 +1055,13 @@ def get_user_wishlist(x_init_data: Optional[str] = Header(None)):
     conn.close()
     return {"wishlist": [r["product_id"] for r in rows]}
 
+@app.post("/user/ping", status_code=204)
+def user_ping(x_init_data: Optional[str] = Header(None)):
+    """Called on app open — records last seen timestamp for the user."""
+    user = get_user(x_init_data)
+    if user:
+        upsert_user(user)  # upsert already called in get_user, but this makes intent explicit
+
 @app.get("/admin/user-detail/{tg_id}")
 def admin_user_detail(tg_id: str, x_init_data: Optional[str] = Header(None)):
     """Full activity detail for a specific user — admin only."""
@@ -1104,8 +1111,9 @@ def admin_user_detail(tg_id: str, x_init_data: Optional[str] = Header(None)):
             display = u["first_name"] + (" " + u["last_name"] if u["last_name"] else "")
 
     return {
-        "tg_id":   tg_id,
-        "display": display,
+        "tg_id":     tg_id,
+        "display":   display,
+        "last_seen": u["updated_at"] if u else None,
         "wishlist": [{"product_id": r["product_id"], "name": r["name"] or f"Товар #{r['product_id']}",
                       "photo": parse_photo(r["photos"]), "price": r["price"] or 0} for r in wish_rows],
         "views":    [{"product_id": r["product_id"], "name": r["name"] or f"Товар #{r['product_id']}",
