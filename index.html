@@ -1432,6 +1432,23 @@ body {
           <div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Загрузка...</div>
         </div>
       </div>
+
+      <!-- Сброс -->
+      <div style="margin-top:24px">
+        <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">🗑 Сброс статистики</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button onclick="resetEvents('views')"
+            style="width:100%;padding:12px 16px;background:var(--s2);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:'Inter',sans-serif;font-size:13px;font-weight:600;cursor:pointer;text-align:left">
+            🔄 Обнулить просмотры товаров
+            <span style="display:block;font-size:11px;font-weight:400;color:var(--text3);margin-top:2px">Удалить все записи о просмотрах</span>
+          </button>
+          <button onclick="resetEvents('activity')"
+            style="width:100%;padding:12px 16px;background:var(--s2);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:'Inter',sans-serif;font-size:13px;font-weight:600;cursor:pointer;text-align:left">
+            👥 Стереть активность пользователей
+            <span style="display:block;font-size:11px;font-weight:400;color:var(--text3);margin-top:2px">Удалить все просмотры и избранное всех пользователей</span>
+          </button>
+        </div>
+      </div>
     </div>
     <!-- ORDERS -->
     <div class="admin-panel" id="panel-orders">
@@ -5144,6 +5161,19 @@ async function bulkPrice(action, inputId) {
     showToast('✅ Обновлено товаров: ' + res.updated);
     input.value = '';
     await loadProducts();
+  } catch(e) { showToast('Ошибка: ' + (e.message || 'неизвестная')); }
+}
+
+async function resetEvents(type) {
+  const labels = {
+    views:    'Обнулить просмотры? Это удалит все записи о просмотрах товаров.',
+    activity: 'Стереть всю активность пользователей? Удалятся просмотры и избранное всех пользователей.',
+  };
+  if (!confirm(labels[type])) return;
+  try {
+    const res = await apiFetch('/admin/reset-events', { method: 'POST', body: { type } });
+    showToast(`✅ Удалено записей: ${res.deleted}`);
+    loadProductEvents();
   } catch(e) { showToast('Ошибка: ' + (e.message || 'неизвестная')); }
 }
 
