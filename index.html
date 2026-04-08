@@ -139,7 +139,12 @@ body {
 .pe-price { font-size:11px;color:var(--text3);margin-top:1px }
 .pe-cnt { font-size:13px;font-weight:700;color:var(--text);text-align:right;flex-shrink:0 }
 .pe-uniq { font-size:10px;color:var(--text3);text-align:right }
-.nav-btn { position:relative;overflow:hidden }
+/* pe detail sheet */
+#pe-detail-overlay { z-index:800 }
+.pe-detail-photo { width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;margin-bottom:14px;background:var(--s2) }
+.pe-detail-photo-ph { width:100%;aspect-ratio:1;border-radius:14px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:64px;margin-bottom:14px }
+.pe-user-tag { display:inline-flex;align-items:center;gap:6px;background:var(--s1);border:1px solid var(--border2);border-radius:20px;padding:6px 12px;font-size:13px;font-weight:500;color:var(--text);margin:3px 3px 0 0 }
+.pe-user-avatar { width:22px;height:22px;border-radius:50%;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text3);flex-shrink:0 }
 
 /* ═══════════════════════════════════════════════
    HOME
@@ -1744,6 +1749,18 @@ body {
   </div>
 </div>
 
+<!-- PE DETAIL OVERLAY -->
+<div class="overlay" id="pe-detail-overlay" onclick="closePeDetail(event)">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <div class="sheet-title" id="pe-detail-title">Детали</div>
+      <button class="sheet-close" onclick="closePeDetail()">×</button>
+    </div>
+    <div id="pe-detail-body" style="padding-bottom:12px"></div>
+  </div>
+</div>
+
 <!-- NAV -->
 <nav class="bottom-nav">
   <button class="nav-btn active" data-pg="home" onclick="navigate('home',this)">
@@ -2533,6 +2550,7 @@ function renderGrid(elId, list, animate = true) {
 let lastViewedProduct = null; // запоминаем последний просмотренный товар
 let savedHomeScrollTop = 0;  // позиция скролла ленты перед открытием карточки
 let openedFromRec = false;   // открыт ли товар из блока «Похожие товары»
+let openedFromAdmin = false; // открыт ли товар из панели администратора
 const productLinksCache = {}; // кэш source_links: {product_id: [{label,url}]}
 
 function toggleFullscreen() {
@@ -2681,12 +2699,13 @@ function filterWish() {
 /* ═══════════════════════════════════════════════
    PRODUCT DETAIL
 ═══════════════════════════════════════════════ */
-function openProduct(id, fromRec = false) {
+function openProduct(id, fromRec = false, fromAdmin = false) {
   const p = PRODUCTS.find(x => x.id === id);
   if (!p) return;
-  openedFromRec = fromRec;
-  // Сохраняем позицию ленты перед открытием карточки (только если не из рекомендаций)
-  if (!fromRec) {
+  openedFromRec   = fromRec;
+  openedFromAdmin = fromAdmin;
+  // Сохраняем позицию ленты перед открытием карточки (только если не из рекомендаций/админки)
+  if (!fromRec && !fromAdmin) {
     const homeScroll = document.getElementById('home-scroll');
     if (homeScroll) savedHomeScrollTop = homeScroll.scrollTop;
   }
@@ -2812,18 +2831,17 @@ function closeProduct() {
     if (wishSearch) wishSearch.style.display = 'block';
   }
 
-  // Обновляем рекомендации «Для вас» без перерисовки ленты и без потери позиции
   const viewed = currentProduct;
-  const wasFromRec = openedFromRec;
-  currentProduct = null;
-  openedFromRec = false;
+  const wasFromRec   = openedFromRec;
+  const wasFromAdmin = openedFromAdmin;
+  currentProduct  = null;
+  openedFromRec   = false;
+  openedFromAdmin = false;
 
-  if (wasFromRec) {
-    // Открыт из блока «Похожие товары» — ничего не трогаем, остаёмся на месте
-    return;
-  }
+  // Открыт из похожих товаров или из админки — ничего не трогаем
+  if (wasFromRec || wasFromAdmin) return;
 
-  // Открыт из главной ленты — flash-анимация + scroll наверх + обновляем рекомендации
+  // Открыт из главной ленты — flash + scroll наверх + обновляем рекомендации
   if (viewed) {
     lastViewedProduct = viewed;
     updateRecsOnly(viewed);
@@ -3831,57 +3849,81 @@ async function loadProductEvents() {
   try {
     const data = await apiFetch('/admin/product-events');
 
-    // Views list — clickable, no users
-    if (!data.views.length) {
-      viewsEl.innerHTML = `<div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Нет данных</div>`;
-    } else {
-      viewsEl.innerHTML = data.views.map((item, i) => `
-        <div class="pe-row" onclick="openProduct(${item.product_id})" style="cursor:pointer">
-          <div class="pe-rank">${i + 1}</div>
-          ${item.photo
-            ? `<img class="pe-img" src="${item.photo}" alt=""/>`
-            : `<div class="pe-img-ph">📦</div>`}
-          <div class="pe-info">
-            <div class="pe-name">${item.name}</div>
-            <div class="pe-price">${fmt(item.price)}</div>
-          </div>
-          <div style="text-align:right;flex-shrink:0">
-            <div class="pe-cnt">${item.count}</div>
-            <div class="pe-uniq">польз.</div>
-          </div>
-        </div>`).join('');
-    }
+    const makeRow = (item, i, type) => `
+      <div class="pe-row" onclick="openPeDetail(${item.product_id},'${type}')" style="cursor:pointer">
+        <div class="pe-rank">${i + 1}</div>
+        ${item.photo
+          ? `<img class="pe-img" src="${item.photo}" alt=""/>`
+          : `<div class="pe-img-ph">📦</div>`}
+        <div class="pe-info">
+          <div class="pe-name">${item.name}</div>
+          <div class="pe-price">${fmt(item.price)}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div class="pe-cnt">${item.count}</div>
+          <div class="pe-uniq">${item.count === 1 ? 'польз.' : 'польз.'}</div>
+        </div>
+      </div>`;
 
-    // Wishlist — clickable + show which users
-    if (!data.wishlist.length) {
-      wishEl.innerHTML = `<div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Нет данных</div>`;
-    } else {
-      wishEl.innerHTML = data.wishlist.map((item, i) => {
-        const userTags = (item.users || []).map(u =>
-          `<span style="display:inline-block;background:var(--s1);border:1px solid var(--border);border-radius:20px;padding:2px 8px;font-size:10px;color:var(--text2);margin:2px 2px 0 0">${u}</span>`
-        ).join('');
-        return `
-        <div class="pe-row" onclick="openProduct(${item.product_id})" style="cursor:pointer;flex-wrap:wrap;align-items:flex-start">
-          <div class="pe-rank" style="margin-top:2px">${i + 1}</div>
-          ${item.photo
-            ? `<img class="pe-img" src="${item.photo}" alt="" style="margin-top:2px"/>`
-            : `<div class="pe-img-ph" style="margin-top:2px">📦</div>`}
-          <div class="pe-info" style="min-width:0">
-            <div class="pe-name">${item.name}</div>
-            <div class="pe-price">${fmt(item.price)}</div>
-            ${userTags ? `<div style="margin-top:4px">${userTags}</div>` : ''}
-          </div>
-          <div style="text-align:right;flex-shrink:0;margin-top:2px">
-            <div class="pe-cnt">${item.count}</div>
-            <div class="pe-uniq">польз.</div>
-          </div>
-        </div>`;
-      }).join('');
-    }
+    viewsEl.innerHTML = data.views.length
+      ? data.views.map((item, i) => makeRow(item, i, 'view')).join('')
+      : `<div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Нет данных</div>`;
+
+    wishEl.innerHTML = data.wishlist.length
+      ? data.wishlist.map((item, i) => makeRow(item, i, 'wish')).join('')
+      : `<div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Нет данных</div>`;
+
+    // Сохраняем данные для использования в detail sheet
+    window._peData = { views: data.views, wishlist: data.wishlist };
   } catch(e) {
     const err = `<div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Ошибка загрузки</div>`;
     viewsEl.innerHTML = err; wishEl.innerHTML = err;
   }
+}
+
+function openPeDetail(productId, type) {
+  const data = window._peData;
+  if (!data) return;
+  const list = type === 'view' ? data.views : data.wishlist;
+  const item = list.find(x => x.product_id === productId);
+  if (!item) return;
+
+  const title = type === 'view' ? '👁 Просмотры' : '❤️ Избранное';
+  const userLabel = type === 'view' ? 'Смотрели' : 'Добавили в избранное';
+  const users = item.users || [];
+
+  document.getElementById('pe-detail-title').textContent = title;
+  document.getElementById('pe-detail-body').innerHTML = `
+    ${item.photo
+      ? `<img class="pe-detail-photo" src="${item.photo}" alt="${item.name}"/>`
+      : `<div class="pe-detail-photo-ph">📦</div>`}
+    <div style="font-size:16px;font-weight:700;font-family:'Unbounded',sans-serif;margin-bottom:4px">${item.name}</div>
+    <div style="font-size:13px;color:var(--text3);margin-bottom:16px">${fmt(item.price)}</div>
+    <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">
+      ${userLabel} · ${item.count} ${item.count === 1 ? 'человек' : item.count < 5 ? 'человека' : 'человек'}
+    </div>
+    <div style="display:flex;flex-wrap:wrap">
+      ${users.length
+        ? users.map(u => `
+            <div class="pe-user-tag">
+              <div class="pe-user-avatar">${(u[0]||'?').replace('@','').toUpperCase()}</div>
+              ${u}
+            </div>`).join('')
+        : `<div style="color:var(--text3);font-size:13px">Нет данных о пользователях</div>`}
+    </div>
+    <div style="margin-top:20px">
+      <button onclick="openProduct(${item.product_id},false,true);closePeDetail()"
+        style="width:100%;padding:13px;background:var(--s2);border:1px solid var(--border2);border-radius:12px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;font-weight:600;cursor:pointer">
+        Открыть карточку товара →
+      </button>
+    </div>`;
+
+  document.getElementById('pe-detail-overlay').classList.add('open');
+}
+
+function closePeDetail(e) {
+  if (e && e.target !== document.getElementById('pe-detail-overlay')) return;
+  document.getElementById('pe-detail-overlay').classList.remove('open');
 }
 
 function renderAdminOrders() {
