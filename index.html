@@ -31,6 +31,12 @@
   --safe-b:   env(safe-area-inset-bottom, 0px);
   --easing:   cubic-bezier(.32,.72,0,1);
   --spring:   cubic-bezier(.34,1.56,.64,1);
+  --vip-a:    #f59e0b;
+  --vip-b:    #ef4444;
+  --blue:     #60a5fa;
+  --radius:   12px;
+  --radius-lg:18px;
+  --radius-xl:20px;
 }
 * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent }
 html {
@@ -60,6 +66,8 @@ body {
   transition:opacity .5s ease,transform .5s ease;
 }
 #splash.hide { opacity:0;transform:scale(1.04);pointer-events:none }
+#splash { animation:splashAutohide 1.5s ease 1.5s both }
+@keyframes splashAutohide { to { opacity:0; pointer-events:none; visibility:hidden } }
 .splash-logo {
   font-family:'Unbounded',sans-serif;font-size:28px;font-weight:700;letter-spacing:12px;
   animation:pulse 1.6s ease-in-out infinite alternate;
@@ -127,6 +135,8 @@ body {
 .nav-btn.active::after { content:'';position:absolute;bottom:2px;width:4px;height:4px;border-radius:50%;background:#fff;animation:dotPop .3s var(--spring) }
 @keyframes dotPop { from{transform:scale(0)} to{transform:scale(1)} }
 .nav-btn { position:relative;overflow:hidden }
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+@keyframes slideUpIn { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
 
 /* ═══════════════════════════════════════════════
    HOME
@@ -317,12 +327,6 @@ body {
   z-index:2;
   animation:badgePop .3s var(--spring) both;
 }
-.autoplay-wrap { position:absolute;inset:0;overflow:hidden }
-.autoplay-slide { position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .6s ease }
-.autoplay-slide.active { opacity:1 }
-.autoplay-dots { position:absolute;bottom:6px;left:50%;transform:translateX(-50%);display:flex;gap:4px;z-index:3;pointer-events:none }
-.autoplay-dot { width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.35);transition:background .3s }
-.autoplay-dot.on { background:#fff;width:12px;border-radius:3px }
 .vscroll-sentinel { height:1px;grid-column:1/-1 }
 .prod-sale-badge {
   position:absolute;top:8px;left:8px;
@@ -773,10 +777,90 @@ body {
 .admin-tab { flex-shrink:0;padding:12px 16px;font-size:12px;font-weight:500;color:var(--text3);border-bottom:2px solid transparent;cursor:pointer;transition:color .18s,border-color .18s,transform .12s var(--spring);background:none;border-left:none;border-right:none;border-top:none;font-family:'Inter',sans-serif }
 .admin-tab:active { transform:scale(.93) }
 .admin-tab.on { color:#fff;border-bottom-color:#fff }
-.admin-panel { padding:16px;padding-bottom:calc(var(--nav-h) + var(--safe-b) + 40px);display:none }
+/* Universal section label used in panels */
+.section-label {
+  font-size:10px;color:var(--text3);font-weight:600;
+  text-transform:uppercase;letter-spacing:.8px;
+  margin-bottom:10px;
+}
+/* Universal card row - used in analytics, users, etc */
+.card-row {
+  display:flex;align-items:center;gap:10px;
+  padding:10px 0;border-bottom:1px solid var(--border);
+  transition:opacity .15s;cursor:pointer;border-radius:6px;
+}
+.card-row:active { opacity:.6 }
+.card-row:last-child { border-bottom:none }
+/* Avatar circle */
+.avatar {
+  width:38px;height:38px;border-radius:50%;
+  background:var(--s3);display:flex;align-items:center;
+  justify-content:center;font-size:15px;font-weight:700;
+  color:var(--text2);flex-shrink:0;
+  transition:transform .2s var(--spring);
+}
+.avatar.vip {
+  background:linear-gradient(135deg,var(--vip-a),var(--vip-b));
+  color:#fff;
+}
+/* VIP badge pill */
+.vip-pill {
+  display:inline-flex;align-items:center;gap:3px;
+  background:linear-gradient(135deg,var(--vip-a),var(--vip-b));
+  color:#fff;font-size:10px;font-weight:700;
+  padding:2px 8px;border-radius:20px;letter-spacing:.4px;
+  font-family:'Unbounded',sans-serif;
+  box-shadow:0 2px 8px rgba(245,158,11,.3);
+}
+/* Pill badge - generic */
+.pill {
+  display:inline-flex;align-items:center;gap:3px;
+  background:var(--s3);font-size:10px;font-weight:600;
+  padding:2px 7px;border-radius:6px;
+}
+/* Action button - danger style */
+.btn-danger {
+  padding:8px 14px;
+  background:rgba(239,68,68,.1);
+  border:1px solid rgba(239,68,68,.25);
+  border-radius:9px;color:var(--red);
+  font-family:'Inter',sans-serif;font-size:12px;font-weight:600;
+  cursor:pointer;white-space:nowrap;transition:opacity .15s;
+}
+.btn-danger:active { opacity:.6 }
+.admin-panel {
+  padding:16px;
+  padding-bottom:calc(var(--nav-h) + var(--safe-b) + 40px);
+  display:none;
+}
+.admin-panel.on { display:block;animation:slideUpIn .22s var(--easing) both }
 .admin-panel.on { display:block;animation:panelIn .22s var(--easing) both }
 @keyframes panelIn { from{opacity:0;transform:translateY(8px) scale(.99)} to{opacity:1;transform:none} }
 .stat-grid { display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px }
+.stat-card {
+  background:var(--s2);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  padding:14px 12px 12px;
+  display:flex;flex-direction:column;align-items:center;text-align:center;
+  position:relative;overflow:hidden;
+  transition:border-color .2s,transform .15s var(--spring);
+}
+.stat-card::before {
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,var(--vip-a),var(--vip-b));
+  opacity:0;transition:opacity .2s;
+}
+.stat-card:active { transform:scale(.97) }
+.stat-val {
+  font-family:'Unbounded',sans-serif;
+  font-size:20px;font-weight:700;letter-spacing:-.5px;
+  color:var(--text);line-height:1.1;
+}
+.stat-label {
+  font-size:10px;font-weight:500;color:var(--text3);
+  margin-top:4px;letter-spacing:.3px;text-transform:uppercase;
+}
 .stat-card {
   background:var(--s1);border:1px solid var(--border);border-radius:16px;padding:14px;
   animation:cardIn .35s var(--easing) both;
@@ -793,7 +877,14 @@ body {
 .admin-order-id { font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700 }
 .admin-order-meta { font-size:11px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
 .admin-order-total { font-size:13px;font-weight:600;flex-shrink:0 }
-.admin-prod-row { display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);animation:slideUp .28s var(--easing) both }
+.admin-prod-row {
+  display:flex;align-items:center;gap:12px;padding:12px 0;
+  border-bottom:1px solid var(--border);
+  animation:slideUpIn .28s var(--easing) both;
+  cursor:pointer;border-radius:8px;
+  transition:opacity .15s;
+}
+.admin-prod-row:active { opacity:.6 }
 @keyframes slideUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
 .admin-prod-img { width:44px;height:44px;border-radius:10px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;overflow:hidden }
 .admin-prod-img img { width:100%;height:100%;object-fit:cover }
@@ -1114,14 +1205,13 @@ body {
   <div id="ptr-indicator" style="
     display:flex;align-items:center;justify-content:center;
     height:0;overflow:hidden;
-    transition:height .2s ease;
-    background:var(--bg);
+    transition:height .25s cubic-bezier(.32,.72,0,1);
+    background:var(--bg);will-change:height;
   ">
     <div id="ptr-spinner" style="
       width:22px;height:22px;border-radius:50%;
       border:2px solid var(--border2);border-top-color:#fff;
-      animation:spin .7s linear infinite;opacity:0;
-      transition:opacity .2s;
+      opacity:0;transition:opacity .2s;will-change:transform,opacity;
     "></div>
   </div>
   <div class="scroll" id="home-scroll" style="padding-top:calc(44px + var(--safe-t))">
@@ -1329,7 +1419,20 @@ body {
     </button>
     <div class="page-title">Мои заказы</div>
   </div>
-  <div class="scroll"><div id="orders-list" style="padding:0 0 20px"></div></div>
+  <!-- Pull-to-refresh indicator -->
+  <div id="orders-ptr-indicator" style="
+    display:flex;align-items:center;justify-content:center;
+    height:0;overflow:hidden;
+    transition:height .2s ease;
+    background:var(--bg);
+  ">
+    <div id="orders-ptr-spinner" style="
+      width:22px;height:22px;border-radius:50%;
+      border:2px solid var(--border2);border-top-color:#fff;
+      opacity:0;transition:opacity .2s;
+    "></div>
+  </div>
+  <div class="scroll" id="orders-scroll"><div id="orders-list" style="padding:0 0 20px"></div></div>
 </div>
 
 <!-- ADMIN -->
@@ -1350,9 +1453,24 @@ body {
     <button class="admin-tab" id="tab-brands" onclick="switchTab('brands',this)">Бренды</button>
     <button class="admin-tab" onclick="switchTab('templates',this)">📋 Шаблоны</button>
     <button class="admin-tab" onclick="switchTab('prices',this)">💰 Цены</button>
+    <button class="admin-tab" onclick="switchTab('analytics',this)">📊 Аналитика</button>
+    <button class="admin-tab" onclick="switchTab('users',this)">👥 Пользователи</button>
 
   </div>
-  <div class="scroll">
+  <!-- Pull-to-refresh indicator -->
+  <div id="admin-ptr-indicator" style="
+    display:flex;align-items:center;justify-content:center;
+    height:0;overflow:hidden;
+    transition:height .25s cubic-bezier(.32,.72,0,1);
+    background:var(--bg);will-change:height;
+  ">
+    <div id="admin-ptr-spinner" style="
+      width:22px;height:22px;border-radius:50%;
+      border:2px solid var(--border2);border-top-color:#fff;
+      opacity:0;transition:opacity .2s;will-change:transform,opacity;
+    "></div>
+  </div>
+  <div class="scroll" id="admin-scroll">
     <!-- STATS -->
     <div class="admin-panel on" id="panel-stats">
       <div class="stat-grid">
@@ -1360,6 +1478,21 @@ body {
         <div class="stat-card"><div class="stat-val" id="a-revenue">0</div><div class="stat-label">Выручка</div></div>
         <div class="stat-card"><div class="stat-val" id="a-products">0</div><div class="stat-label">Товаров</div></div>
         <div class="stat-card"><div class="stat-val" id="a-active">0</div><div class="stat-label">В обработке</div></div>
+      </div>
+      <!-- Топ просмотров -->
+      <div style="margin-top:20px">
+        <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">🔥 Топ просмотров</div>
+        <div id="stats-top-views"><div style="text-align:center;padding:20px 0;color:var(--text3);font-size:12px">Загрузка...</div></div>
+      </div>
+      <!-- Топ избранного -->
+      <div style="margin-top:20px">
+        <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">❤️ Топ избранного</div>
+        <div id="stats-top-wishes"><div style="text-align:center;padding:20px 0;color:var(--text3);font-size:12px">Загрузка...</div></div>
+      </div>
+      <!-- Лог избранного -->
+      <div style="margin-top:20px;margin-bottom:8px">
+        <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">📋 Последние добавления в избранное</div>
+        <div id="stats-wish-log"><div style="text-align:center;padding:20px 0;color:var(--text3);font-size:12px">Загрузка...</div></div>
       </div>
     </div>
     <!-- ORDERS -->
@@ -1518,7 +1651,6 @@ body {
           <label>Ссылки на источники <span style="color:var(--orange)">🔒 Только для админов</span></label>
           <div id="a-link-chips"></div>
           <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
-            <input id="a-link-label" class="var-add-input" type="text" placeholder="Название: Taobao, 1688, Poizon..."/>
             <input id="a-link-url" class="var-add-input" type="text" placeholder="Вставьте ссылку сюда"/>
             <button class="var-add-btn" onclick="addLink('add')" style="width:100%;padding:10px;text-align:center;background:var(--s2);border:1px solid var(--border);border-radius:9px;color:#fff;font-size:13px;font-weight:600;cursor:pointer">+ Добавить ссылку</button>
           </div>
@@ -1546,6 +1678,20 @@ body {
       </div>
       <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Команда</div>
       <div id="admin-list"></div>
+
+      <div style="height:1px;background:var(--border);margin:20px 0"></div>
+
+      <!-- VIP раздел -->
+      <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px">♛ VIP покупатели</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <input id="vip-username-input" type="text" placeholder="@username"
+          style="flex:1;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-family:'Inter',sans-serif;font-size:14px;color:#fff;outline:none"/>
+        <button onclick="grantVipByUsername()"
+          style="padding:11px 16px;background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff;border:none;border-radius:10px;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">
+          Выдать
+        </button>
+      </div>
+      <div id="vip-list" style="margin-top:8px"></div>
     </div>
 
     <!-- BRANDS & STYLES -->
@@ -1656,6 +1802,30 @@ body {
         </div>
         <div style="font-size:11px;color:var(--text3);margin-top:6px">Введите число от 1 до 99 — например 20 означает скидку 20%</div>
       </div>
+
+      <div style="background:var(--s2);border:1px solid var(--red);border-radius:14px;padding:16px;margin-top:12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="font-size:20px">❌</span>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--red)">Аннулировать скидки</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:1px">Убрать все скидки — цена станет равна текущей «старой» цене</div>
+          </div>
+        </div>
+        <button onclick="clearAllDiscounts()"
+          style="width:100%;padding:10px 18px;background:var(--red);color:#fff;border:none;border-radius:10px;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;cursor:pointer">
+          Убрать все скидки
+        </button>
+      </div>
+    </div>
+
+    <!-- ANALYTICS PANEL -->
+    <div class="admin-panel" id="panel-analytics">
+      <div id="analytics-content"><div style="text-align:center;padding:40px 0;color:var(--text3);font-size:13px">Загрузка...</div></div>
+    </div>
+
+    <!-- USERS PANEL -->
+    <div class="admin-panel" id="panel-users">
+      <div id="users-content"><div style="text-align:center;padding:40px 0;color:var(--text3);font-size:13px">Загрузка...</div></div>
     </div>
 
     <!-- MODERATION PANEL -->
@@ -1960,7 +2130,6 @@ body {
         <label>Ссылки на источники <span style="color:var(--orange)">🔒 Только для админов</span></label>
         <div id="e-link-chips"></div>
         <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
-          <input id="e-link-label" class="var-add-input" type="text" placeholder="Название (Taobao, 1688...)"/>
           <input id="e-link-url" class="var-add-input" type="url" placeholder="https://..." style="width:100%"/>
           <button class="var-add-btn" onclick="addLink('edit')" style="width:100%;padding:10px;text-align:center">+ Добавить ссылку</button>
         </div>
@@ -2094,6 +2263,9 @@ let wishlist = new Set();
 let cart = [];
 
 let currentProduct = null;
+let homeFeedScrollTop = 0; // сохраняем позицию ленты перед открытием карточки
+let openedFromRec = false;  // открыт ли товар из блока «Для вас»
+let IS_VIP = false;              // VIP-статус текущего пользователя
 let selColor = null, selSize = null, selVariation = null, detailQty = 1;
 let sliderIdx = 0, sliderPhotos = [], touchX = 0, touchStartX = 0, touchStartY = 0, touchStartTime = 0;
 
@@ -2118,7 +2290,7 @@ async function apiFetch(path, opts = {}) {
   }
   // Таймаут 10 секунд — если API не отвечает, не висим вечно
   const controller = new AbortController();
-  const tid = setTimeout(() => controller.abort(), 10000);
+  const tid = setTimeout(() => controller.abort(), 25000);
   try {
     const r = await fetch(API + path, { ...opts, headers, signal: controller.signal });
     clearTimeout(tid);
@@ -2144,16 +2316,27 @@ const apiDel = (path) => apiFetch(path, { method:'DELETE' });
 ═══════════════════════════════════════════════ */
 function hideSplash() {
   const s = document.getElementById('splash');
-  if (!s) return; // уже удалён
-  if (s._hidden) return; // уже скрывается
+  if (!s) return;
+  if (s._hidden) return;
   s._hidden = true;
-  s.classList.add('hide');
-  setTimeout(() => { if (s.parentNode) s.parentNode.removeChild(s); }, 540);
+  if (hideSplash._cleanup) hideSplash._cleanup();
+  s.style.animation = 'none';
+  s.style.transition = 'opacity .35s ease, transform .35s ease';
+  s.style.opacity = '0';
+  s.style.transform = 'scale(1.04)';
+  s.style.pointerEvents = 'none';
+  s.style.visibility = 'hidden';
+  s.style.zIndex = '-1';
+  setTimeout(() => {
+    s.style.display = 'none';
+    if (s.parentNode) s.parentNode.removeChild(s);
+  }, 380);
 }
 
-async function loadProducts() {
+async function loadProducts(attempt = 1) {
   try {
     const data = await apiGet('/products');
+    if (!Array.isArray(data)) throw new Error('Ответ не массив: ' + JSON.stringify(data).slice(0,100));
     PRODUCTS.length = 0;
     // Fisher-Yates shuffle при загрузке — порядок всегда случайный
     for (let i = data.length - 1; i > 0; i--) {
@@ -2161,18 +2344,48 @@ async function loadProducts() {
       [data[i], data[j]] = [data[j], data[i]];
     }
     data.forEach(p => PRODUCTS.push(p));
+    window._prodError = false; // products loaded OK
     renderHome(true); // instant=true — без skeleton, сразу карточки
     applySearch();
     hideSplash(); // скрываем сплэш как только товары готовы
     loadBrands();
     loadRecommendations();
+    loadWishlist();
     // Грузим ссылки отдельно (только для админов, бэкенд проверяет роль)
     loadProductLinks();
   } catch(e) {
-    console.error(e);
+    console.error('loadProducts error:', e);
+    // Retry once — сервер мог быть в cold start
+    if (attempt < 3) {
+      console.log(`Retry attempt ${attempt + 1}...`);
+      setTimeout(() => loadProducts(attempt + 1), 2000);
+      return;
+    }
     hideSplash();
-    toast('Ошибка загрузки каталога ⚠️');
+    const grid = document.getElementById('home-grid');
+    if (grid) grid.innerHTML = `<div style="grid-column:1/-1;padding:40px 20px;text-align:center;color:var(--text3);font-size:12px;line-height:1.6">
+      Не удалось загрузить товары<br/><span style="font-size:11px">${e.message||'Нет соединения'}</span><br/><br/>
+      <button onclick="location.reload()" style="margin-top:8px;padding:8px 20px;background:none;border:1px solid var(--border2);border-radius:20px;color:var(--text2);font-size:12px;cursor:pointer">Обновить</button>
+    </div>`;
   }
+}
+
+async function loadWishlist() {
+  if (!TG_USER) return;
+  try {
+    const data = await apiFetch('/wishlist');
+    wishlist.clear();
+    (data.ids || []).forEach(id => wishlist.add(id));
+    updateStats();
+    // Refresh heart buttons in feed
+    document.querySelectorAll('.prod-heart').forEach(btn => {
+      const card = btn.closest('[onclick]');
+      if (!card) return;
+      const m = (card.getAttribute('onclick')||'').match(/openProduct\((\d+)/);
+      if (m) btn.classList.toggle('liked', wishlist.has(+m[1]));
+    });
+    if (document.getElementById('page-wishlist')?.classList.contains('active')) filterWish();
+  } catch(e) { console.error('[wishlist] load error:', e); }
 }
 
 async function loadProductLinks() {
@@ -2230,6 +2443,27 @@ async function loadAllOrders() {
 ═══════════════════════════════════════════════ */
 function navigate(id, btn) {
   if (id === 'admin' && !isAdmin()) { toast('Доступ запрещён'); return; }
+  // Если уже на главной — анимация + перемешать ленту + scroll to top
+  const alreadyHome = id === 'home' && document.getElementById('page-home').classList.contains('active');
+  if (alreadyHome) {
+    const grid = document.getElementById('home-grid');
+    const scroll = document.getElementById('home-scroll');
+    // Fade-out
+    if (grid) { grid.style.transition = 'opacity .18s ease'; grid.style.opacity = '0'; }
+    setTimeout(() => {
+      // Scroll top мгновенно пока невидимо
+      if (scroll) scroll.scrollTop = 0;
+      // Перемешиваем ленту
+      renderHome(true);
+      loadRecommendations(lastViewedProduct);
+      // Fade-in
+      requestAnimationFrame(() => {
+        if (grid) { grid.style.opacity = '1'; }
+        setTimeout(() => { if (grid) grid.style.transition = ''; }, 220);
+      });
+    }, 190);
+    return;
+  }
   // close product if open
   if (document.getElementById('page-product').classList.contains('open')) closeProduct();
   closeCat();
@@ -2343,10 +2577,9 @@ function statusPill(s) {
 /* ═══════════════════════════════════════════════
    PRODUCT CARDS
 ═══════════════════════════════════════════════ */
-function cardHTML(p, idx = 0, autoplay = false) {
+function cardHTML(p, idx = 0, fromRec = false) {
   const disc = (p.old && p.old > p.price) ? Math.round((1 - p.price/p.old)*100) : 0;
-  const photos = (p.photos && p.photos.length) ? p.photos : null;
-  const photo  = photos ? photos[0] : null;
+  const photo = p.photos && p.photos.length ? p.photos[0] : null;
 
   const delay = idx < 2 ? 0 : Math.min((idx - 2) * 0.06, 0.5);
 
@@ -2360,23 +2593,12 @@ function cardHTML(p, idx = 0, autoplay = false) {
         до 12 дней · Бесплатно
       </div>`;
 
-  // Автоплей-слайдер для первых 4 карточек, обычное фото для остальных
-  let imgHtml;
-  if (autoplay && photos && photos.length > 1) {
-    const slides = photos.map((src, si) =>
-      `<img src="${src}" class="autoplay-slide${si===0?' active':''}" loading="${idx<4?'eager':'lazy'}" alt="${p.name}" onload="this.classList.add('img-loaded')" onerror="this.style.display='none'">`
-    ).join('');
-    imgHtml = `<div class="autoplay-wrap" data-pid="${p.id}" data-cur="0" data-total="${photos.length}">
-      ${slides}
-      <div class="autoplay-dots">${photos.map((_,si)=>`<span class="autoplay-dot${si===0?' on':''}"></span>`).join('')}</div>
-    </div>`;
-  } else if (photo) {
-    imgHtml = `<img src="${photo}" loading="${idx<4?'eager':'lazy'}" fetchpriority="${idx<2?'high':'auto'}" alt="${p.name}" onload="this.classList.add('img-loaded')" onerror="this.style.display='none'"/>`;
-  } else {
-    imgHtml = `<span>${p.emoji||'📦'}</span>`;
-  }
+  // Фото появляется плавно через onload
+  const imgHtml = photo
+    ? `<img src="${photo}" loading="${idx < 4 ? 'eager' : 'lazy'}" fetchpriority="${idx < 2 ? 'high' : 'auto'}" alt="${p.name}" onload="this.classList.add('img-loaded')" onerror="this.style.display='none'">`
+    : `<span>${p.emoji||'📦'}</span>`;
 
-  return `<div class="prod-card" onclick="openProduct(${p.id})" style="animation-delay:${delay}s">
+  return `<div class="prod-card" onclick="openProduct(${p.id},${fromRec})" style="animation-delay:${delay}s">
     <div class="prod-img">
       ${imgHtml}
       ${p.isPreorder ? `<div class="prod-preorder-badge">Под заказ</div>` : ''}
@@ -2601,10 +2823,11 @@ function toggleWish(e, id) {
   if (wishlist.has(id)) {
     wishlist.delete(id); btn.classList.remove('liked');
     toast('Убрано из избранного');
+    if (TG_USER) apiDel('/wishlist/' + id).catch(() => {});
   } else {
     wishlist.add(id); btn.classList.add('liked');
     toast('Добавлено в избранное ❤️');
-    trackWish(id);
+    if (TG_USER) apiFetch('/wishlist/' + id, { method: 'POST' }).catch(() => {});
   }
   updateStats();
   if (document.getElementById('page-wishlist').classList.contains('active')) filterWish();
@@ -2627,9 +2850,13 @@ function filterWish() {
 /* ═══════════════════════════════════════════════
    PRODUCT DETAIL
 ═══════════════════════════════════════════════ */
-function openProduct(id) {
+function openProduct(id, fromRec = false) {
   const p = PRODUCTS.find(x => x.id === id);
   if (!p) return;
+  openedFromRec = !!fromRec;
+  // Запоминаем позицию ленты чтобы восстановить при закрытии
+  const homeScroll = document.getElementById('home-scroll');
+  if (homeScroll) homeFeedScrollTop = homeScroll.scrollTop;
   currentProduct = p; detailQty = 1;
   trackView(id);
   selColor = (p.colors&&p.colors.length) ? p.colors[0] : null;
@@ -2752,15 +2979,34 @@ function closeProduct() {
     if (wishSearch) wishSearch.style.display = 'block';
   }
 
-  // Обновляем ленту с рекомендациями на основе просмотренного товара
   const viewed = currentProduct;
+  const wasFromRec = openedFromRec;
   currentProduct = null;
-  if (viewed) {
-    lastViewedProduct = viewed;
-    loadRecommendations(viewed); // обновляем рекомендации без перезагрузки каталога
-  } else {
-    loadRecommendations(lastViewedProduct);
+  openedFromRec = false;
+
+  if (wasFromRec) {
+    // Открыт из «Для вас» — ничего не обновляем, позицию не трогаем
+    if (viewed) lastViewedProduct = viewed;
+    return;
   }
+
+  // Открыт из обычной ленты — fade-out → scroll top + рефреш → fade-in
+  const grid = document.getElementById('home-grid');
+  const homeScroll = document.getElementById('home-scroll');
+  if (grid) { grid.style.transition = 'opacity .18s ease'; grid.style.opacity = '0'; }
+  setTimeout(() => {
+    if (homeScroll) homeScroll.scrollTop = 0;
+    if (viewed) {
+      lastViewedProduct = viewed;
+      loadRecommendations(viewed);
+    } else {
+      loadRecommendations(lastViewedProduct);
+    }
+    requestAnimationFrame(() => {
+      if (grid) { grid.style.opacity = '1'; }
+      setTimeout(() => { if (grid) grid.style.transition = ''; }, 220);
+    });
+  }, 190);
 }
 
 function searchByTag(type, value) {
@@ -2806,8 +3052,13 @@ function toggleDetailWish() {
   if (!currentProduct) return;
   const id = currentProduct.id;
   const btn = document.getElementById('detail-wish');
-  if (wishlist.has(id)) { wishlist.delete(id); btn.classList.remove('liked'); }
-  else { wishlist.add(id); btn.classList.add('liked'); toast('Добавлено ❤️'); }
+  if (wishlist.has(id)) {
+    wishlist.delete(id); btn.classList.remove('liked');
+    if (TG_USER) apiDel('/wishlist/' + id).catch(() => {});
+  } else {
+    wishlist.add(id); btn.classList.add('liked'); toast('Добавлено ❤️');
+    if (TG_USER) apiFetch('/wishlist/' + id, { method: 'POST' }).catch(() => {});
+  }
   updateStats();
 }
 
@@ -3596,6 +3847,18 @@ function renderProfile() {
   const rav = document.getElementById('rec-self-av');
   if(rav) rav.innerHTML = photo ? `<img src="${photo}" alt="av" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>` : '🧑';
 
+  // VIP badge (shown to user themselves)
+  let vipBadgeEl = document.getElementById('vip-badge');
+  if (IS_VIP) {
+    if (!vipBadgeEl) {
+      vipBadgeEl = document.createElement('div');
+      vipBadgeEl.id = 'vip-badge';
+      vipBadgeEl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;margin-top:4px;background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;letter-spacing:.5px;font-family:'Unbounded',sans-serif';
+      vipBadgeEl.textContent = '♛ VIP';
+      document.getElementById('profile-user').after(vipBadgeEl);
+    }
+  } else if (vipBadgeEl) { vipBadgeEl.remove(); }
+
   // admin badge
   let badge = document.getElementById('admin-badge');
   if (admin) {
@@ -3633,7 +3896,7 @@ function renderRecentlyViewed() {
     const products = ids.map(id => PRODUCTS.find(p => p.id === id)).filter(Boolean).slice(0, 4);
     if (!products.length) { sec.style.display = 'none'; return; }
     sec.style.display = 'block';
-    grid.innerHTML = products.map((p, i) => cardHTML(p, i, true)).join('');
+    grid.innerHTML = products.map((p, i) => cardHTML(p, i)).join('');
   } catch(e) { sec.style.display = 'none'; }
 }
 
@@ -3666,11 +3929,13 @@ function switchTab(tab, btn) {
   if (tab === 'stats')     { loadAllOrders().then(renderAdminStats); }
   if (tab === 'orders')    { loadAllOrders(); }
   if (tab === 'products')  { renderAdminProducts(); }
-  if (tab === 'admins')    { renderAdminList(); }
+  if (tab === 'admins')    { renderAdminList(); loadVipList(); }
   if (tab === 'brands')    { renderBrandsList(); }
   if (tab === 'add')       { resetAddForm(); }
   if (tab === 'templates') { loadDescTemplates(); }
   if (tab === 'moderation') { loadPendingProducts(); }
+  if (tab === 'analytics')  { loadAnalytics(); }
+  if (tab === 'users')      { loadUsers(); }
 }
 
 function showProductLinks(e, pid) {
@@ -3743,6 +4008,72 @@ function renderAdminStats() {
   document.getElementById('a-revenue').textContent = fmtK(rev);
   document.getElementById('a-products').textContent = PRODUCTS.length;
   document.getElementById('a-active').textContent = act;
+  loadProductEvents();
+}
+
+async function loadProductEvents() {
+  const elViews  = document.getElementById('stats-top-views');
+  const elWishes = document.getElementById('stats-top-wishes');
+  const elLog    = document.getElementById('stats-wish-log');
+  if (!elViews || !elWishes || !elLog) return;
+
+  try {
+    const data = await apiFetch('/admin/product-events?limit=15');
+
+    // Топ просмотров
+    if (!data.top_views.length) {
+      elViews.innerHTML = '<div style="text-align:center;padding:16px 0;color:var(--text3);font-size:12px">Нет данных</div>';
+    } else {
+      elViews.innerHTML = data.top_views.map((r, i) => `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;color:var(--text3);width:18px;text-align:right">${i+1}</div>
+          <div style="font-size:18px;width:28px;text-align:center">${r.emoji}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.name}</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:1px">${r.unique_users} польз.</div>
+          </div>
+          <div style="font-size:13px;font-weight:700;color:var(--orange)">${r.views} <span style="font-size:10px;font-weight:400;color:var(--text3)">просм.</span></div>
+        </div>`).join('');
+    }
+
+    // Топ избранного
+    if (!data.top_wishes.length) {
+      elWishes.innerHTML = '<div style="text-align:center;padding:16px 0;color:var(--text3);font-size:12px">Нет данных</div>';
+    } else {
+      elWishes.innerHTML = data.top_wishes.map((r, i) => `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;color:var(--text3);width:18px;text-align:right">${i+1}</div>
+          <div style="font-size:18px;width:28px;text-align:center">${r.emoji}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.name}</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:1px">${r.unique_users} польз.</div>
+          </div>
+          <div style="font-size:13px;font-weight:700;color:#e879a0">${r.wishes} <span style="font-size:10px;font-weight:400;color:var(--text3)">❤️</span></div>
+        </div>`).join('');
+    }
+
+    // Лог добавлений в избранное
+    if (!data.wish_log.length) {
+      elLog.innerHTML = '<div style="text-align:center;padding:16px 0;color:var(--text3);font-size:12px">Нет данных</div>';
+    } else {
+      elLog.innerHTML = data.wish_log.map(r => {
+        const dt = r.at ? new Date(r.at * 1000).toLocaleString('ru', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+        return `
+        <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
+          <div style="font-size:16px;width:24px;text-align:center">${r.emoji}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.product_name}</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:1px">@${r.user_id}</div>
+          </div>
+          <div style="font-size:10px;color:var(--text3);white-space:nowrap">${dt}</div>
+        </div>`;
+      }).join('');
+    }
+
+  } catch(e) {
+    const msg = '<div style="text-align:center;padding:12px 0;color:var(--text3);font-size:12px">Ошибка загрузки</div>';
+    elViews.innerHTML = msg; elWishes.innerHTML = msg; elLog.innerHTML = msg;
+  }
 }
 
 function renderAdminOrders() {
@@ -3777,7 +4108,9 @@ function renderAdminProducts() {
   const el = document.getElementById('admin-products-list');
   if (!el) return;
   if (!PRODUCTS.length) { el.innerHTML = `<div style="text-align:center;padding:40px 0;color:var(--text3);font-size:13px">Товаров пока нет</div>`; return; }
-  el.innerHTML = PRODUCTS.map(p => {
+  // Показываем в порядке добавления (по ID), не перемешиваем
+  const sorted = [...PRODUCTS].sort((a, b) => a.id - b.id);
+  el.innerHTML = sorted.map(p => {
     const img = p.photos&&p.photos.length
       ? `<div class="admin-prod-img"><img src="${p.photos[0]}" alt=""/></div>`
       : `<div class="admin-prod-img">${p.emoji}</div>`;
@@ -4180,19 +4513,81 @@ async function removeAdmin(u) {
 }
 
 /* ═══════════════════════════════════════════════
+   VIP MANAGEMENT
+═══════════════════════════════════════════════ */
+async function grantVipByUsername() {
+  const inp = document.getElementById('vip-username-input');
+  const raw = (inp?.value || '').trim();
+  if (!raw) { toast('Введите @username'); return; }
+  const username = raw.replace(/^@/, '');
+  try {
+    const res = await apiPost('/admin/vip-by-username', { username, action: 'grant' });
+    inp.value = '';
+    toast(`♛ VIP выдан @${username}`);
+    loadVipList();
+  } catch(e) {
+    const msg = e.message || '';
+    toast(msg.includes('не найден') ? `@${username} не найден в системе` : 'Ошибка ⚠️');
+  }
+}
+
+async function revokeVip(userId, handle) {
+  if (!confirm(`Снять VIP у ${handle}?`)) return;
+  try {
+    await apiFetch('/admin/users/' + userId + '/vip', { method: 'POST' });
+    toast(`VIP снят у ${handle}`);
+    loadVipList();
+    loadUsers(); // refresh users panel if open
+  } catch(e) { toast('Ошибка ⚠️'); }
+}
+
+async function loadVipList() {
+  const el = document.getElementById('vip-list');
+  if (!el) return;
+  try {
+    const data = await apiFetch('/admin/vip-list');
+    const vips = data.vips || [];
+    if (!vips.length) {
+      el.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:8px 0">VIP-пользователей пока нет</div>';
+      return;
+    }
+    el.innerHTML = vips.map(u => {
+      const initial = (u.display || u.handle)[0].toUpperCase();
+      const lastSeen = u.last_seen
+        ? new Date(u.last_seen * 1000).toLocaleDateString('ru', {day:'numeric', month:'short'})
+        : '';
+      return `<div class="card-row">
+        <div class="avatar vip" style="width:34px;height:34px;font-size:13px">${initial}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.display}</div>
+          <div style="font-size:11px;color:var(--orange);margin-top:1px">${u.handle}${lastSeen ? ' · '+lastSeen : ''}</div>
+        </div>
+        <button onclick="revokeVip('${u.user_id}','${u.handle}')" class="btn-danger">Снять</button>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:8px 0">Ошибка загрузки</div>';
+  }
+}
+
+/* ═══════════════════════════════════════════════
    SOURCE LINKS
 ═══════════════════════════════════════════════ */
 function addLink(ctx) {
   const prefix = ctx === 'add' ? 'a' : 'e';
-  const labelEl = document.getElementById(`${prefix}-link-label`);
-  const urlEl   = document.getElementById(`${prefix}-link-url`);
-  const label = (labelEl?.value||'').trim();
+  const urlEl = document.getElementById(`${prefix}-link-url`);
   const url   = (urlEl?.value||'').trim();
-  if (!label || !url) { toast('Введите название и ссылку'); return; }
+  if (!url) { toast('Вставьте ссылку'); return; }
   if (!url.startsWith('http')) { toast('Ссылка должна начинаться с http'); return; }
+  // Автоматически берём название из домена
+  let label = url;
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, '');
+    label = host.split('.')[0]; // taobao, 1688, poizon и т.д.
+    label = label.charAt(0).toUpperCase() + label.slice(1);
+  } catch(e) {}
   varState[ctx].links.push({ label, url });
-  if (labelEl) labelEl.value = '';
-  if (urlEl)   urlEl.value   = '';
+  if (urlEl) urlEl.value = '';
   renderLinkChips(ctx);
 }
 
@@ -4622,7 +5017,7 @@ function loadRecommendations(lastViewed = null) {
     // Лента: остальные товары по убыванию релевантности
     const inRecs = new Set(recs.map(x => x.product.id));
     const scoreMap = new Map(scored.map(x => [x.product.id, x.score]));
-    renderHomeSorted(inRecs, scoreMap);
+    renderHomeSorted(inRecs);
   } else {
     // Нет истории — скрываем «Для вас», лента по новизне (дефолт)
     sec.style.display = 'none';
@@ -4630,7 +5025,7 @@ function loadRecommendations(lastViewed = null) {
   }
 }
 
-function renderHomeSorted(inRecs, scoreMap) {
+function renderHomeSorted(inRecs) {
   const q = (document.getElementById('home-search-input')?.value||'').trim().toLowerCase();
   let list = [...PRODUCTS];
   if (homeCat !== 'Все') list = list.filter(p => p.cat === homeCat);
@@ -4639,15 +5034,13 @@ function renderHomeSorted(inRecs, scoreMap) {
   // Убираем товары из «Для вас»
   list = list.filter(p => !inRecs.has(p.id));
 
-  // Сортируем: релевантные сверху, нулевые — в случайном порядке
-  list.sort((a, b) => {
-    const sa = scoreMap.get(a.id) || 0;
-    const sb = scoreMap.get(b.id) || 0;
-    if (Math.abs(sb - sa) > 3) return sb - sa; // значимая разница — сортируем строго
-    return Math.random() - 0.5; // близкие score — перемешиваем
-  });
+  // Все товары идут в случайном порядке — независимо от рекомендаций
+  for (let i = list.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [list[i], list[j]] = [list[j], list[i]];
+  }
 
-  renderGrid('home-grid', list, true);
+  renderGrid('home-grid', list);
 }
 
 // Показывает рекомендации на странице товара
@@ -4811,69 +5204,454 @@ function renderTemplatesList() {
     </div>`).join('');
 }
 
+async function loadAnalytics() {
+  const el = document.getElementById('analytics-content');
+  if (!el) return;
+  el.innerHTML = '<div style="display:flex;justify-content:center;padding:48px 0"><div style="width:22px;height:22px;border-radius:50%;border:2px solid var(--border2);border-top-color:#fff;animation:spin .7s linear infinite"></div></div>';
+  try {
+    const data = await apiFetch('/admin/product-events');
+    const totalViews  = data.top_views.reduce((s,r) => s+r.views, 0);
+    const totalWishes = data.top_wishes.reduce((s,r) => s+r.wishes, 0);
+
+    el.innerHTML = `
+      <div class="stat-grid" style="margin-bottom:20px">
+        <div class="stat-card"><div class="stat-val">${fmtK(totalViews)}</div><div class="stat-label">Просмотров</div></div>
+        <div class="stat-card"><div class="stat-val">${fmtK(totalWishes)}</div><div class="stat-label">В избранном</div></div>
+      </div>
+
+      <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">🔥 Топ просмотров</div>
+      <div style="margin-bottom:20px">
+        ${data.top_views.length ? data.top_views.map((p,i) => analyticsRow(p, i+1, 'view')).join('') : '<div style="color:var(--text3);font-size:13px;padding:8px 0">Нет данных</div>'}
+      </div>
+
+      <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">❤️ Топ избранного</div>
+      <div style="margin-bottom:20px">
+        ${data.top_wishes.length ? data.top_wishes.map((p,i) => analyticsRow(p, i+1, 'wish')).join('') : '<div style="color:var(--text3);font-size:13px;padding:8px 0">Нет данных</div>'}
+      </div>
+
+      <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">📋 Кто добавлял в избранное</div>
+      <div style="margin-bottom:24px">
+        ${data.wish_log.length ? data.wish_log.map(r => wishLogRow(r)).join('') : '<div style="color:var(--text3);font-size:13px;padding:8px 0">Нет данных</div>'}
+      </div>
+
+      <div style="height:1px;background:var(--border);margin-bottom:16px"></div>
+      <button onclick="clearAllViews()" style="width:100%;padding:11px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:10px;color:var(--red);font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;cursor:pointer">
+        🗑 Обнулить все просмотры
+      </button>`;
+  } catch(e) {
+    el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--red);font-size:13px">Ошибка загрузки</div>';
+    console.error(e);
+  }
+}
+
+function analyticsRow(p, rank, type) {
+  const color = type === 'wish' ? 'var(--red)' : 'var(--orange)';
+  const icon  = type === 'wish' ? '❤️' : '👁';
+  const count = type === 'wish' ? p.wishes : p.views;
+  const prod = PRODUCTS.find(x => x.id === p.product_id);
+  const photoSrc = p.photo || prod?.photos?.[0] || null;
+  const imgEl = photoSrc
+    ? `<img src="${photoSrc}" style="width:100%;height:100%;object-fit:cover;border-radius:10px"/>`
+    : `<span style="font-size:18px">${p.emoji}</span>`;
+  return `<div class="card-row" onclick="showProductStats(${p.product_id},'${type}')">
+    <div style="width:20px;text-align:center;font-size:11px;font-weight:700;color:var(--text3);flex-shrink:0;font-family:'Unbounded',sans-serif">${rank}</div>
+    <div style="width:44px;height:44px;border-radius:10px;background:var(--s2);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;border:1px solid var(--border)">${imgEl}</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px">${p.unique_users} чел.</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:4px 8px">
+      <span style="font-size:11px">${icon}</span>
+      <span style="font-size:13px;font-weight:700;color:${color};font-family:'Unbounded',sans-serif">${count}</span>
+    </div>
+  </div>`;
+}
+
+async function showProductStats(productId, focusTab) {
+  // Создаём попап поверх аналитики
+  const old = document.getElementById('product-stats-popup');
+  if (old) old.remove();
+
+  const popup = document.createElement('div');
+  popup.id = 'product-stats-popup';
+  popup.style.cssText = `
+    position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.7);
+    display:flex;align-items:flex-end;justify-content:center;
+    animation:fadeIn .18s ease;
+  `;
+  popup.innerHTML = `
+    <div style="background:var(--s1);border-radius:20px 20px 0 0;width:100%;max-height:80vh;
+      display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,0px);
+      animation:slideUp .22s var(--easing)">
+      <div style="width:36px;height:4px;background:var(--border2);border-radius:2px;margin:12px auto 0"></div>
+      <div id="pstats-content" style="overflow-y:auto;padding:16px 16px 24px;flex:1">
+        <div style="display:flex;justify-content:center;padding:32px 0">
+          <div style="width:22px;height:22px;border-radius:50%;border:2px solid var(--border2);border-top-color:#fff;animation:spin .7s linear infinite"></div>
+        </div>
+      </div>
+    </div>`;
+  popup.addEventListener('click', e => { if (e.target === popup) popup.remove(); });
+  document.body.appendChild(popup);
+
+  try {
+    const data = await apiFetch('/admin/product-stats/' + productId);
+    const p = data.product;
+    const viewers = data.viewers;
+    const wishers = data.wishers;
+
+    const photoHtml = p.photo
+      ? `<img src="${p.photo}" style="width:100%;height:180px;object-fit:cover;border-radius:12px;margin-bottom:12px"/>`
+      : `<div style="font-size:48px;text-align:center;margin-bottom:12px">${p.emoji}</div>`;
+
+    const userRow = u => {
+      const name = u.first_name || '';
+      const handle = u.username ? '@' + u.username : 'id' + u.user_id;
+      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="width:32px;height:32px;border-radius:50%;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--text2);flex-shrink:0">
+          ${name ? name[0].toUpperCase() : '?'}
+        </div>
+        <div style="flex:1;min-width:0">
+          ${name ? `<div style="font-size:13px;font-weight:500">${name}</div>` : ''}
+          <div style="font-size:11px;color:var(--orange)">${handle}</div>
+        </div>
+      </div>`;
+    };
+
+    const activeTab = focusTab || 'view';
+
+    document.getElementById('pstats-content').innerHTML = `
+      ${photoHtml}
+      <div style="font-size:15px;font-weight:600;margin-bottom:16px">${p.name}</div>
+
+      <!-- tabs -->
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <button id="pstab-view" onclick="pstatsTab('view')"
+          style="flex:1;padding:8px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;
+          border:1px solid var(--border);font-family:'Inter',sans-serif;
+          background:${activeTab==='view'?'#fff':'var(--s2)'};color:${activeTab==='view'?'#000':'var(--text2)'}">
+          👁 Просмотры (${viewers.length})
+        </button>
+        <button id="pstab-wish" onclick="pstatsTab('wish')"
+          style="flex:1;padding:8px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;
+          border:1px solid var(--border);font-family:'Inter',sans-serif;
+          background:${activeTab==='wish'?'var(--red)':'var(--s2)'};color:${activeTab==='wish'?'#fff':'var(--text2)'}">
+          ❤️ Избранное (${wishers.length})
+        </button>
+      </div>
+
+      <div id="pstats-view-list" style="display:${activeTab==='view'?'block':'none'}">
+        ${viewers.length ? viewers.map(userRow).join('') : '<div style="color:var(--text3);font-size:13px;padding:12px 0">Никто не смотрел</div>'}
+      </div>
+      <div id="pstats-wish-list" style="display:${activeTab==='wish'?'block':'none'}">
+        ${wishers.length ? wishers.map(userRow).join('') : '<div style="color:var(--text3);font-size:13px;padding:12px 0">Никто не добавил</div>'}
+      </div>`;
+
+    // Store data for tab switching
+    popup._viewers = viewers;
+    popup._wishers = wishers;
+    popup._userRow = userRow;
+  } catch(e) {
+    document.getElementById('pstats-content').innerHTML = `<div style="color:var(--red);text-align:center;padding:32px 0">Ошибка загрузки</div>`;
+  }
+}
+
+function pstatsTab(tab) {
+  const popup = document.getElementById('product-stats-popup');
+  if (!popup) return;
+  const vBtn = document.getElementById('pstab-view');
+  const wBtn = document.getElementById('pstab-wish');
+  const vList = document.getElementById('pstats-view-list');
+  const wList = document.getElementById('pstats-wish-list');
+  if (tab === 'view') {
+    vBtn.style.background = '#fff'; vBtn.style.color = '#000';
+    wBtn.style.background = 'var(--s2)'; wBtn.style.color = 'var(--text2)';
+    vList.style.display = 'block'; wList.style.display = 'none';
+  } else {
+    wBtn.style.background = 'var(--red)'; wBtn.style.color = '#fff';
+    vBtn.style.background = 'var(--s2)'; vBtn.style.color = 'var(--text2)';
+    wList.style.display = 'block'; vList.style.display = 'none';
+  }
+}
+
+function wishLogRow(r) {
+  const date = r.at ? new Date(r.at * 1000).toLocaleDateString('ru', {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '';
+  const imgEl = r.photo
+    ? `<img src="${r.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:10px"/>`
+    : `<span style="font-size:18px">${r.emoji}</span>`;
+  // Показываем имя + username если есть, иначе Telegram ID
+  const displayName = r.first_name || (r.username ? '@' + r.username : '');
+  const handle = r.username ? '@' + r.username : ('id' + r.user_id);
+  const userLine = displayName
+    ? `<span style="color:#fff">${displayName}</span> <span style="color:var(--text3)">${handle}</span>`
+    : `<span style="color:var(--orange)">${handle}</span>`;
+  return `<div onclick="openProduct(${r.product_id})" style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer;-webkit-tap-highlight-color:transparent" ontouchstart="this.style.opacity='.6'" ontouchend="this.style.opacity='1'" onmousedown="this.style.opacity='.6'" onmouseup="this.style.opacity='1'">
+    <div style="width:44px;height:44px;border-radius:10px;background:var(--s2);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden">${imgEl}</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.product_name}</div>
+      <div style="font-size:11px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${userLine}</div>
+    </div>
+    <div style="font-size:11px;color:var(--text3);flex-shrink:0;text-align:right">${date}</div>
+  </div>`;
+}
+
+async function loadUsers() {
+  const el = document.getElementById('users-content');
+  if (!el) return;
+  el.innerHTML = '<div style="display:flex;justify-content:center;padding:48px 0"><div style="width:22px;height:22px;border-radius:50%;border:2px solid var(--border2);border-top-color:#fff;animation:spin .7s linear infinite"></div></div>';
+  try {
+    const data = await apiFetch('/admin/users');
+    const users = data.users || [];
+    if (!users.length) {
+      el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--text3);font-size:13px">Нет данных</div>';
+      return;
+    }
+
+    // Summary
+    const totalLaunches = users.reduce((s,u) => s+u.launches, 0);
+    const totalSpent    = users.reduce((s,u) => s+u.spent, 0);
+
+    el.innerHTML = `
+      <div class="stat-grid" style="margin-bottom:20px">
+        <div class="stat-card"><div class="stat-val">${users.length}</div><div class="stat-label">Пользователей</div></div>
+        <div class="stat-card"><div class="stat-val">${totalLaunches}</div><div class="stat-label">Запусков</div></div>
+        <div class="stat-card"><div class="stat-val">${fmtK(totalSpent)}</div><div class="stat-label">Потрачено</div></div>
+      </div>
+      <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Все пользователи</div>
+      ${users.map(u => userRow(u)).join('')}`;
+  } catch(e) {
+    el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--red);font-size:13px">Ошибка загрузки</div>';
+    console.error(e);
+  }
+}
+
+function userRow(u) {
+  const lastSeen = u.last_seen
+    ? new Date(u.last_seen * 1000).toLocaleDateString('ru', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'})
+    : '—';
+  const initial = (u.display || u.handle || '?')[0].toUpperCase();
+  const vipBadge = u.is_vip ? `<span class="vip-pill">♛ VIP</span>` : '';
+  const badges = [
+    u.orders  ? `<span class="pill" style="color:var(--orange)">🛍 ${u.orders}</span>` : '',
+    u.wishes  ? `<span class="pill" style="color:var(--red)">❤️ ${u.wishes}</span>` : '',
+    u.views   ? `<span class="pill" style="color:var(--text2)">👁 ${u.views}</span>` : '',
+  ].filter(Boolean).join('');
+  return `<div class="card-row" onclick="showUserDetail(${JSON.stringify(u).replace(/"/g,'&quot;')})">
+    <div class="avatar ${u.is_vip ? 'vip' : ''}">${initial}</div>
+    <div style="flex:1;min-width:0">
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px">${u.display}</span>
+        ${vipBadge}
+      </div>
+      <div style="font-size:11px;color:var(--orange);margin-top:1px">${u.handle}</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px">${badges}</div>
+    </div>
+    <div style="text-align:right;flex-shrink:0">
+      <div style="font-size:10px;color:var(--text3);font-weight:500">${u.launches}× запусков</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:3px">${lastSeen}</div>
+    </div>
+  </div>`;
+}
+
+async function showUserDetail(u) {
+  if (typeof u === 'string') { try { u = JSON.parse(u); } catch(e) { return; } }
+  const oldP = document.getElementById('user-detail-popup');
+  if (oldP) oldP.remove();
+
+  const firstSeen = u.first_seen ? new Date(u.first_seen*1000).toLocaleDateString('ru',{day:'numeric',month:'short',year:'numeric'}) : '—';
+  const lastSeen  = u.last_seen  ? new Date(u.last_seen *1000).toLocaleDateString('ru',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '—';
+  const initial   = (u.display||u.handle||'?')[0].toUpperCase();
+  // Имя + username отдельно
+  const nameLabel   = u.display || u.handle;
+  const handleLabel = u.username ? '@'+u.username : (u.user_id ? 'id'+u.user_id : '');
+
+  const popup = document.createElement('div');
+  popup.id = 'user-detail-popup';
+  popup.style.cssText = 'position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.7);display:flex;align-items:flex-end;justify-content:center;animation:fadeIn .18s ease';
+  popup.innerHTML = `
+    <div style="background:var(--s1);border-radius:20px 20px 0 0;width:100%;max-height:85vh;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,0px);animation:slideUp .22s var(--easing)">
+      <div style="width:36px;height:4px;background:var(--border2);border-radius:2px;margin:12px auto 0;flex-shrink:0"></div>
+      <div style="overflow-y:auto;padding:16px 16px 24px;flex:1">
+        <!-- Header -->
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <div style="width:48px;height:48px;border-radius:50%;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:var(--text2);flex-shrink:0">${initial}</div>
+          <div style="min-width:0">
+            <div style="font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nameLabel}</div>
+            ${handleLabel ? `<div style="font-size:12px;color:var(--orange);margin-top:2px">${handleLabel}</div>` : ''}
+            <div style="font-size:11px;color:var(--text3);margin-top:2px">${firstSeen} — ${lastSeen} · ${u.launches} запусков</div>
+          </div>
+        </div>
+        <!-- Stats mini -->
+        <div style="display:flex;gap:8px;margin-bottom:16px;overflow-x:auto;padding-bottom:2px">
+          ${[['👁',u.views,'просм.'],['❤️',u.wishes,'избр.'],['🛍',u.orders,'заказов'],['💰',fmtK(u.spent),'']].map(([i,v,l])=>`
+          <div style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:8px 12px;text-align:center;flex-shrink:0">
+            <div style="font-size:13px">${i}</div>
+            <div style="font-size:13px;font-weight:700;margin-top:2px">${v}</div>
+            ${l?`<div style="font-size:10px;color:var(--text3)">${l}</div>`:''}
+          </div>`).join('')}
+        </div>
+        <!-- Tabs -->
+        <div style="display:flex;gap:6px;margin-bottom:12px">
+          <button id="udtab-view" onclick="udTab('view')" style="flex:1;padding:7px;border-radius:9px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border);font-family:'Inter',sans-serif;background:#fff;color:#000">👁 Просмотры</button>
+          <button id="udtab-wish" onclick="udTab('wish')" style="flex:1;padding:7px;border-radius:9px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border);font-family:'Inter',sans-serif;background:var(--s2);color:var(--text2)">❤️ Избранное</button>
+          <button id="udtab-orders" onclick="udTab('orders')" style="flex:1;padding:7px;border-radius:9px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border);font-family:'Inter',sans-serif;background:var(--s2);color:var(--text2)">🛍 Заказы</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <button id="ud-vip-btn" onclick="toggleVip()" style="flex:1;padding:9px;background:linear-gradient(135deg,rgba(245,158,11,.15),rgba(239,68,68,.15));border:1px solid rgba(245,158,11,.4);border-radius:9px;color:#f59e0b;font-family:'Inter',sans-serif;font-size:12px;font-weight:700;cursor:pointer">
+            ♛ VIP
+          </button>
+          <button id="ud-clear-btn" onclick="clearUserViews()" style="flex:1;padding:9px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:9px;color:var(--red);font-family:'Inter',sans-serif;font-size:12px;font-weight:600;cursor:pointer">
+            🗑 Стереть просмотры
+          </button>
+        </div>
+        <div id="ud-body">
+          <div style="display:flex;justify-content:center;padding:28px 0">
+            <div style="width:20px;height:20px;border-radius:50%;border:2px solid var(--border2);border-top-color:#fff;animation:spin .7s linear infinite"></div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  popup.addEventListener('click', e => { if (e.target === popup) popup.remove(); });
+  popup._userId = u.user_id;
+  popup._isVip = !!u.is_vip;
+  document.body.appendChild(popup);
+  // Update VIP button label
+  const vipBtn = document.getElementById('ud-vip-btn');
+  if (vipBtn) {
+    vipBtn.textContent = u.is_vip ? '♛ Снять VIP' : '♛ Выдать VIP';
+    vipBtn.style.opacity = '1';
+  }
+
+  // Load detail data
+  try {
+    const data = await apiFetch('/admin/user-detail/' + u.user_id);
+    popup._ud = data;
+    udTab('view');
+  } catch(e) {
+    const b = document.getElementById('ud-body');
+    if (b) b.innerHTML = '<div style="color:var(--red);text-align:center;padding:24px 0">Ошибка загрузки</div>';
+  }
+}
+
+function udTab(tab) {
+  const popup = document.getElementById('user-detail-popup');
+  if (!popup || !popup._ud) return;
+  const data = popup._ud;
+
+  // Update tab buttons
+  const tabs = {view:'#fff|#000', wish:'var(--red)|#fff', orders:'var(--orange)|#000'};
+  ['view','wish','orders'].forEach(t => {
+    const btn = document.getElementById('udtab-'+t);
+    if (!btn) return;
+    const [bg,clr] = (tabs[t]||'var(--s2)|var(--text2)').split('|');
+    btn.style.background = t===tab ? bg : 'var(--s2)';
+    btn.style.color = t===tab ? clr : 'var(--text2)';
+  });
+
+  const body = document.getElementById('ud-body');
+  if (!body) return;
+
+  const miniCard = (r) => {
+    const img = r.photo
+      ? `<img src="${r.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:8px"/>`
+      : `<span style="font-size:18px">${r.emoji}</span>`;
+    return `<div onclick="openProduct(${r.product_id})" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer">
+      <div style="width:40px;height:40px;border-radius:9px;background:var(--s2);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden">${img}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.name}</div>
+      </div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>`;
+  };
+
+  if (tab === 'view') {
+    body.innerHTML = data.viewed.length
+      ? data.viewed.map(miniCard).join('')
+      : '<div style="color:var(--text3);font-size:13px;padding:16px 0;text-align:center">Нет просмотров</div>';
+  } else if (tab === 'wish') {
+    body.innerHTML = data.wished.length
+      ? data.wished.map(miniCard).join('')
+      : '<div style="color:var(--text3);font-size:13px;padding:16px 0;text-align:center">Избранное пусто</div>';
+  } else {
+    body.innerHTML = data.orders.length
+      ? data.orders.map(o => `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+          <div>
+            <div style="font-size:13px;font-weight:500">Заказ #${o.id}</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px">${o.date} · ${o.items_count} поз.</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:13px;font-weight:600">${fmt(o.total)}</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:2px">${o.status}</div>
+          </div>
+        </div>`).join('')
+      : '<div style="color:var(--text3);font-size:13px;padding:16px 0;text-align:center">Заказов нет</div>';
+  }
+}
+
+async function clearAllViews() {
+  if (!confirm('Обнулить все просмотры всех товаров? Это действие нельзя отменить.')) return;
+  try {
+    await apiDel('/admin/views');
+    toast('✅ Все просмотры удалены');
+    loadAnalytics();
+  } catch(e) { toast('Ошибка: ' + (e.message || 'неизвестная')); }
+}
+
+async function toggleVip() {
+  const popup = document.getElementById('user-detail-popup');
+  if (!popup || !popup._userId) return;
+  const uid = popup._userId;
+  const wasVip = popup._isVip;
+  const btn = document.getElementById('ud-vip-btn');
+  if (btn) { btn.disabled = true; btn.style.opacity = '.5'; }
+  try {
+    await apiFetch('/admin/users/' + uid + '/vip', { method: 'POST' });
+    popup._isVip = !wasVip;
+    const label = popup._isVip ? '♛ Снять VIP' : '♛ Выдать VIP';
+    if (btn) { btn.textContent = label; btn.disabled = false; btn.style.opacity = '1'; }
+    toast(popup._isVip ? '♛ VIP выдан' : 'VIP снят');
+    // Refresh users list in background
+    loadUsers();
+  } catch(e) {
+    toast('Ошибка: ' + (e.message || 'неизвестная'));
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+  }
+}
+
+async function clearUserViews() {
+  const popup = document.getElementById('user-detail-popup');
+  if (!popup || !popup._userId) return;
+  const uid = popup._userId;
+  if (!confirm('Стереть все просмотры этого пользователя?')) return;
+  try {
+    await apiDel('/admin/views/' + uid);
+    toast('✅ Просмотры пользователя удалены');
+    // Refresh tab
+    if (popup._ud) { popup._ud.viewed = []; udTab('view'); }
+  } catch(e) { toast('Ошибка: ' + (e.message || 'неизвестная')); }
+}
+
 async function bulkPrice(action, inputId) {
   const input = document.getElementById(inputId);
   const amount = parseFloat(input?.value);
-  if (!amount || amount <= 0) { showToast('Введите значение больше 0'); return; }
-  if (action === 'discount' && amount >= 100) { showToast('Скидка должна быть меньше 100%'); return; }
+  if (!amount || amount <= 0) { toast('Введите значение больше 0'); return; }
+  if (action === 'discount' && amount >= 100) { toast('Скидка должна быть меньше 100%'); return; }
   const labels = { increase: `повысить на ${amount.toLocaleString()} сум`, decrease: `снизить на ${amount.toLocaleString()} сум`, discount: `поставить скидку ${amount}%` };
   if (!confirm(`Применить ко всем товарам: ${labels[action]}?`)) return;
   try {
     const res = await apiFetch('/products/bulk-price', { method: 'POST', body: { action, amount } });
-    showToast('✅ Обновлено товаров: ' + res.updated);
+    toast('✅ Обновлено товаров: ' + res.updated);
     input.value = '';
     await loadProducts();
-  } catch(e) { showToast('Ошибка: ' + (e.message || 'неизвестная')); }
+  } catch(e) { toast('Ошибка: ' + (e.message || 'неизвестная')); }
 }
 
-// ── AUTOPLAY ENGINE ─────────────────────────────────────────────────────
-const autoplayTimers = new Map();
-
-function startAutoplay(wrap) {
-  const pid = wrap.dataset.pid;
-  if (autoplayTimers.has(pid)) return;
-  const slides = wrap.querySelectorAll('.autoplay-slide');
-  const dots   = wrap.querySelectorAll('.autoplay-dot');
-  if (slides.length < 2) return;
-  let cur = parseInt(wrap.dataset.cur) || 0;
-  const timer = setInterval(() => {
-    slides[cur].classList.remove('active');
-    dots[cur]?.classList.remove('on');
-    cur = (cur + 1) % slides.length;
-    slides[cur].classList.add('active');
-    dots[cur]?.classList.add('on');
-    wrap.dataset.cur = cur;
-  }, 3000);
-  autoplayTimers.set(pid, timer);
-}
-
-function stopAutoplay(wrap) {
-  const pid = wrap.dataset.pid;
-  const timer = autoplayTimers.get(pid);
-  if (timer) { clearInterval(timer); autoplayTimers.delete(pid); }
-}
-
-function initAutoplayObserver() {
-  const obs = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-      const wrap = entry.target;
-      if (entry.isIntersecting) startAutoplay(wrap);
-      else stopAutoplay(wrap);
-    });
-  }, { threshold: 0.3 });
-  // Observe existing wraps
-  document.querySelectorAll('.autoplay-wrap').forEach(w => obs.observe(w));
-  // Watch for new wraps added dynamically
-  const mutObs = new MutationObserver(muts => {
-    muts.forEach(m => m.addedNodes.forEach(node => {
-      if (node.nodeType !== 1) return;
-      const wraps = node.classList?.contains('autoplay-wrap')
-        ? [node]
-        : [...(node.querySelectorAll?.('.autoplay-wrap') || [])];
-      wraps.forEach(w => obs.observe(w));
-    }));
-  });
-  mutObs.observe(document.body, { childList: true, subtree: true });
+async function clearAllDiscounts() {
+  if (!confirm('Убрать скидки со всех товаров? Цена станет равна текущей «старой» цене.')) return;
+  try {
+    const res = await apiFetch('/products/bulk-price', { method: 'POST', body: { action: 'clear_discounts', amount: 0 } });
+    toast('✅ Скидки аннулированы: ' + res.updated + ' товаров');
+    await loadProducts();
+  } catch(e) { toast('Ошибка: ' + (e.message || 'неизвестная')); }
 }
 
 async function loadPendingCount() {
@@ -5267,90 +6045,93 @@ function toast(msg) {
    PULL-TO-REFRESH + RUBBER BAND
 ═══════════════════════════════════════════════ */
 (function() {
-  const TRIGGER = 80;   // px to pull before refresh triggers
-  const MAX     = 110;  // max rubber band stretch px
+  const TRIGGER = 72;   // px to pull before refresh triggers
+  const MAX     = 100;  // max rubber band stretch px
 
-  let startY = 0, pulling = false, triggered = false;
+  let startY = 0, pulling = false, triggered = false, refreshing = false;
 
-  function getHomeScroll() {
-    return document.getElementById('home-scroll');
+  function getHomeScroll() { return document.getElementById('home-scroll'); }
+  function getPTR()        { return document.getElementById('ptr-indicator'); }
+  function getSpinner()    { return document.getElementById('ptr-spinner'); }
+
+  function setPtr(h, instant) {
+    const ptr = getPTR();
+    if (!ptr) return;
+    if (instant) ptr.style.transition = 'none';
+    else ptr.style.transition = 'height .28s cubic-bezier(.32,.72,0,1)';
+    ptr.style.height = h + 'px';
   }
 
-  function getPTR() {
-    return document.getElementById('ptr-indicator');
-  }
-
-  function getSpinner() {
-    return document.getElementById('ptr-spinner');
+  function resetPtr() {
+    const spinner = getSpinner();
+    setPtr(0, false);
+    setTimeout(() => {
+      if (spinner) { spinner.style.opacity = '0'; spinner.style.animation = ''; spinner.style.transform = 'rotate(0deg)'; }
+      refreshing = false;
+    }, 320);
   }
 
   document.addEventListener('touchstart', (e) => {
+    if (refreshing) return;
     const scroll = getHomeScroll();
-    if (!scroll || !scroll.closest('.page.active')) return;
+    if (!scroll || !document.getElementById('page-home')?.classList.contains('active')) return;
     if (!e.target.closest('#home-scroll')) return;
-    if (scroll.scrollTop > 0) return; // only pull when at top
+    if (scroll.scrollTop > 0) return;
     startY = e.touches[0].clientY;
     pulling = true;
     triggered = false;
   }, { passive: true });
 
   document.addEventListener('touchmove', (e) => {
-    if (!pulling) return;
+    if (!pulling || refreshing) return;
     const scroll = getHomeScroll();
     if (!scroll || scroll.scrollTop > 0) { pulling = false; return; }
 
     const dy = e.touches[0].clientY - startY;
-    if (dy <= 0) return;
+    if (dy <= 0) { setPtr(0, true); return; }
 
-    // Rubber band: slow down resistance as we pull further
-    const resistance = 0.4;
-    const pull = Math.min(dy * resistance, MAX);
-    const ptr = getPTR();
+    // Progressive resistance: feels heavy near MAX
+    const pull = Math.min(MAX * (1 - Math.exp(-dy / (MAX * 2.5))), MAX);
     const spinner = getSpinner();
 
-    if (ptr) ptr.style.height = pull + 'px';
+    setPtr(pull, true);
 
-    // Spinner appears + rotates as pull increases
     if (spinner) {
       const progress = Math.min(pull / TRIGGER, 1);
       spinner.style.opacity = String(progress);
-      spinner.style.transform = `rotate(${progress * 180}deg)`;
+      spinner.style.transform = `rotate(${Math.round(progress * 210)}deg)`;
+      spinner.style.animation = '';
     }
 
-    // Haptic when threshold reached
     if (pull >= TRIGGER && !triggered) {
       triggered = true;
-      if (window.Telegram?.WebApp?.HapticFeedback) {
-        window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
-      }
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
     }
   }, { passive: true });
 
   document.addEventListener('touchend', () => {
     if (!pulling) return;
     pulling = false;
+    if (refreshing) return;
 
-    const ptr = getPTR();
     const spinner = getSpinner();
 
     if (triggered) {
-      // Show loading state
-      if (ptr) ptr.style.height = '48px';
+      refreshing = true;
+      // Snap to 48px loading state
+      setPtr(48, false);
       if (spinner) {
         spinner.style.opacity = '1';
+        spinner.style.transform = 'rotate(0deg)';
         spinner.style.animation = 'spin .7s linear infinite';
       }
-      // Refresh
-      Promise.all([loadProducts(), loadAdmins()]).finally(() => {
-        setTimeout(() => {
-          if (ptr) ptr.style.height = '0';
-          if (spinner) spinner.style.opacity = '0';
-        }, 400);
+      // Only reload products — no second loader
+      loadProducts().finally(() => {
+        setTimeout(resetPtr, 300);
       });
     } else {
-      // Spring back
-      if (ptr) ptr.style.height = '0';
-      if (spinner) spinner.style.opacity = '0';
+      setPtr(0, false);
+      if (spinner) { spinner.style.opacity = '0'; spinner.style.transform = 'rotate(0deg)'; }
     }
   });
 
@@ -5361,6 +6142,168 @@ function toast(msg) {
     if (scroll) lastScrollTop = scroll.scrollTop;
   }, { passive: true });
 
+})();
+
+/* ═══════════════════════════════════════════════
+   PULL-TO-REFRESH — АДМИНИСТРАТОР
+═══════════════════════════════════════════════ */
+(function() {
+  const TRIGGER = 72;
+  const MAX     = 100;
+  let startY = 0, pulling = false, triggered = false, refreshing = false;
+
+  function getScroll()  { return document.getElementById('admin-scroll'); }
+  function getPtr()     { return document.getElementById('admin-ptr-indicator'); }
+  function getSpinner() { return document.getElementById('admin-ptr-spinner'); }
+  function isAdminActive() {
+    return document.getElementById('page-admin')?.classList.contains('active');
+  }
+
+  function setPtr(h, instant) {
+    const ptr = getPtr();
+    if (!ptr) return;
+    ptr.style.transition = instant ? 'none' : 'height .28s cubic-bezier(.32,.72,0,1)';
+    ptr.style.height = h + 'px';
+  }
+
+  function resetPtr() {
+    const spinner = getSpinner();
+    setPtr(0, false);
+    setTimeout(() => {
+      if (spinner) { spinner.style.opacity = '0'; spinner.style.animation = ''; spinner.style.transform = 'rotate(0deg)'; }
+      refreshing = false;
+    }, 320);
+  }
+
+  document.addEventListener('touchstart', (e) => {
+    if (!isAdminActive() || refreshing) return;
+    const scroll = getScroll();
+    if (!scroll || !e.target.closest('#admin-scroll')) return;
+    if (scroll.scrollTop > 0) return;
+    startY = e.touches[0].clientY;
+    pulling = true;
+    triggered = false;
+  }, { passive: true });
+
+  document.addEventListener('touchmove', (e) => {
+    if (!pulling || refreshing) return;
+    const scroll = getScroll();
+    if (!scroll || scroll.scrollTop > 0) { pulling = false; return; }
+    const dy = e.touches[0].clientY - startY;
+    if (dy <= 0) { setPtr(0, true); return; }
+    const pull = Math.min(MAX * (1 - Math.exp(-dy / (MAX * 2.5))), MAX);
+    const spinner = getSpinner();
+    setPtr(pull, true);
+    if (spinner) {
+      const progress = Math.min(pull / TRIGGER, 1);
+      spinner.style.opacity = String(progress);
+      spinner.style.transform = `rotate(${Math.round(progress * 210)}deg)`;
+      spinner.style.animation = '';
+    }
+    if (pull >= TRIGGER && !triggered) {
+      triggered = true;
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchend', () => {
+    if (!pulling) return;
+    pulling = false;
+    if (refreshing) return;
+    const spinner = getSpinner();
+    if (triggered) {
+      refreshing = true;
+      setPtr(48, false);
+      if (spinner) { spinner.style.opacity = '1'; spinner.style.transform = 'rotate(0deg)'; spinner.style.animation = 'spin .7s linear infinite'; }
+      // Refresh current active tab
+      const activeTab = document.querySelector('.admin-tab.on')?.getAttribute('onclick')?.match(/switchTab\('(\w+)'/)?.[1];
+      const refreshFn = {
+        stats: () => loadAllOrders().then(renderAdminStats),
+        orders: () => loadAllOrders(),
+        products: () => Promise.resolve(renderAdminProducts()),
+        admins: () => renderAdminList(),
+        brands: () => Promise.resolve(renderBrandsList()),
+        templates: () => loadDescTemplates(),
+        moderation: () => loadPendingProducts(),
+        analytics: () => loadAnalytics(),
+        users:     () => loadUsers(),
+      };
+      const fn = activeTab && refreshFn[activeTab];
+      (fn ? Promise.resolve(fn()) : Promise.resolve()).finally(() => {
+        setTimeout(resetPtr, 300);
+      });
+    } else {
+      setPtr(0, false);
+      if (spinner) { spinner.style.opacity = '0'; spinner.style.transform = 'rotate(0deg)'; }
+    }
+  });
+})();
+
+/* ═══════════════════════════════════════════════
+   PULL-TO-REFRESH — МОИ ЗАКАЗЫ
+═══════════════════════════════════════════════ */
+(function() {
+  const TRIGGER = 80;
+  const MAX     = 110;
+  let startY = 0, pulling = false, triggered = false;
+
+  function getScroll()   { return document.getElementById('orders-scroll'); }
+  function getPtr()      { return document.getElementById('orders-ptr-indicator'); }
+  function getSpinner()  { return document.getElementById('orders-ptr-spinner'); }
+  function isOrdersActive() {
+    return document.getElementById('page-orders')?.classList.contains('active');
+  }
+
+  document.addEventListener('touchstart', (e) => {
+    if (!isOrdersActive()) return;
+    const scroll = getScroll();
+    if (!scroll || !e.target.closest('#orders-scroll')) return;
+    if (scroll.scrollTop > 0) return;
+    startY = e.touches[0].clientY;
+    pulling = true;
+    triggered = false;
+  }, { passive: true });
+
+  document.addEventListener('touchmove', (e) => {
+    if (!pulling) return;
+    const scroll = getScroll();
+    if (!scroll || scroll.scrollTop > 0) { pulling = false; return; }
+    const dy = e.touches[0].clientY - startY;
+    if (dy <= 0) return;
+    const pull = Math.min(dy * 0.4, MAX);
+    const ptr = getPtr();
+    const spinner = getSpinner();
+    if (ptr) ptr.style.height = pull + 'px';
+    if (spinner) {
+      const progress = Math.min(pull / TRIGGER, 1);
+      spinner.style.opacity = String(progress);
+      spinner.style.transform = `rotate(${progress * 180}deg)`;
+    }
+    if (pull >= TRIGGER && !triggered) {
+      triggered = true;
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchend', () => {
+    if (!pulling) return;
+    pulling = false;
+    const ptr = getPtr();
+    const spinner = getSpinner();
+    if (triggered) {
+      if (ptr) ptr.style.height = '48px';
+      if (spinner) { spinner.style.opacity = '1'; spinner.style.animation = 'spin .7s linear infinite'; }
+      loadMyOrders().finally(() => {
+        setTimeout(() => {
+          if (ptr) ptr.style.height = '0';
+          if (spinner) { spinner.style.opacity = '0'; spinner.style.animation = ''; }
+        }, 400);
+      });
+    } else {
+      if (ptr) ptr.style.height = '0';
+      if (spinner) spinner.style.opacity = '0';
+    }
+  });
 })();
 
 /* ═══════════════════════════════════════════════
@@ -5379,22 +6322,59 @@ try {
   }
 } catch(e) {}
 
-// Жёсткий fallback — скрываем сплэш максимум через 3 секунды в любом случае
-const _splashKill = setTimeout(hideSplash, 3000);
+// Жёсткий fallback — скрываем сплэш максимум через 1.5 секунды в любом случае
+const _splashKill = setTimeout(hideSplash, 800);
+// Показываем кнопку повтора если сервер не отвечает за 5 секунд (cold start)
+const _splashRetry = setTimeout(() => {
+  const splash = document.getElementById('splash');
+  if (!splash || splash._hidden) return;
+  const existing = document.getElementById('splash-retry');
+  if (existing) return;
+  const btn = document.createElement('button');
+  btn.id = 'splash-retry';
+  btn.textContent = 'Обновить';
+  btn.style.cssText = 'margin-top:8px;padding:8px 24px;background:none;border:1px solid rgba(255,255,255,.2);border-radius:20px;color:rgba(255,255,255,.5);font-family:Inter,sans-serif;font-size:12px;cursor:pointer;letter-spacing:.5px';
+  btn.onclick = () => location.reload();
+  splash.appendChild(btn);
+}, 5000);
+hideSplash._cleanup = () => { clearTimeout(_splashRetry); };
 
-// Запускаем автоплей observer
-initAutoplayObserver();
+// Трекаем сессию и загружаем VIP-статус (fire-and-forget)
+if (TG_USER) {
+  apiFetch('/session', { method: 'POST' }).catch(() => {});
+  apiFetch('/me').then(d => {
+    IS_VIP = !!d.is_vip;
+    if (IS_VIP) document.body.setAttribute('data-vip','1');
+    renderProfile();
+  }).catch(() => {});
+}
 
-Promise.all([
-  loadProducts(),
-  loadMyOrders(),
-  loadAdmins(),
-  checkPendingOrder(),
-  loadDescTemplates(),
-]).finally(() => {
+// Только loadProducts() блокирует сплэш — остальное грузим параллельно в фоне
+loadProducts().finally(() => {
   clearTimeout(_splashKill);
   hideSplash();
 });
+// Фоновые загрузки — не блокируют сплэш
+loadMyOrders();
+loadAdmins();
+checkPendingOrder();
+loadDescTemplates();
+
+// Debug: show API error visibly if products fail
+window._prodError = true;
+setTimeout(() => {
+  if (!window._prodError) return;
+  const s = document.getElementById('splash');
+  if (!s || s._hidden) return;
+  let errEl = document.getElementById('splash-err');
+  if (!errEl) {
+    errEl = document.createElement('div');
+    errEl.id = 'splash-err';
+    errEl.style.cssText = 'font-size:11px;color:rgba(255,255,255,.4);text-align:center;max-width:260px;line-height:1.5;padding:0 20px';
+    s.appendChild(errEl);
+  }
+  errEl.textContent = 'Сервер не отвечает. Проверь интернет или нажми «Обновить».';
+}, 6000);
 </script>
 </body>
 </html>
