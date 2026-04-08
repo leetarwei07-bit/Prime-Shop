@@ -2290,7 +2290,7 @@ async function apiFetch(path, opts = {}) {
   }
   // Таймаут 10 секунд — если API не отвечает, не висим вечно
   const controller = new AbortController();
-  const tid = setTimeout(() => controller.abort(), 25000);
+  const tid = setTimeout(() => controller.abort(), 8000);
   try {
     const r = await fetch(API + path, { ...opts, headers, signal: controller.signal });
     clearTimeout(tid);
@@ -2357,8 +2357,7 @@ async function loadProducts(attempt = 1) {
     console.error('loadProducts error:', e);
     // Retry once — сервер мог быть в cold start
     if (attempt < 3) {
-      console.log(`Retry attempt ${attempt + 1}...`);
-      setTimeout(() => loadProducts(attempt + 1), 2000);
+      setTimeout(() => loadProducts(attempt + 1), 1000);
       return;
     }
     hideSplash();
@@ -6343,6 +6342,11 @@ const _splashRetry = setTimeout(() => {
   splash.appendChild(btn);
 }, 5000);
 hideSplash._cleanup = () => { clearTimeout(_splashRetry); };
+
+// Пингуем сервер каждые 4 минуты чтобы Railway не засыпал
+setInterval(() => {
+  fetch(API + '/health').catch(() => {});
+}, 4 * 60 * 1000);
 
 // Трекаем сессию и загружаем VIP-статус (fire-and-forget)
 if (TG_USER) {
