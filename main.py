@@ -960,18 +960,52 @@ def delete_desc_template(tid: int, x_init_data: Optional[str] = Header(None)):
     log_action(user["username"], "template_delete", row["title"])
 
 
+@app.post("/events", status_code=204)
 def track_event(body: UserEvent, x_init_data: Optional[str] = Header(None)):
-    """Track user interaction for recommendation engine."""
+    """Track user interaction for recommendation engine.
+    - view:     1 event per user per product (deduplicated)
+    - wish:     insert if not exists; DELETE if already exists (toggle)
+    - purchase: always insert
+    """
     user = get_user(x_init_data)
     uid = str(user["id"]) if user else "guest"
     if body.event_type not in ("view", "wish", "purchase"):
         raise HTTPException(400, "Invalid event_type")
     conn = get_db()
-    conn.execute(
-        "INSERT INTO user_events (user_id,product_id,event_type) VALUES (?,?,?)",
-        (uid, body.product_id, body.event_type)
-    )
-    conn.commit(); conn.close()
+    if body.event_type == "view":
+        # 1 user = 1 view per product
+        exists = conn.execute(
+            "SELECT id FROM user_events WHERE user_id=? AND product_id=? AND event_type='view'",
+            (uid, body.product_id)
+        ).fetchone()
+        if not exists:
+            conn.execute(
+                "INSERT INTO user_events (user_id,product_id,event_type) VALUES (?,?,?)",
+                (uid, body.product_id, "view")
+            )
+    elif body.event_type == "wish":
+        # Toggle: if already wishlisted, remove; otherwise add
+        exists = conn.execute(
+            "SELECT id FROM user_events WHERE user_id=? AND product_id=? AND event_type='wish'",
+            (uid, body.product_id)
+        ).fetchone()
+        if exists:
+            conn.execute(
+                "DELETE FROM user_events WHERE user_id=? AND product_id=? AND event_type='wish'",
+                (uid, body.product_id)
+            )
+        else:
+            conn.execute(
+                "INSERT INTO user_events (user_id,product_id,event_type) VALUES (?,?,?)",
+                (uid, body.product_id, "wish")
+            )
+    else:
+        conn.execute(
+            "INSERT INTO user_events (user_id,product_id,event_type) VALUES (?,?,?)",
+            (uid, body.product_id, body.event_type)
+        )
+    conn.commit()
+    conn.close()
 
 @app.get("/recommendations")
 def get_recommendations(x_init_data: Optional[str] = Header(None), limit: int = 10):
@@ -1257,15 +1291,14 @@ def admin_stats(x_init_data: Optional[str] = Header(None)):
 
 @app.get("/admin/product-events")
 def admin_product_events(x_init_data: Optional[str] = Header(None), limit: int = 10):
-    """Top products by views and wishlist adds — admin only."""
+    """Top products by unique views and wishlist users — admin only."""
     require_admin(x_init_data, "orders")
     conn = get_db()
 
-    # Top viewed products
+    # Top viewed products — count = unique users (already deduplicated at insert)
     views_rows = conn.execute("""
         SELECT e.product_id, p.name, p.photos, p.price,
-               COUNT(*) as cnt,
-               COUNT(DISTINCT e.user_id) as unique_users
+               COUNT(DISTINCT e.user_id) as cnt
         FROM user_events e
         LEFT JOIN products p ON p.id = e.product_id
         WHERE e.event_type = 'view'
@@ -1274,11 +1307,11 @@ def admin_product_events(x_init_data: Optional[str] = Header(None), limit: int =
         LIMIT ?
     """, (limit,)).fetchall()
 
-    # Top wishlisted products
+    # Wishlist: current state (users who currently have it wishlisted)
     wish_rows = conn.execute("""
         SELECT e.product_id, p.name, p.photos, p.price,
-               COUNT(*) as cnt,
-               COUNT(DISTINCT e.user_id) as unique_users
+               COUNT(DISTINCT e.user_id) as cnt,
+               GROUP_CONCAT(DISTINCT e.user_id) as user_ids
         FROM user_events e
         LEFT JOIN products p ON p.id = e.product_id
         WHERE e.event_type = 'wish'
@@ -1287,26 +1320,60 @@ def admin_product_events(x_init_data: Optional[str] = Header(None), limit: int =
         LIMIT ?
     """, (limit,)).fetchall()
 
-    def row_to_dict(r):
-        photos = []
+    # Get Telegram usernames for wish users
+    import json as _json
+
+    def get_usernames(user_ids_str):
+        if not user_ids_str:
+            return []
+        ids = [u.strip() for u in user_ids_str.split(',') if u.strip()]
+        users = []
+        for uid in ids:
+            row = conn.execute(
+                "SELECT username, first_name FROM admins WHERE tg_id=?", (uid,)
+            ).fetchone()
+            if row and row["username"]:
+                users.append(f"@{row['username']}")
+            elif row and row["first_name"]:
+                users.append(row["first_name"])
+            else:
+                users.append(f"user_{uid}")
+        return users
+
+    def parse_photos(photos_raw):
         try:
-            import json as _json
-            photos = _json.loads(r["photos"] or "[]")
+            return _json.loads(photos_raw or "[]")
         except Exception:
-            pass
-        return {
-            "product_id":   r["product_id"],
-            "name":         r["name"] or f"Товар #{r['product_id']}",
-            "photo":        photos[0] if photos else None,
-            "price":        r["price"] or 0,
-            "count":        r["cnt"],
-            "unique_users": r["unique_users"],
-        }
+            return []
+
+    views_result = []
+    for r in views_rows:
+        photos = parse_photos(r["photos"])
+        views_result.append({
+            "product_id": r["product_id"],
+            "name":       r["name"] or f"Товар #{r['product_id']}",
+            "photo":      photos[0] if photos else None,
+            "price":      r["price"] or 0,
+            "count":      r["cnt"],
+        })
+
+    wish_result = []
+    for r in wish_rows:
+        photos = parse_photos(r["photos"])
+        usernames = get_usernames(r["user_ids"])
+        wish_result.append({
+            "product_id": r["product_id"],
+            "name":       r["name"] or f"Товар #{r['product_id']}",
+            "photo":      photos[0] if photos else None,
+            "price":      r["price"] or 0,
+            "count":      r["cnt"],
+            "users":      usernames,
+        })
 
     conn.close()
     return {
-        "views":    [row_to_dict(r) for r in views_rows],
-        "wishlist": [row_to_dict(r) for r in wish_rows],
+        "views":    views_result,
+        "wishlist": wish_result,
     }
 
 # ═══════════════════════════════════════════════
