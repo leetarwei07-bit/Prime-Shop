@@ -2222,6 +2222,11 @@ let PRODUCTS = [];
 let myOrders = [];    // мои заказы (текущего пользователя)
 let allOrders = [];   // все заказы (только для админа)
 let wishlist = new Set();
+// Восстанавливаем избранное из localStorage при старте
+try {
+  const saved = JSON.parse(localStorage.getItem('wishlist') || '[]');
+  saved.forEach(id => wishlist.add(id));
+} catch(e) {}
 let cart = [];
 
 let currentProduct = null;
@@ -2734,6 +2739,7 @@ function toggleWish(e, id) {
     toast('Добавлено в избранное ❤️');
   }
   trackWish(id); // backend toggles: add if not exists, delete if exists
+  try { localStorage.setItem('wishlist', JSON.stringify([...wishlist])); } catch(e) {}
   updateStats();
   if (document.getElementById('page-wishlist').classList.contains('active')) filterWish();
 }
