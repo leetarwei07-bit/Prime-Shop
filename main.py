@@ -176,6 +176,17 @@ def init_db():
         )
     """)
 
+    # Known Telegram users (auto-populated on any API call)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS tg_users (
+            tg_id      TEXT PRIMARY KEY,
+            username   TEXT NOT NULL DEFAULT '',
+            first_name TEXT NOT NULL DEFAULT '',
+            last_name  TEXT NOT NULL DEFAULT '',
+            updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+        )
+    """)
+
     # Payments table
     conn.execute("""
         CREATE TABLE IF NOT EXISTS payments (
@@ -277,11 +288,37 @@ def parse_tg(raw: str) -> Optional[dict]:
         return json.loads(pairs.get("user", "{}"))
     except: return None
 
+def upsert_user(user: dict):
+    """Save/update Telegram user info so we can show names in admin stats."""
+    try:
+        conn = get_db()
+        conn.execute("""
+            INSERT INTO tg_users (tg_id, username, first_name, last_name, updated_at)
+            VALUES (?, ?, ?, ?, strftime('%s','now'))
+            ON CONFLICT(tg_id) DO UPDATE SET
+                username   = excluded.username,
+                first_name = excluded.first_name,
+                last_name  = excluded.last_name,
+                updated_at = excluded.updated_at
+        """, (
+            str(user.get("id", "")),
+            user.get("username") or "",
+            user.get("first_name") or "",
+            user.get("last_name") or "",
+        ))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
 def get_user(x: Optional[str]) -> Optional[dict]:
     if not x: return None
     if BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
         return {"id": 0, "username": SUPER_ADMIN, "first_name": "Dev"}
-    return parse_tg(x)
+    user = parse_tg(x)
+    if user:
+        upsert_user(user)
+    return user
 
 def get_admin_role(username: str) -> Optional[str]:
     conn = get_db()
@@ -1271,6 +1308,96 @@ def admin_log(x_init_data: Optional[str] = Header(None), limit: int = 50):
     return [{"id": r["id"], "admin": r["admin"], "action": r["action"],
              "target": r["target"], "details": r["details"], "ts": r["created_at"]} for r in rows]
 
+@app.get("/admin/users")
+def admin_users(x_init_data: Optional[str] = Header(None)):
+    """All known Telegram users who ever opened the app — admin only."""
+    require_admin(x_init_data, "admins")
+    conn = get_db()
+
+    users = conn.execute(
+        "SELECT tg_id, username, first_name, last_name, updated_at FROM tg_users ORDER BY updated_at DESC"
+    ).fetchall()
+
+    result = []
+    for u in users:
+        tg_id = u["tg_id"]
+        views = conn.execute(
+            "SELECT COUNT(*) FROM user_events WHERE user_id=? AND event_type='view'", (tg_id,)
+        ).fetchone()[0]
+        wishes = conn.execute(
+            "SELECT COUNT(*) FROM user_events WHERE user_id=? AND event_type='wish'", (tg_id,)
+        ).fetchone()[0]
+        purchases = conn.execute(
+            "SELECT COUNT(*) FROM user_events WHERE user_id=? AND event_type='purchase'", (tg_id,)
+        ).fetchone()[0]
+
+        display = ""
+        if u["username"]:
+            display = f"@{u['username']}"
+        elif u["first_name"]:
+            display = u["first_name"]
+            if u["last_name"]:
+                display += f" {u['last_name']}"
+        else:
+            display = f"#{tg_id}"
+
+        result.append({
+            "tg_id":     tg_id,
+            "display":   display,
+            "username":  u["username"],
+            "first_name":u["first_name"],
+            "last_name": u["last_name"],
+            "last_seen": u["updated_at"],
+            "views":     views,
+            "wishes":    wishes,
+            "purchases": purchases,
+        })
+
+    conn.close()
+    return result
+
+@app.get("/admin/activity")
+def admin_activity(x_init_data: Optional[str] = Header(None), limit: int = 100):
+    """Recent user_events log with user info — admin only."""
+    require_admin(x_init_data, "admins")
+    conn = get_db()
+
+    rows = conn.execute("""
+        SELECT e.user_id, e.product_id, e.event_type, e.created_at,
+               p.name as product_name,
+               u.username, u.first_name, u.last_name
+        FROM user_events e
+        LEFT JOIN products p ON p.id = e.product_id
+        LEFT JOIN tg_users u ON u.tg_id = e.user_id
+        ORDER BY e.created_at DESC
+        LIMIT ?
+    """, (limit,)).fetchall()
+    conn.close()
+
+    result = []
+    for r in rows:
+        if r["username"]:
+            display = f"@{r['username']}"
+        elif r["first_name"]:
+            display = r["first_name"]
+            if r["last_name"]:
+                display += f" {r['last_name']}"
+        else:
+            display = f"#{r['user_id']}"
+
+        type_label = {"view": "👁 просмотр", "wish": "❤️ избранное", "purchase": "🛍 покупка"}.get(r["event_type"], r["event_type"])
+
+        result.append({
+            "user":         display,
+            "event_type":   r["event_type"],
+            "type_label":   type_label,
+            "product_id":   r["product_id"],
+            "product_name": r["product_name"] or f"Товар #{r['product_id']}",
+            "ts":           r["created_at"],
+        })
+
+    return result
+
 @app.get("/admin/stats")
 def admin_stats(x_init_data: Optional[str] = Header(None)):
     require_admin(x_init_data, "orders")
@@ -1295,10 +1422,11 @@ def admin_product_events(x_init_data: Optional[str] = Header(None), limit: int =
     require_admin(x_init_data, "orders")
     conn = get_db()
 
-    # Top viewed products — count = unique users (already deduplicated at insert)
+    # Top viewed products — count = unique users, with list of who viewed
     views_rows = conn.execute("""
         SELECT e.product_id, p.name, p.photos, p.price,
-               COUNT(DISTINCT e.user_id) as cnt
+               COUNT(DISTINCT e.user_id) as cnt,
+               GROUP_CONCAT(DISTINCT e.user_id) as user_ids
         FROM user_events e
         LEFT JOIN products p ON p.id = e.product_id
         WHERE e.event_type = 'view'
@@ -1329,15 +1457,31 @@ def admin_product_events(x_init_data: Optional[str] = Header(None), limit: int =
         ids = [u.strip() for u in user_ids_str.split(',') if u.strip()]
         users = []
         for uid in ids:
+            # Check tg_users first (populated from real initData)
             row = conn.execute(
-                "SELECT username, first_name FROM admins WHERE tg_id=?", (uid,)
+                "SELECT username, first_name, last_name FROM tg_users WHERE tg_id=?", (uid,)
             ).fetchone()
-            if row and row["username"]:
-                users.append(f"@{row['username']}")
-            elif row and row["first_name"]:
-                users.append(row["first_name"])
+            if row:
+                if row["username"]:
+                    users.append(f"@{row['username']}")
+                elif row["first_name"]:
+                    name = row["first_name"]
+                    if row["last_name"]:
+                        name += f" {row['last_name']}"
+                    users.append(name)
+                else:
+                    users.append(f"#{uid}")
             else:
-                users.append(f"user_{uid}")
+                # Fallback: check admins table
+                arow = conn.execute(
+                    "SELECT username, first_name FROM admins WHERE tg_id=?", (uid,)
+                ).fetchone()
+                if arow and arow["username"]:
+                    users.append(f"@{arow['username']}")
+                elif arow and arow["first_name"]:
+                    users.append(arow["first_name"])
+                else:
+                    users.append(f"#{uid}")
         return users
 
     def parse_photos(photos_raw):
@@ -1349,12 +1493,14 @@ def admin_product_events(x_init_data: Optional[str] = Header(None), limit: int =
     views_result = []
     for r in views_rows:
         photos = parse_photos(r["photos"])
+        usernames = get_usernames(r["user_ids"])
         views_result.append({
             "product_id": r["product_id"],
             "name":       r["name"] or f"Товар #{r['product_id']}",
             "photo":      photos[0] if photos else None,
             "price":      r["price"] or 0,
             "count":      r["cnt"],
+            "users":      usernames,
         })
 
     wish_result = []
