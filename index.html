@@ -2309,16 +2309,14 @@ async function loadProducts() {
   try {
     const data = await apiGet('/products');
     PRODUCTS.length = 0;
-    // Сохраняем оригинальный порядок (по дате добавления) — для админки
-    // Лента перемешивается отдельно в renderHome()
     data.forEach(p => PRODUCTS.push(p));
-    renderHome(true); // instant=true — без skeleton, сразу карточки
+    renderHome(true);
     applySearch();
-    hideSplash(); // скрываем сплэш как только товары готовы
+    hideSplash();
     loadBrands();
     loadRecommendations();
-    // Грузим ссылки отдельно (только для админов, бэкенд проверяет роль)
     loadProductLinks();
+    loadUserWishlist(); // после товаров — обновит сердечки на готовой ленте
   } catch(e) {
     console.error(e);
     hideSplash();
@@ -5848,7 +5846,6 @@ Promise.all([
   loadAdmins(),
   checkPendingOrder(),
   loadDescTemplates(),
-  loadUserWishlist(),
 ]).finally(() => {
   clearTimeout(_splashKill);
   hideSplash();
