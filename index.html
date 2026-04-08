@@ -4475,18 +4475,20 @@ async function removeAdmin(u) {
 }
 
 function fmtTs(ts) {
-  if (!ts) return '';
+  if (!ts) return '—';
   const d = new Date(ts * 1000);
   const now = Date.now();
   const diff = now - d.getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1)   return 'только что';
+  const exact = d.toLocaleDateString('ru-RU', { day:'numeric', month:'short' })
+    + ' ' + d.toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit' });
+  if (mins < 1)   return `только что`;
   if (mins < 60)  return `${mins} мин. назад`;
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24)   return `${hrs} ч. назад`;
+  if (hrs < 24)   return `${hrs} ч. назад · ${exact}`;
   const days = Math.floor(hrs / 24);
-  if (days < 7)   return `${days} д. назад`;
-  return d.toLocaleDateString('ru-RU', { day:'numeric', month:'short' });
+  if (days < 7)   return `${days} д. назад · ${exact}`;
+  return exact;
 }
 
 async function loadAdminUsers() {
@@ -5055,12 +5057,11 @@ function loadRecommendations(lastViewed = null) {
     const allLabel = document.getElementById('home-section-label-all');
     if (allLabel) allLabel.style.display = 'block';
 
-    grid.innerHTML = recs.map((x, i) => cardHTML(x.product, i)).join('');
+    grid.innerHTML = recs.map((x, i) => cardHTML(x.product, i, true)).join('');
 
-    // Лента: остальные товары по убыванию релевантности
+    // Лента: остальные товары — рандом, без учёта релевантности
     const inRecs = new Set(recs.map(x => x.product.id));
-    const scoreMap = new Map(scored.map(x => [x.product.id, x.score]));
-    renderHomeSorted(inRecs, scoreMap);
+    renderHomeSorted(inRecs);
   } else {
     // Нет истории — скрываем «Для вас», лента по новизне (дефолт)
     sec.style.display = 'none';
