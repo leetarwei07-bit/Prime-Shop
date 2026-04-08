@@ -126,6 +126,19 @@ body {
 .nav-btn.active svg { transform:scale(1.12) }
 .nav-btn.active::after { content:'';position:absolute;bottom:2px;width:4px;height:4px;border-radius:50%;background:#fff;animation:dotPop .3s var(--spring) }
 @keyframes dotPop { from{transform:scale(0)} to{transform:scale(1)} }
+@keyframes homeFlash { 0%{opacity:1} 30%{opacity:.15} 100%{opacity:1} }
+.home-flash { animation:homeFlash .38s var(--easing) both }
+/* product event stats */
+.pe-row { display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border) }
+.pe-row:last-child { border-bottom:none }
+.pe-rank { font-size:11px;font-weight:700;color:var(--text3);width:18px;text-align:center;flex-shrink:0 }
+.pe-img { width:40px;height:40px;border-radius:9px;object-fit:cover;flex-shrink:0;background:var(--s2) }
+.pe-img-ph { width:40px;height:40px;border-radius:9px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0 }
+.pe-info { flex:1;min-width:0 }
+.pe-name { font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+.pe-price { font-size:11px;color:var(--text3);margin-top:1px }
+.pe-cnt { font-size:13px;font-weight:700;color:var(--text);text-align:right;flex-shrink:0 }
+.pe-uniq { font-size:10px;color:var(--text3);text-align:right }
 .nav-btn { position:relative;overflow:hidden }
 
 /* ═══════════════════════════════════════════════
@@ -1355,6 +1368,22 @@ body {
         <div class="stat-card"><div class="stat-val" id="a-products">0</div><div class="stat-label">Товаров</div></div>
         <div class="stat-card"><div class="stat-val" id="a-active">0</div><div class="stat-label">В обработке</div></div>
       </div>
+
+      <!-- Топ просмотров -->
+      <div style="margin-top:20px">
+        <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">🔥 Топ просмотров</div>
+        <div id="pe-views-list" style="background:var(--s2);border:1px solid var(--border);border-radius:14px;padding:0 14px">
+          <div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Загрузка...</div>
+        </div>
+      </div>
+
+      <!-- Топ избранного -->
+      <div style="margin-top:16px">
+        <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">❤️ Топ избранного</div>
+        <div id="pe-wish-list" style="background:var(--s2);border:1px solid var(--border);border-radius:14px;padding:0 14px">
+          <div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Загрузка...</div>
+        </div>
+      </div>
     </div>
     <!-- ORDERS -->
     <div class="admin-panel" id="panel-orders">
@@ -1512,7 +1541,6 @@ body {
           <label>Ссылки на источники <span style="color:var(--orange)">🔒 Только для админов</span></label>
           <div id="a-link-chips"></div>
           <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
-            <input id="a-link-label" class="var-add-input" type="text" placeholder="Название: Taobao, 1688, Poizon..."/>
             <input id="a-link-url" class="var-add-input" type="text" placeholder="Вставьте ссылку сюда"/>
             <button class="var-add-btn" onclick="addLink('add')" style="width:100%;padding:10px;text-align:center;background:var(--s2);border:1px solid var(--border);border-radius:9px;color:#fff;font-size:13px;font-weight:600;cursor:pointer">+ Добавить ссылку</button>
           </div>
@@ -1649,6 +1677,20 @@ body {
             style="padding:10px 18px;background:var(--orange);color:#fff;border:none;border-radius:10px;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">Скидка</button>
         </div>
         <div style="font-size:11px;color:var(--text3);margin-top:6px">Введите число от 1 до 99 — например 20 означает скидку 20%</div>
+      </div>
+
+      <div style="background:var(--s2);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="font-size:20px">🚫</span>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:#fff">Аннулировать скидки</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:1px">Убрать все скидки — цены вернутся к оригинальным</div>
+          </div>
+        </div>
+        <button onclick="bulkResetDiscounts()"
+          style="width:100%;padding:10px 18px;background:var(--red);color:#fff;border:none;border-radius:10px;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;cursor:pointer">
+          Убрать все скидки
+        </button>
       </div>
     </div>
 
@@ -1954,7 +1996,6 @@ body {
         <label>Ссылки на источники <span style="color:var(--orange)">🔒 Только для админов</span></label>
         <div id="e-link-chips"></div>
         <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
-          <input id="e-link-label" class="var-add-input" type="text" placeholder="Название (Taobao, 1688...)"/>
           <input id="e-link-url" class="var-add-input" type="url" placeholder="https://..." style="width:100%"/>
           <button class="var-add-btn" onclick="addLink('edit')" style="width:100%;padding:10px;text-align:center">+ Добавить ссылку</button>
         </div>
@@ -2149,11 +2190,8 @@ async function loadProducts() {
   try {
     const data = await apiGet('/products');
     PRODUCTS.length = 0;
-    // Fisher-Yates shuffle при загрузке — порядок всегда случайный
-    for (let i = data.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [data[i], data[j]] = [data[j], data[i]];
-    }
+    // Сохраняем оригинальный порядок (по дате добавления) — для админки
+    // Лента перемешивается отдельно в renderHome()
     data.forEach(p => PRODUCTS.push(p));
     renderHome(true); // instant=true — без skeleton, сразу карточки
     applySearch();
@@ -2244,8 +2282,14 @@ function navigate(id, btn) {
   if (id === 'wishlist') { document.getElementById('wish-input').value=''; filterWish(); }
   if (id === 'home') {
     const homeScroll = document.getElementById('home-scroll');
+    const homeGrid   = document.getElementById('home-grid');
+    // Вспышка-анимация на ленте
+    if (homeGrid) {
+      homeGrid.classList.remove('home-flash');
+      void homeGrid.offsetWidth; // reflow
+      homeGrid.classList.add('home-flash');
+    }
     if (homeScroll) homeScroll.scrollTo({ top: 0, behavior: 'smooth' });
-    // Не перерендериваем ленту — просто скроллим наверх
   }
   if (id === 'admin') {
     pg.setAttribute('data-ok','1');
@@ -2261,6 +2305,7 @@ function navigate(id, btn) {
     // Загружаем все заказы для статистики и вкладки заказов
     loadAllOrders();
     renderAdminStats();
+    loadProductEvents();
     renderAdminProducts();
   }
 }
@@ -2337,7 +2382,7 @@ function statusPill(s) {
 /* ═══════════════════════════════════════════════
    PRODUCT CARDS
 ═══════════════════════════════════════════════ */
-function cardHTML(p, idx = 0) {
+function cardHTML(p, idx = 0, fromRec = false) {
   const disc = (p.old && p.old > p.price) ? Math.round((1 - p.price/p.old)*100) : 0;
   const photo = p.photos && p.photos.length ? p.photos[0] : null;
 
@@ -2358,7 +2403,7 @@ function cardHTML(p, idx = 0) {
     ? `<img src="${photo}" loading="${idx < 4 ? 'eager' : 'lazy'}" fetchpriority="${idx < 2 ? 'high' : 'auto'}" alt="${p.name}" onload="this.classList.add('img-loaded')" onerror="this.style.display='none'">`
     : `<span>${p.emoji||'📦'}</span>`;
 
-  return `<div class="prod-card" onclick="openProduct(${p.id})" style="animation-delay:${delay}s">
+  return `<div class="prod-card" onclick="openProduct(${p.id},${fromRec})" style="animation-delay:${delay}s">
     <div class="prod-img">
       ${imgHtml}
       ${p.isPreorder ? `<div class="prod-preorder-badge">Под заказ</div>` : ''}
@@ -2462,6 +2507,7 @@ function renderGrid(elId, list, animate = true) {
 
 let lastViewedProduct = null; // запоминаем последний просмотренный товар
 let savedHomeScrollTop = 0;  // позиция скролла ленты перед открытием карточки
+let openedFromRec = false;   // открыт ли товар из блока «Похожие товары»
 const productLinksCache = {}; // кэш source_links: {product_id: [{label,url}]}
 
 function toggleFullscreen() {
@@ -2610,12 +2656,15 @@ function filterWish() {
 /* ═══════════════════════════════════════════════
    PRODUCT DETAIL
 ═══════════════════════════════════════════════ */
-function openProduct(id) {
+function openProduct(id, fromRec = false) {
   const p = PRODUCTS.find(x => x.id === id);
   if (!p) return;
-  // Сохраняем позицию ленты перед открытием карточки
-  const homeScroll = document.getElementById('home-scroll');
-  if (homeScroll) savedHomeScrollTop = homeScroll.scrollTop;
+  openedFromRec = fromRec;
+  // Сохраняем позицию ленты перед открытием карточки (только если не из рекомендаций)
+  if (!fromRec) {
+    const homeScroll = document.getElementById('home-scroll');
+    if (homeScroll) savedHomeScrollTop = homeScroll.scrollTop;
+  }
   currentProduct = p; detailQty = 1;
   trackView(id);
   selColor = (p.colors&&p.colors.length) ? p.colors[0] : null;
@@ -2740,16 +2789,23 @@ function closeProduct() {
 
   // Обновляем рекомендации «Для вас» без перерисовки ленты и без потери позиции
   const viewed = currentProduct;
+  const wasFromRec = openedFromRec;
   currentProduct = null;
+  openedFromRec = false;
+
+  if (wasFromRec) {
+    // Открыт из блока «Похожие товары» — ничего не трогаем, остаёмся на месте
+    return;
+  }
+
+  // Открыт из главной ленты — обновляем рекомендации и возвращаемся наверх
   if (viewed) {
     lastViewedProduct = viewed;
-    // Тихо пересчитываем рекомендации (только rec-section), лента остаётся на месте
     updateRecsOnly(viewed);
   }
-  // Восстанавливаем позицию скролла
   const homeScroll = document.getElementById('home-scroll');
   if (homeScroll) {
-    requestAnimationFrame(() => { homeScroll.scrollTop = savedHomeScrollTop; });
+    homeScroll.scrollTo({ top: 0, behavior: 'smooth' });
   }
 }
 
@@ -3653,7 +3709,7 @@ function switchTab(tab, btn) {
   btn.classList.add('on');
   const panel = document.getElementById('panel-'+tab);
   if (panel) panel.classList.add('on');
-  if (tab === 'stats')     { loadAllOrders().then(renderAdminStats); }
+  if (tab === 'stats')     { loadAllOrders().then(renderAdminStats); loadProductEvents(); }
   if (tab === 'orders')    { loadAllOrders(); }
   if (tab === 'products')  { renderAdminProducts(); }
   if (tab === 'admins')    { renderAdminList(); }
@@ -3733,6 +3789,43 @@ function renderAdminStats() {
   document.getElementById('a-revenue').textContent = fmtK(rev);
   document.getElementById('a-products').textContent = PRODUCTS.length;
   document.getElementById('a-active').textContent = act;
+}
+
+async function loadProductEvents() {
+  const viewsEl = document.getElementById('pe-views-list');
+  const wishEl  = document.getElementById('pe-wish-list');
+  if (!viewsEl || !wishEl) return;
+  const loading = `<div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Загрузка...</div>`;
+  viewsEl.innerHTML = loading; wishEl.innerHTML = loading;
+  try {
+    const data = await apiFetch('/admin/product-events');
+    const renderList = (items, el) => {
+      if (!items.length) {
+        el.innerHTML = `<div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Нет данных</div>`;
+        return;
+      }
+      el.innerHTML = items.map((item, i) => `
+        <div class="pe-row">
+          <div class="pe-rank">${i + 1}</div>
+          ${item.photo
+            ? `<img class="pe-img" src="${item.photo}" alt=""/>`
+            : `<div class="pe-img-ph">📦</div>`}
+          <div class="pe-info">
+            <div class="pe-name">${item.name}</div>
+            <div class="pe-price">${fmt(item.price)}</div>
+          </div>
+          <div>
+            <div class="pe-cnt">${item.count}</div>
+            <div class="pe-uniq">${item.unique_users} польз.</div>
+          </div>
+        </div>`).join('');
+    };
+    renderList(data.views,    viewsEl);
+    renderList(data.wishlist, wishEl);
+  } catch(e) {
+    const err = `<div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Ошибка загрузки</div>`;
+    viewsEl.innerHTML = err; wishEl.innerHTML = err;
+  }
 }
 
 function renderAdminOrders() {
@@ -4174,15 +4267,15 @@ async function removeAdmin(u) {
 ═══════════════════════════════════════════════ */
 function addLink(ctx) {
   const prefix = ctx === 'add' ? 'a' : 'e';
-  const labelEl = document.getElementById(`${prefix}-link-label`);
-  const urlEl   = document.getElementById(`${prefix}-link-url`);
-  const label = (labelEl?.value||'').trim();
+  const urlEl = document.getElementById(`${prefix}-link-url`);
   const url   = (urlEl?.value||'').trim();
-  if (!label || !url) { toast('Введите название и ссылку'); return; }
+  if (!url) { toast('Введите ссылку'); return; }
   if (!url.startsWith('http')) { toast('Ссылка должна начинаться с http'); return; }
+  // Авто-генерируем название из домена
+  let label = url;
+  try { label = new URL(url).hostname.replace(/^www\./, ''); } catch(e) {}
   varState[ctx].links.push({ label, url });
-  if (labelEl) labelEl.value = '';
-  if (urlEl)   urlEl.value   = '';
+  if (urlEl) urlEl.value = '';
   renderLinkChips(ctx);
 }
 
@@ -4677,7 +4770,7 @@ function showProductRecs(product) {
     <div style="height:1px;background:var(--border);margin-bottom:16px"></div>
     <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">Похожие товары</div>
     <div class="prod-grid" style="padding:0;gap:8px">
-      ${recs.map(p => cardHTML(p)).join('')}
+      ${recs.map(p => cardHTML(p, 0, true)).join('')}
     </div>`;
   body.appendChild(el);
 }
@@ -4831,6 +4924,15 @@ async function bulkPrice(action, inputId) {
     const res = await apiFetch('/products/bulk-price', { method: 'POST', body: { action, amount } });
     showToast('✅ Обновлено товаров: ' + res.updated);
     input.value = '';
+    await loadProducts();
+  } catch(e) { showToast('Ошибка: ' + (e.message || 'неизвестная')); }
+}
+
+async function bulkResetDiscounts() {
+  if (!confirm('Убрать все скидки у всех товаров? Цены вернутся к оригинальным.')) return;
+  try {
+    const res = await apiFetch('/products/bulk-price', { method: 'POST', body: { action: 'reset_discounts', amount: 0 } });
+    showToast('✅ Скидки убраны у товаров: ' + res.updated);
     await loadProducts();
   } catch(e) { showToast('Ошибка: ' + (e.message || 'неизвестная')); }
 }
