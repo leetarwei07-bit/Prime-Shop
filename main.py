@@ -1398,7 +1398,31 @@ def admin_activity(x_init_data: Optional[str] = Header(None), limit: int = 100):
 
     return result
 
-@app.get("/admin/stats")
+class ResetEventsBody(BaseModel):
+    type: str  # "views" | "activity"
+
+@app.post("/admin/reset-events")
+def reset_events(body: ResetEventsBody, x_init_data: Optional[str] = Header(None)):
+    """
+    Reset user events:
+    - views    : delete only 'view' events (preserve wish/purchase)
+    - activity : delete all 'view' and 'wish' events for all users
+    """
+    user = require_admin(x_init_data, "orders")
+    if body.type not in ("views", "activity"):
+        raise HTTPException(400, "Invalid type")
+    conn = get_db()
+    if body.type == "views":
+        cur = conn.execute("DELETE FROM user_events WHERE event_type='view'")
+    else:  # activity
+        cur = conn.execute("DELETE FROM user_events WHERE event_type IN ('view','wish')")
+    deleted = cur.rowcount
+    conn.commit()
+    conn.close()
+    log_action(user["username"], f"reset_events_{body.type}", "", f"deleted={deleted}")
+    return {"deleted": deleted}
+
+
 def admin_stats(x_init_data: Optional[str] = Header(None)):
     require_admin(x_init_data, "orders")
     conn = get_db()
