@@ -1311,7 +1311,7 @@ def admin_log(x_init_data: Optional[str] = Header(None), limit: int = 50):
 @app.get("/admin/users")
 def admin_users(x_init_data: Optional[str] = Header(None)):
     """All known Telegram users who ever opened the app — admin only."""
-    require_admin(x_init_data, "admins")
+    require_admin(x_init_data, "orders")
     conn = get_db()
 
     users = conn.execute(
@@ -1481,7 +1481,6 @@ def admin_product_events(x_init_data: Optional[str] = Header(None), limit: int =
         ids = [u.strip() for u in user_ids_str.split(',') if u.strip()]
         users = []
         for uid in ids:
-            # Check tg_users first (populated from real initData)
             row = conn.execute(
                 "SELECT username, first_name, last_name FROM tg_users WHERE tg_id=?", (uid,)
             ).fetchone()
@@ -1496,16 +1495,7 @@ def admin_product_events(x_init_data: Optional[str] = Header(None), limit: int =
                 else:
                     users.append(f"#{uid}")
             else:
-                # Fallback: check admins table
-                arow = conn.execute(
-                    "SELECT username, first_name FROM admins WHERE tg_id=?", (uid,)
-                ).fetchone()
-                if arow and arow["username"]:
-                    users.append(f"@{arow['username']}")
-                elif arow and arow["first_name"]:
-                    users.append(arow["first_name"])
-                else:
-                    users.append(f"#{uid}")
+                users.append(f"#{uid}")
         return users
 
     def parse_photos(photos_raw):
