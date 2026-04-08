@@ -56,6 +56,14 @@ app.add_middleware(
 # ═══════════════════════════════════════════════
 # DATABASE
 # ═══════════════════════════════════════════════
+def parse_photo(photos_str: str):
+    """Parse first photo URL from JSON array string."""
+    try:
+        arr = json.loads(photos_str) if photos_str else []
+        return arr[0] if arr else None
+    except Exception:
+        return None
+
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -166,15 +174,83 @@ def init_db():
     """)
 
     # User events for recommendations (views, purchases)
+    # Миграция: пересоздаём таблицу с UNIQUE constraint если его нет
+    existing_cols = [r[1] for r in conn.execute("PRAGMA table_info(user_events)").fetchall()]
+    if existing_cols:
+        # Таблица уже есть — проверяем есть ли уже UNIQUE index
+        indexes = conn.execute("PRAGMA index_list(user_events)").fetchall()
+        has_unique = any(idx[2] for idx in indexes)  # idx[2] = unique flag
+        if not has_unique:
+            # Удаляем дубли (оставляем строку с минимальным id)
+            conn.execute("""
+                DELETE FROM user_events WHERE id NOT IN (
+                    SELECT MIN(id) FROM user_events
+                    GROUP BY user_id, product_id, event_type
+                )
+            """)
+            # Пересоздаём таблицу с UNIQUE constraint
+            conn.execute("""
+                CREATE TABLE user_events_new (
+                    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id    TEXT    NOT NULL,
+                    product_id INTEGER NOT NULL,
+                    event_type TEXT    NOT NULL,
+                    created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+                    UNIQUE(user_id, product_id, event_type)
+                )
+            """)
+            conn.execute("INSERT INTO user_events_new SELECT * FROM user_events")
+            conn.execute("DROP TABLE user_events")
+            conn.execute("ALTER TABLE user_events_new RENAME TO user_events")
+            conn.commit()
+    else:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_events (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id    TEXT    NOT NULL,
+                product_id INTEGER NOT NULL,
+                event_type TEXT    NOT NULL,  -- 'view' | 'purchase' | 'wish'
+                created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+                UNIQUE(user_id, product_id, event_type)
+            )
+        """)
+
+    # Wishlist — persistent per user
     conn.execute("""
-        CREATE TABLE IF NOT EXISTS user_events (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        CREATE TABLE IF NOT EXISTS wishlists (
             user_id    TEXT    NOT NULL,
             product_id INTEGER NOT NULL,
-            event_type TEXT    NOT NULL,  -- 'view' | 'purchase' | 'wish'
-            created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+            username   TEXT    NOT NULL DEFAULT '',
+            first_name TEXT    NOT NULL DEFAULT '',
+            created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+            PRIMARY KEY (user_id, product_id)
         )
     """)
+    # Миграция: добавляем колонки username/first_name если их нет
+    wish_cols = [r[1] for r in conn.execute("PRAGMA table_info(wishlists)").fetchall()]
+    if 'username' not in wish_cols:
+        conn.execute("ALTER TABLE wishlists ADD COLUMN username TEXT NOT NULL DEFAULT ''")
+    if 'first_name' not in wish_cols:
+        conn.execute("ALTER TABLE wishlists ADD COLUMN first_name TEXT NOT NULL DEFAULT ''")
+
+    # User sessions — кто и когда запускал приложение
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_sessions (
+            user_id    TEXT    PRIMARY KEY,
+            username   TEXT    NOT NULL DEFAULT '',
+            first_name TEXT    NOT NULL DEFAULT '',
+            last_name  TEXT    NOT NULL DEFAULT '',
+            first_seen INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+            last_seen  INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+            launches   INTEGER NOT NULL DEFAULT 1
+        )
+    """)
+    # Migrate: add missing columns
+    ses_cols = [r[1] for r in conn.execute("PRAGMA table_info(user_sessions)").fetchall()]
+    if ses_cols and 'launches' not in ses_cols:
+        conn.execute("ALTER TABLE user_sessions ADD COLUMN launches INTEGER NOT NULL DEFAULT 1")
+    if ses_cols and 'is_vip' not in ses_cols:
+        conn.execute("ALTER TABLE user_sessions ADD COLUMN is_vip INTEGER NOT NULL DEFAULT 0")
 
     # Payments table
     conn.execute("""
@@ -202,10 +278,17 @@ def init_db():
         "ALTER TABLE orders ADD COLUMN payment_id TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE products ADD COLUMN is_preorder INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE products ADD COLUMN quality TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE products ADD COLUMN moderation_status TEXT NOT NULL DEFAULT 'active'",
+        "ALTER TABLE products ADD COLUMN added_by TEXT NOT NULL DEFAULT ''",
     ]
     for m in migrations:
         try: conn.execute(m)
         except: pass
+    # Existing products are already live — mark them active
+    try:
+        conn.execute("UPDATE products SET moderation_status='active' WHERE moderation_status=''")
+        conn.commit()
+    except: pass
 
     # Seed superadmin role
     conn.execute(
@@ -471,10 +554,12 @@ def row_to_product(row, include_links=False) -> dict:
         "colors":     json.loads(row["colors"]),
         "variations": json.loads(row["variations"]) if "variations" in cols else [],
         "desc":       row["desc"],
-        "isNew":      bool(row["is_new"]),
-        "isSale":     bool(row["is_sale"]),
-        "isPreorder": bool(row["is_preorder"]) if "is_preorder" in cols else False,
-        "quality":    row["quality"] if "quality" in cols else "",
+        "isNew":         bool(row["is_new"]),
+        "isSale":        bool(row["is_sale"]),
+        "isPreorder":    bool(row["is_preorder"]) if "is_preorder" in cols else False,
+        "quality":       row["quality"] if "quality" in cols else "",
+        "modStatus":     row["moderation_status"] if "moderation_status" in cols else "active",
+        "addedBy":       row["added_by"] if "added_by" in cols else "",
         "rating":     row["rating"],
         "reviews":    row["reviews"],
         "sold":       row["sold"],
@@ -602,6 +687,87 @@ def root(): return {"status": "ok", "version": "2.0"}
 @app.get("/health")
 def health(): return {"status": "ok", "ts": int(time.time())}
 
+@app.post("/session", status_code=204)
+def track_session(x_init_data: Optional[str] = Header(None)):
+    """Записывает запуск приложения пользователем."""
+    user = get_user(x_init_data)
+    if not user:
+        return
+    uid        = str(user["id"])
+    username   = user.get("username")   or ""
+    first_name = user.get("first_name") or ""
+    last_name  = user.get("last_name")  or ""
+    conn = get_db()
+    existing = conn.execute("SELECT launches FROM user_sessions WHERE user_id=?", (uid,)).fetchone()
+    if existing:
+        conn.execute("""
+            UPDATE user_sessions
+            SET username=?, first_name=?, last_name=?, last_seen=strftime('%s','now'),
+                launches=launches+1
+            WHERE user_id=?
+        """, (username, first_name, last_name, uid))
+    else:
+        conn.execute("""
+            INSERT INTO user_sessions (user_id, username, first_name, last_name)
+            VALUES (?,?,?,?)
+        """, (uid, username, first_name, last_name))
+    conn.commit(); conn.close()
+
+@app.get("/admin/users")
+def admin_users(x_init_data: Optional[str] = Header(None)):
+    """Список всех пользователей и их активность. Только для админов."""
+    require_admin(x_init_data, "orders")
+    conn = get_db()
+    users = conn.execute("""
+        SELECT user_id, username, first_name, last_name,
+               first_seen, last_seen, launches,
+               COALESCE(is_vip, 0) as is_vip
+        FROM user_sessions ORDER BY is_vip DESC, last_seen DESC
+    """).fetchall()
+    activity_rows = conn.execute("""
+        SELECT user_id, event_type, COUNT(*) as cnt
+        FROM user_events WHERE event_type != 'wish'
+        GROUP BY user_id, event_type
+    """).fetchall()
+    # Избранное берём из wishlists (актуально — учитывает удаление)
+    wish_counts = conn.execute("""
+        SELECT user_id, COUNT(*) as cnt FROM wishlists GROUP BY user_id
+    """).fetchall()
+    wish_map = {r["user_id"]: r["cnt"] for r in wish_counts}
+    order_rows = conn.execute("""
+        SELECT user_id, COUNT(*) as cnt, COALESCE(SUM(total),0) as total
+        FROM orders GROUP BY user_id
+    """).fetchall()
+    conn.close()
+    act_map = {}
+    for r in activity_rows:
+        act_map.setdefault(r["user_id"], {})[r["event_type"]] = r["cnt"]
+    ord_map = {r["user_id"]: {"cnt": r["cnt"], "total": r["total"]} for r in order_rows}
+    result = []
+    for u in users:
+        uid = u["user_id"]
+        act = act_map.get(uid, {})
+        ord_ = ord_map.get(uid, {"cnt": 0, "total": 0})
+        fname = u["first_name"] or ""
+        lname = u["last_name"]  or ""
+        uname = u["username"]   or ""
+        result.append({
+            "user_id":    uid,
+            "username":   uname,
+            "display":    " ".join(filter(None, [fname, lname])) or uname or "id"+uid,
+            "handle":     ("@"+uname) if uname else ("id"+uid),
+            "first_seen": u["first_seen"],
+            "last_seen":  u["last_seen"],
+            "launches":   u["launches"],
+            "views":      act.get("view", 0),
+            "wishes":     wish_map.get(uid, 0),
+            "purchases":  act.get("purchase", 0),
+            "orders":     ord_["cnt"],
+            "spent":      ord_["total"] or 0,
+            "is_vip":     bool(u["is_vip"]),
+        })
+    return {"users": result}
+
 # ═══════════════════════════════════════════════
 # ROUTES — BRANDS
 # ═══════════════════════════════════════════════
@@ -639,7 +805,7 @@ def create_brand(body: BrandCreate, x_init_data: Optional[str] = Header(None)):
         conn.close()
         log_action(user["username"], "brand_create", name)
         return {"id": bid, "name": name, "styles": body.styles}
-    except:
+    except Exception:
         conn.close()
         raise HTTPException(409, "Brand already exists")
 
@@ -672,11 +838,54 @@ def delete_brand(bid: int, x_init_data: Optional[str] = Header(None)):
 # ═══════════════════════════════════════════════
 @app.get("/products")
 def list_products(x_init_data: Optional[str] = Header(None)):
-    is_admin = check_admin(x_init_data) is not None
+    admin = check_admin(x_init_data)
+    is_admin = admin is not None
+    is_super = is_admin and admin.get("role") == "superadmin"
     conn = get_db()
-    rows = conn.execute("SELECT * FROM products ORDER BY created_at DESC").fetchall()
+    # Superadmin sees all products; everyone else only sees active
+    if is_super:
+        rows = conn.execute("SELECT * FROM products ORDER BY created_at DESC").fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM products WHERE moderation_status='active' ORDER BY created_at DESC"
+        ).fetchall()
     conn.close()
     return [row_to_product(r, include_links=is_admin) for r in rows]
+
+@app.get("/products/pending")
+def list_pending_products(x_init_data: Optional[str] = Header(None)):
+    """Superadmin only — returns products awaiting moderation."""
+    user = require_admin(x_init_data, "admins")
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM products WHERE moderation_status='pending' ORDER BY created_at DESC"
+    ).fetchall()
+    conn.close()
+    return [row_to_product(r, include_links=True) for r in rows]
+
+@app.post("/products/{pid}/approve")
+def approve_product(pid: int, x_init_data: Optional[str] = Header(None)):
+    """Superadmin approves a pending product."""
+    user = require_admin(x_init_data, "admins")
+    conn = get_db()
+    conn.execute("UPDATE products SET moderation_status='active' WHERE id=?", (pid,))
+    conn.commit()
+    conn.close()
+    log_action(user["username"], "product_approve", str(pid))
+    return {"ok": True}
+
+@app.post("/products/{pid}/reject")
+def reject_product(pid: int, x_init_data: Optional[str] = Header(None)):
+    """Superadmin rejects (deletes) a pending product."""
+    user = require_admin(x_init_data, "admins")
+    conn = get_db()
+    row = conn.execute("SELECT name FROM products WHERE id=?", (pid,)).fetchone()
+    if row:
+        conn.execute("DELETE FROM products WHERE id=?", (pid,))
+        conn.commit()
+        log_action(user["username"], "product_reject", row["name"])
+    conn.close()
+    return {"ok": True}
 
 @app.post("/products", status_code=201)
 def create_product(body: ProductCreate, x_init_data: Optional[str] = Header(None)):
@@ -701,8 +910,15 @@ def create_product(body: ProductCreate, x_init_data: Optional[str] = Header(None
     conn.commit()
     row = conn.execute("SELECT * FROM products WHERE id=?", (new_id,)).fetchone()
     conn.close()
+    mod_status = "active" if user.get("role") == "superadmin" else "pending"
+    conn2 = get_db()
+    conn2.execute("UPDATE products SET moderation_status=? WHERE id=?", (mod_status, new_id))
+    conn2.commit()
+    conn2.close()
+    row2 = get_db().execute("SELECT * FROM products WHERE id=?", (new_id,)).fetchone()
+    get_db().close()
     log_action(user["username"], "product_create", body.name)
-    return row_to_product(row, include_links=True)
+    return row_to_product(row2 or row, include_links=True)
 
 @app.put("/products/{pid}")
 def update_product(pid: int, body: ProductUpdate, x_init_data: Optional[str] = Header(None)):
@@ -739,44 +955,58 @@ def update_product(pid: int, body: ProductUpdate, x_init_data: Optional[str] = H
     return row_to_product(row, include_links=True)
 
 class BulkPriceBody(BaseModel):
-    action: str    # "increase" | "decrease" | "discount"
-    amount: float  # сум для increase/decrease, процент (1-99) для discount
+    action: str    # "increase" | "decrease" | "discount" | "clear_discounts"
+    amount: float  # сум для increase/decrease, процент (1-99) для discount, 0 для clear_discounts
 
 @app.post("/products/bulk-price")
 def bulk_price(body: BulkPriceBody, x_init_data: Optional[str] = Header(None)):
     """
     Массовое изменение цен:
-    - increase : price += amount
-    - decrease : price -= amount (минимум 1)
-    - discount : old_price = price, price = round(price * (1 - amount/100)), is_sale = 1
-                 Пример: amount=20 → скидка 20%
+    - increase        : price += amount
+    - decrease        : price -= amount (минимум 1)
+    - discount        : old_price = price, price = round(price * (1 - amount/100)), is_sale = 1
+    - clear_discounts : price = old_price, old_price = NULL, is_sale = 0
     """
     user = require_admin(x_init_data, "products")
-    if body.action not in ("increase", "decrease", "discount"):
+    if body.action not in ("increase", "decrease", "discount", "clear_discounts"):
         raise HTTPException(400, "Invalid action")
-    if body.amount <= 0:
-        raise HTTPException(400, "amount must be > 0")
-    if body.action == "discount" and body.amount >= 100:
-        raise HTTPException(400, "discount percent must be < 100")
+    if body.action != "clear_discounts":
+        if body.amount <= 0:
+            raise HTTPException(400, "amount must be > 0")
+        if body.action == "discount" and body.amount >= 100:
+            raise HTTPException(400, "discount percent must be < 100")
 
     conn = get_db()
-    rows = conn.execute("SELECT id, price FROM products").fetchall()
     updated = 0
-    for row in rows:
-        pid_  = row["id"]
-        price = row["price"]
-        if body.action == "increase":
-            conn.execute("UPDATE products SET price=? WHERE id=?", (price + int(body.amount), pid_))
-        elif body.action == "decrease":
-            conn.execute("UPDATE products SET price=? WHERE id=?", (max(1, price - int(body.amount)), pid_))
-        elif body.action == "discount":
-            new_price = max(1, round(price * (1 - body.amount / 100)))
-            if new_price < price:
-                conn.execute(
-                    "UPDATE products SET old_price=?, price=?, is_sale=1 WHERE id=?",
-                    (price, new_price, pid_)
-                )
-        updated += 1
+
+    if body.action == "clear_discounts":
+        rows = conn.execute(
+            "SELECT id, old_price FROM products WHERE old_price IS NOT NULL AND old_price > 0"
+        ).fetchall()
+        for row in rows:
+            conn.execute(
+                "UPDATE products SET price=?, old_price=NULL, is_sale=0 WHERE id=?",
+                (row["old_price"], row["id"])
+            )
+            updated += 1
+    else:
+        rows = conn.execute("SELECT id, price FROM products").fetchall()
+        for row in rows:
+            pid_  = row["id"]
+            price = row["price"]
+            if body.action == "increase":
+                conn.execute("UPDATE products SET price=? WHERE id=?", (price + int(body.amount), pid_))
+            elif body.action == "decrease":
+                conn.execute("UPDATE products SET price=? WHERE id=?", (max(1, price - int(body.amount)), pid_))
+            elif body.action == "discount":
+                new_price = max(1, round(price * (1 - body.amount / 100)))
+                if new_price < price:
+                    conn.execute(
+                        "UPDATE products SET old_price=?, price=?, is_sale=1 WHERE id=?",
+                        (price, new_price, pid_)
+                    )
+            updated += 1
+
     conn.commit()
     conn.close()
     log_action(user["username"], f"bulk_price_{body.action}", f"amount={body.amount}, products={updated}")
@@ -815,7 +1045,7 @@ def create_style(body: StyleCreate, x_init_data: Optional[str] = Header(None)):
         sid = cur.lastrowid; conn.close()
         log_action(user["username"], "style_create", name)
         return {"id": sid, "name": name}
-    except:
+    except Exception:
         conn.close(); raise HTTPException(409, "Style already exists")
 
 @app.delete("/styles/{sid}", status_code=204)
@@ -891,16 +1121,345 @@ def delete_desc_template(tid: int, x_init_data: Optional[str] = Header(None)):
     log_action(user["username"], "template_delete", row["title"])
 
 
+@app.post("/events", status_code=204)
 def track_event(body: UserEvent, x_init_data: Optional[str] = Header(None)):
-    """Track user interaction for recommendation engine."""
+    """Track user interaction for recommendation engine. Each user counted once per product+event."""
     user = get_user(x_init_data)
     uid = str(user["id"]) if user else "guest"
     if body.event_type not in ("view", "wish", "purchase"):
         raise HTTPException(400, "Invalid event_type")
     conn = get_db()
+    # INSERT OR IGNORE enforces the UNIQUE(user_id, product_id, event_type) constraint
     conn.execute(
-        "INSERT INTO user_events (user_id,product_id,event_type) VALUES (?,?,?)",
+        "INSERT OR IGNORE INTO user_events (user_id,product_id,event_type) VALUES (?,?,?)",
         (uid, body.product_id, body.event_type)
+    )
+    conn.commit(); conn.close()
+
+@app.get("/admin/product-events")
+def admin_product_events(x_init_data: Optional[str] = Header(None), limit: int = 20):
+    """
+    Топ товаров по просмотрам и добавлениям в избранное.
+    Только для администраторов.
+    """
+    require_admin(x_init_data, "orders")
+    conn = get_db()
+
+    # Топ просмотров
+    views = conn.execute("""
+        SELECT e.product_id, p.name, p.emoji, p.photos,
+               COUNT(*) as cnt,
+               COUNT(DISTINCT e.user_id) as unique_users
+        FROM user_events e
+        LEFT JOIN products p ON p.id = e.product_id
+        WHERE e.event_type = 'view'
+        GROUP BY e.product_id
+        ORDER BY cnt DESC
+        LIMIT ?
+    """, (limit,)).fetchall()
+
+    # Топ избранного
+    wishes = conn.execute("""
+        SELECT e.product_id, p.name, p.emoji, p.photos,
+               COUNT(*) as cnt,
+               COUNT(DISTINCT e.user_id) as unique_users
+        FROM user_events e
+        LEFT JOIN products p ON p.id = e.product_id
+        WHERE e.event_type = 'wish'
+        GROUP BY e.product_id
+        ORDER BY cnt DESC
+        LIMIT ?
+    """, (limit,)).fetchall()
+
+    # Кто сейчас держит товар в избранном — username хранится прямо в wishlists
+    wish_log = conn.execute("""
+        SELECT w.user_id, w.product_id, w.username, w.first_name,
+               p.name as product_name, p.emoji, p.photos,
+               w.created_at
+        FROM wishlists w
+        LEFT JOIN products p ON p.id = w.product_id
+        ORDER BY w.created_at DESC
+        LIMIT 100
+    """).fetchall()
+
+    conn.close()
+
+
+    return {
+        "top_views": [
+            {"product_id": r["product_id"], "name": r["name"] or "Удалён", "emoji": r["emoji"] or "📦",
+             "photo": parse_photo(r["photos"] if "photos" in r.keys() else None),
+             "views": r["cnt"], "unique_users": r["unique_users"]}
+            for r in views
+        ],
+        "top_wishes": [
+            {"product_id": r["product_id"], "name": r["name"] or "Удалён", "emoji": r["emoji"] or "📦",
+             "photo": parse_photo(r["photos"] if "photos" in r.keys() else None),
+             "wishes": r["cnt"], "unique_users": r["unique_users"]}
+            for r in wishes
+        ],
+        "wish_log": [
+            {"user_id": r["user_id"],
+             "product_id": r["product_id"],
+             "product_name": r["product_name"] or "Удалён",
+             "emoji": r["emoji"] or "📦",
+             "photo": parse_photo(r["photos"]),
+             "username": r["username"] or "",
+             "first_name": r["first_name"] or "",
+             "at": r["created_at"] or 0}
+            for r in wish_log
+        ],
+    }
+
+@app.get("/admin/product-stats/{product_id}")
+def admin_product_stats(product_id: int, x_init_data: Optional[str] = Header(None)):
+    """
+    Детальная статистика по конкретному товару:
+    список кто смотрел и кто добавил в избранное.
+    """
+    require_admin(x_init_data, "orders")
+    conn = get_db()
+
+    # Товар
+    prod = conn.execute("SELECT * FROM products WHERE id=?", (product_id,)).fetchone()
+
+    # Кто смотрел — джойним с orders чтобы получить username/first_name
+    viewers = conn.execute("""
+        SELECT e.user_id, e.created_at,
+               COALESCE(o.username, '') as username,
+               COALESCE(o.recipient, '') as first_name
+        FROM user_events e
+        LEFT JOIN (
+            SELECT user_id, username, recipient
+            FROM orders
+            WHERE id IN (SELECT MAX(id) FROM orders GROUP BY user_id)
+        ) o ON o.user_id = e.user_id
+        WHERE e.event_type = 'view' AND e.product_id = ?
+        ORDER BY e.created_at DESC
+    """, (product_id,)).fetchall()
+
+    # Кто в избранном (из wishlists — актуально)
+    wishers = conn.execute("""
+        SELECT user_id, username, first_name, created_at
+        FROM wishlists
+        WHERE product_id = ?
+        ORDER BY created_at DESC
+    """, (product_id,)).fetchall()
+
+    conn.close()
+
+    photos = []
+    if prod:
+        try: photos = json.loads(prod["photos"]) if prod["photos"] else []
+        except: pass
+
+    def fmt_user(user_id, username, first_name):
+        uname = (username or "").strip()
+        fname = (first_name or "").strip()
+        handle = ('@' + uname) if uname else ('id' + str(user_id))
+        return {"user_id": user_id, "username": uname, "first_name": fname, "handle": handle}
+
+    return {
+        "product": {
+            "id": product_id,
+            "name": prod["name"] if prod else "Удалён",
+            "emoji": (prod["emoji"] if prod else "📦") or "📦",
+            "photo": photos[0] if photos else None,
+        },
+        "viewers": [fmt_user(r["user_id"], r["username"], r["first_name"]) for r in viewers],
+        "wishers": [fmt_user(r["user_id"], r["username"], r["first_name"]) for r in wishers],
+    }
+
+@app.get("/admin/user-detail/{user_id}")
+def admin_user_detail(user_id: str, x_init_data: Optional[str] = Header(None)):
+    """Детальная история конкретного пользователя: что смотрел, что в избранном."""
+    require_admin(x_init_data, "orders")
+    conn = get_db()
+
+
+    # Что смотрел (из user_events)
+    viewed = conn.execute("""
+        SELECT e.product_id, e.created_at,
+               p.name, p.emoji, p.photos
+        FROM user_events e
+        LEFT JOIN products p ON p.id = e.product_id
+        WHERE e.user_id = ? AND e.event_type = 'view'
+        ORDER BY e.created_at DESC
+    """, (user_id,)).fetchall()
+
+    # Что сейчас в избранном (из wishlists — актуально)
+    wished = conn.execute("""
+        SELECT w.product_id, w.created_at,
+               p.name, p.emoji, p.photos
+        FROM wishlists w
+        LEFT JOIN products p ON p.id = w.product_id
+        WHERE w.user_id = ?
+        ORDER BY w.created_at DESC
+    """, (user_id,)).fetchall()
+
+    # Заказы пользователя
+    orders = conn.execute("""
+        SELECT id, total, status, date_str, items
+        FROM orders WHERE user_id = ?
+        ORDER BY created_at DESC
+    """, (user_id,)).fetchall()
+
+    conn.close()
+
+    def prod_item(r):
+        return {
+            "product_id": r["product_id"],
+            "name":       r["name"] or "Удалён",
+            "emoji":      r["emoji"] or "📦",
+            "photo":      parse_photo(r["photos"]),
+            "at":         r["created_at"] or 0,
+        }
+
+    return {
+        "viewed": [prod_item(r) for r in viewed],
+        "wished": [prod_item(r) for r in wished],
+        "orders": [
+            {"id": o["id"], "total": o["total"], "status": o["status"],
+             "date": o["date_str"], "items_count": len(json.loads(o["items"] or "[]"))}
+            for o in orders
+        ],
+    }
+
+@app.post("/admin/vip-by-username", status_code=200)
+def vip_by_username(body: dict, x_init_data: Optional[str] = Header(None)):
+    """Выдать или снять VIP по @username."""
+    admin = require_admin(x_init_data, "orders")
+    username = (body.get("username") or "").strip().lstrip("@").lower()
+    action   = body.get("action", "grant")  # "grant" | "revoke"
+    if not username:
+        raise HTTPException(400, "username required")
+    conn = get_db()
+    row = conn.execute(
+        "SELECT user_id, is_vip FROM user_sessions WHERE LOWER(username)=?", (username,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, f"Пользователь @{username} не найден в системе")
+    new_vip = 1 if action == "grant" else 0
+    conn.execute("UPDATE user_sessions SET is_vip=? WHERE user_id=?", (new_vip, row["user_id"]))
+    conn.commit(); conn.close()
+    log_action(admin["username"], "vip_by_username", username, "action="+action)
+    return {"user_id": row["user_id"], "is_vip": bool(new_vip)}
+
+@app.get("/admin/vip-list")
+def get_vip_list(x_init_data: Optional[str] = Header(None)):
+    """Список всех VIP-пользователей."""
+    require_admin(x_init_data, "orders")
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT user_id, username, first_name, last_name, last_seen
+        FROM user_sessions WHERE is_vip=1 ORDER BY last_seen DESC
+    """).fetchall()
+    conn.close()
+    return {"vips": [
+        {"user_id": r["user_id"],
+         "username": r["username"] or "",
+         "first_name": r["first_name"] or "",
+         "last_name": r["last_name"] or "",
+         "display": " ".join(filter(None,[r["first_name"],r["last_name"]])) or r["username"] or "id"+r["user_id"],
+         "handle": ("@"+r["username"]) if r["username"] else "id"+r["user_id"],
+         "last_seen": r["last_seen"]}
+        for r in rows
+    ]}
+
+@app.post("/admin/users/{user_id}/vip", status_code=204)
+def toggle_vip(user_id: str, x_init_data: Optional[str] = Header(None)):
+    """Выдать или снять VIP-статус пользователя."""
+    admin = require_admin(x_init_data, "orders")
+    conn = get_db()
+    row = conn.execute("SELECT is_vip FROM user_sessions WHERE user_id=?", (user_id,)).fetchone()
+    if not row:
+        conn.close(); raise HTTPException(404, "User not found")
+    new_vip = 0 if row["is_vip"] else 1
+    conn.execute("UPDATE user_sessions SET is_vip=? WHERE user_id=?", (new_vip, user_id))
+    conn.commit(); conn.close()
+    log_action(admin["username"], "vip_toggle", user_id, "vip="+str(new_vip))
+
+@app.get("/me")
+def get_me(x_init_data: Optional[str] = Header(None)):
+    """Возвращает данные текущего пользователя включая VIP-статус."""
+    user = get_user(x_init_data)
+    if not user:
+        return {"is_vip": False}
+    uid = str(user["id"])
+    conn = get_db()
+    row = conn.execute("SELECT is_vip FROM user_sessions WHERE user_id=?", (uid,)).fetchone()
+    conn.close()
+    return {"is_vip": bool(row["is_vip"]) if row else False}
+
+@app.delete("/admin/views", status_code=204)
+def clear_all_views(x_init_data: Optional[str] = Header(None)):
+    """Обнулить все просмотры товаров."""
+    user = require_admin(x_init_data, "orders")
+    conn = get_db()
+    conn.execute("DELETE FROM user_events WHERE event_type='view'")
+    conn.commit(); conn.close()
+    log_action(user["username"], "clear_views", "all")
+
+@app.delete("/admin/views/{user_id}", status_code=204)
+def clear_user_views(user_id: str, x_init_data: Optional[str] = Header(None)):
+    """Обнулить просмотры конкретного пользователя."""
+    user = require_admin(x_init_data, "orders")
+    conn = get_db()
+    conn.execute("DELETE FROM user_events WHERE event_type='view' AND user_id=?", (user_id,))
+    conn.commit(); conn.close()
+    log_action(user["username"], "clear_user_views", user_id)
+
+# ═══════════════════════════════════════════════
+# ROUTES — WISHLIST
+# ═══════════════════════════════════════════════
+
+@app.get("/wishlist")
+def get_wishlist(x_init_data: Optional[str] = Header(None)):
+    """Get current user's wishlist product IDs."""
+    user = get_user(x_init_data)
+    if not user:
+        return {"ids": []}
+    uid = str(user["id"])
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT product_id FROM wishlists WHERE user_id=? ORDER BY created_at DESC", (uid,)
+    ).fetchall()
+    conn.close()
+    return {"ids": [r["product_id"] for r in rows]}
+
+@app.post("/wishlist/{product_id}", status_code=204)
+def add_to_wishlist(product_id: int, x_init_data: Optional[str] = Header(None)):
+    """Add product to wishlist."""
+    user = get_user(x_init_data)
+    if not user:
+        raise HTTPException(401, "Unauthorized")
+    uid = str(user["id"])
+    uname = user.get("username") or ""
+    fname = user.get("first_name") or ""
+    conn = get_db()
+    # INSERT OR REPLACE чтобы обновить username/first_name если изменились
+    conn.execute(
+        "INSERT OR REPLACE INTO wishlists (user_id, product_id, username, first_name) VALUES (?,?,?,?)",
+        (uid, product_id, uname, fname)
+    )
+    # Also track as wish event (unique per user)
+    conn.execute(
+        "INSERT OR IGNORE INTO user_events (user_id,product_id,event_type) VALUES (?,?,?)",
+        (uid, product_id, "wish")
+    )
+    conn.commit(); conn.close()
+
+@app.delete("/wishlist/{product_id}", status_code=204)
+def remove_from_wishlist(product_id: int, x_init_data: Optional[str] = Header(None)):
+    """Remove product from wishlist."""
+    user = get_user(x_init_data)
+    if not user:
+        raise HTTPException(401, "Unauthorized")
+    uid = str(user["id"])
+    conn = get_db()
+    conn.execute(
+        "DELETE FROM wishlists WHERE user_id=? AND product_id=?", (uid, product_id)
     )
     conn.commit(); conn.close()
 
@@ -991,7 +1550,7 @@ def create_order(body: OrderCreate, x_init_data: Optional[str] = Header(None)):
             try:
                 conn2 = get_db()
                 conn2.execute(
-                    "INSERT INTO user_events (user_id,product_id,event_type) VALUES (?,?,?)",
+                    "INSERT OR IGNORE INTO user_events (user_id,product_id,event_type) VALUES (?,?,?)",
                     (uid, pid, "purchase")
                 )
                 conn2.commit(); conn2.close()
