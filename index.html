@@ -1127,7 +1127,7 @@ body {
     <div id="ptr-spinner" style="
       width:22px;height:22px;border-radius:50%;
       border:2px solid var(--border2);border-top-color:#fff;
-      animation:spin .7s linear infinite;opacity:0;
+      opacity:0;
       transition:opacity .2s;
     "></div>
   </div>
@@ -1336,7 +1336,20 @@ body {
     </button>
     <div class="page-title">Мои заказы</div>
   </div>
-  <div class="scroll"><div id="orders-list" style="padding:0 0 20px"></div></div>
+  <!-- Pull-to-refresh indicator -->
+  <div id="ptr-orders-indicator" style="
+    display:flex;align-items:center;justify-content:center;
+    height:0;overflow:hidden;
+    transition:height .25s cubic-bezier(.32,.72,0,1);
+    background:var(--bg);
+  ">
+    <div id="ptr-orders-spinner" style="
+      width:22px;height:22px;border-radius:50%;
+      border:2px solid var(--border2);border-top-color:#fff;
+      opacity:0;transition:opacity .2s;
+    "></div>
+  </div>
+  <div class="scroll" id="orders-scroll"><div id="orders-list" style="padding:0 0 20px"></div></div>
 </div>
 
 <!-- ADMIN -->
@@ -1357,9 +1370,21 @@ body {
     <button class="admin-tab" id="tab-brands" onclick="switchTab('brands',this)">Бренды</button>
     <button class="admin-tab" onclick="switchTab('templates',this)">📋 Шаблоны</button>
     <button class="admin-tab" onclick="switchTab('prices',this)">💰 Цены</button>
-
   </div>
-  <div class="scroll">
+  <!-- Pull-to-refresh indicator -->
+  <div id="ptr-admin-indicator" style="
+    display:flex;align-items:center;justify-content:center;
+    height:0;overflow:hidden;
+    transition:height .25s cubic-bezier(.32,.72,0,1);
+    background:var(--bg);
+  ">
+    <div id="ptr-admin-spinner" style="
+      width:22px;height:22px;border-radius:50%;
+      border:2px solid var(--border2);border-top-color:#fff;
+      opacity:0;transition:opacity .2s;
+    "></div>
+  </div>
+  <div class="scroll" id="admin-scroll">
     <!-- STATS -->
     <div class="admin-panel on" id="panel-stats">
       <div class="stat-grid">
@@ -2633,8 +2658,8 @@ function toggleWish(e, id) {
   } else {
     wishlist.add(id); btn.classList.add('liked');
     toast('Добавлено в избранное ❤️');
-    trackWish(id);
   }
+  trackWish(id); // backend toggles: add if not exists, delete if exists
   updateStats();
   if (document.getElementById('page-wishlist').classList.contains('active')) filterWish();
 }
@@ -2798,12 +2823,18 @@ function closeProduct() {
     return;
   }
 
-  // Открыт из главной ленты — обновляем рекомендации и возвращаемся наверх
+  // Открыт из главной ленты — flash-анимация + scroll наверх + обновляем рекомендации
   if (viewed) {
     lastViewedProduct = viewed;
     updateRecsOnly(viewed);
   }
   const homeScroll = document.getElementById('home-scroll');
+  const homeGrid   = document.getElementById('home-grid');
+  if (homeGrid) {
+    homeGrid.classList.remove('home-flash');
+    void homeGrid.offsetWidth;
+    homeGrid.classList.add('home-flash');
+  }
   if (homeScroll) {
     homeScroll.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -3799,13 +3830,13 @@ async function loadProductEvents() {
   viewsEl.innerHTML = loading; wishEl.innerHTML = loading;
   try {
     const data = await apiFetch('/admin/product-events');
-    const renderList = (items, el) => {
-      if (!items.length) {
-        el.innerHTML = `<div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Нет данных</div>`;
-        return;
-      }
-      el.innerHTML = items.map((item, i) => `
-        <div class="pe-row">
+
+    // Views list — clickable, no users
+    if (!data.views.length) {
+      viewsEl.innerHTML = `<div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Нет данных</div>`;
+    } else {
+      viewsEl.innerHTML = data.views.map((item, i) => `
+        <div class="pe-row" onclick="openProduct(${item.product_id})" style="cursor:pointer">
           <div class="pe-rank">${i + 1}</div>
           ${item.photo
             ? `<img class="pe-img" src="${item.photo}" alt=""/>`
@@ -3814,14 +3845,39 @@ async function loadProductEvents() {
             <div class="pe-name">${item.name}</div>
             <div class="pe-price">${fmt(item.price)}</div>
           </div>
-          <div>
+          <div style="text-align:right;flex-shrink:0">
             <div class="pe-cnt">${item.count}</div>
-            <div class="pe-uniq">${item.unique_users} польз.</div>
+            <div class="pe-uniq">польз.</div>
           </div>
         </div>`).join('');
-    };
-    renderList(data.views,    viewsEl);
-    renderList(data.wishlist, wishEl);
+    }
+
+    // Wishlist — clickable + show which users
+    if (!data.wishlist.length) {
+      wishEl.innerHTML = `<div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Нет данных</div>`;
+    } else {
+      wishEl.innerHTML = data.wishlist.map((item, i) => {
+        const userTags = (item.users || []).map(u =>
+          `<span style="display:inline-block;background:var(--s1);border:1px solid var(--border);border-radius:20px;padding:2px 8px;font-size:10px;color:var(--text2);margin:2px 2px 0 0">${u}</span>`
+        ).join('');
+        return `
+        <div class="pe-row" onclick="openProduct(${item.product_id})" style="cursor:pointer;flex-wrap:wrap;align-items:flex-start">
+          <div class="pe-rank" style="margin-top:2px">${i + 1}</div>
+          ${item.photo
+            ? `<img class="pe-img" src="${item.photo}" alt="" style="margin-top:2px"/>`
+            : `<div class="pe-img-ph" style="margin-top:2px">📦</div>`}
+          <div class="pe-info" style="min-width:0">
+            <div class="pe-name">${item.name}</div>
+            <div class="pe-price">${fmt(item.price)}</div>
+            ${userTags ? `<div style="margin-top:4px">${userTags}</div>` : ''}
+          </div>
+          <div style="text-align:right;flex-shrink:0;margin-top:2px">
+            <div class="pe-cnt">${item.count}</div>
+            <div class="pe-uniq">польз.</div>
+          </div>
+        </div>`;
+      }).join('');
+    }
   } catch(e) {
     const err = `<div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">Ошибка загрузки</div>`;
     viewsEl.innerHTML = err; wishEl.innerHTML = err;
@@ -5325,62 +5381,82 @@ function toast(msg) {
 /* swipe-to-close disabled via tg.disableVerticalSwipes() */
 
 /* ═══════════════════════════════════════════════
-   PULL-TO-REFRESH + RUBBER BAND
+   PULL-TO-REFRESH
 ═══════════════════════════════════════════════ */
 (function() {
-  const TRIGGER = 80;   // px to pull before refresh triggers
-  const MAX     = 110;  // max rubber band stretch px
+  const TRIGGER = 72;   // px to pull before refresh triggers
+  const MAX     = 100;  // max rubber band stretch px
 
-  let startY = 0, pulling = false, triggered = false;
+  // Config per scroll container
+  const zones = [
+    {
+      scrollId:    'home-scroll',
+      indicatorId: 'ptr-indicator',
+      spinnerId:   'ptr-spinner',
+      onRefresh:   () => Promise.all([loadProducts(), loadAdmins()]),
+    },
+    {
+      scrollId:    'orders-scroll',
+      indicatorId: 'ptr-orders-indicator',
+      spinnerId:   'ptr-orders-spinner',
+      onRefresh:   () => loadMyOrders(),
+    },
+    {
+      scrollId:    'admin-scroll',
+      indicatorId: 'ptr-admin-indicator',
+      spinnerId:   'ptr-admin-spinner',
+      onRefresh:   () => {
+        // Refresh whichever tab is currently active
+        const activeTab = document.querySelector('.admin-panel.on')?.id;
+        if (activeTab === 'panel-stats')    return loadAllOrders().then(() => { renderAdminStats(); loadProductEvents(); });
+        if (activeTab === 'panel-orders')   return loadAllOrders();
+        if (activeTab === 'panel-products') return loadProducts();
+        return Promise.resolve();
+      },
+    },
+  ];
 
-  function getHomeScroll() {
-    return document.getElementById('home-scroll');
-  }
+  let state = null; // active zone state
 
-  function getPTR() {
-    return document.getElementById('ptr-indicator');
-  }
-
-  function getSpinner() {
-    return document.getElementById('ptr-spinner');
-  }
+  function ease(x) { return x < 0.5 ? 2*x*x : 1-(Math.pow(-2*x+2,2)/2); } // ease-in-out
 
   document.addEventListener('touchstart', (e) => {
-    const scroll = getHomeScroll();
-    if (!scroll || !scroll.closest('.page.active')) return;
-    if (!e.target.closest('#home-scroll')) return;
-    if (scroll.scrollTop > 0) return; // only pull when at top
-    startY = e.touches[0].clientY;
-    pulling = true;
-    triggered = false;
+    for (const z of zones) {
+      const scroll = document.getElementById(z.scrollId);
+      if (!scroll) continue;
+      // Must be in the visible active page tree
+      if (!scroll.closest('.page.active')) continue;
+      if (!e.target.closest('#' + z.scrollId)) continue;
+      if (scroll.scrollTop > 0) continue;
+      state = { ...z, startY: e.touches[0].clientY, pulling: true, triggered: false };
+      return;
+    }
   }, { passive: true });
 
   document.addEventListener('touchmove', (e) => {
-    if (!pulling) return;
-    const scroll = getHomeScroll();
-    if (!scroll || scroll.scrollTop > 0) { pulling = false; return; }
+    if (!state?.pulling) return;
+    const scroll = document.getElementById(state.scrollId);
+    if (!scroll || scroll.scrollTop > 0) { state.pulling = false; return; }
 
-    const dy = e.touches[0].clientY - startY;
+    const dy = e.touches[0].clientY - state.startY;
     if (dy <= 0) return;
 
-    // Rubber band: slow down resistance as we pull further
-    const resistance = 0.4;
-    const pull = Math.min(dy * resistance, MAX);
-    const ptr = getPTR();
-    const spinner = getSpinner();
+    const resistance = 0.38;
+    const raw  = dy * resistance;
+    const pull = Math.min(raw, MAX);
+    const progress = Math.min(pull / TRIGGER, 1);
 
-    if (ptr) ptr.style.height = pull + 'px';
+    const ptr     = document.getElementById(state.indicatorId);
+    const spinner = document.getElementById(state.spinnerId);
 
-    // Spinner appears + rotates as pull increases
+    if (ptr)     ptr.style.height = pull + 'px';
     if (spinner) {
-      const progress = Math.min(pull / TRIGGER, 1);
-      spinner.style.opacity = String(progress);
-      spinner.style.transform = `rotate(${progress * 180}deg)`;
+      spinner.style.opacity   = String(ease(progress));
+      spinner.style.transform = `rotate(${progress * 200}deg)`;
     }
 
-    // Haptic when threshold reached
-    if (pull >= TRIGGER && !triggered) {
-      triggered = true;
+    if (pull >= TRIGGER && !state.triggered) {
+      state.triggered = true;
       if (window.Telegram?.WebApp?.HapticFeedback) {
         window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
       }
@@ -5388,38 +5464,46 @@ function toast(msg) {
   }, { passive: true });
 
   document.addEventListener('touchend', () => {
-    if (!pulling) return;
-    pulling = false;
+    if (!state?.pulling) return;
+    const z = state;
+    state = null;
 
-    const ptr = getPTR();
-    const spinner = getSpinner();
+    const ptr     = document.getElementById(z.indicatorId);
+    const spinner = document.getElementById(z.spinnerId);
 
-    if (triggered) {
-      // Show loading state
-      if (ptr) ptr.style.height = '48px';
+    if (z.triggered) {
+      // Lock height and start spin
+      if (ptr)     ptr.style.height = '48px';
       if (spinner) {
-        spinner.style.opacity = '1';
+        spinner.style.opacity   = '1';
+        spinner.style.transform = 'none';
         spinner.style.animation = 'spin .7s linear infinite';
       }
-      // Refresh
-      Promise.all([loadProducts(), loadAdmins()]).finally(() => {
+      z.onRefresh().finally(() => {
         setTimeout(() => {
-          if (ptr) ptr.style.height = '0';
-          if (spinner) spinner.style.opacity = '0';
-        }, 400);
+          if (ptr) {
+            ptr.style.transition = 'height .35s cubic-bezier(.32,.72,0,1)';
+            ptr.style.height = '0';
+          }
+          if (spinner) {
+            spinner.style.animation = '';
+            spinner.style.opacity   = '0';
+          }
+        }, 350);
       });
     } else {
-      // Spring back
-      if (ptr) ptr.style.height = '0';
+      if (ptr) {
+        ptr.style.transition = 'height .3s cubic-bezier(.32,.72,0,1)';
+        ptr.style.height = '0';
+      }
       if (spinner) spinner.style.opacity = '0';
     }
   });
 
   // Rubber band at bottom of scroll
-  let lastScrollTop = 0;
   document.addEventListener('touchstart', (e) => {
     const scroll = e.target.closest('.scroll');
-    if (scroll) lastScrollTop = scroll.scrollTop;
+    if (scroll) scroll._lastTop = scroll.scrollTop;
   }, { passive: true });
 
 })();
