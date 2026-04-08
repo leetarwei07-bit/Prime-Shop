@@ -2444,28 +2444,28 @@ async function loadAllOrders() {
 function navigate(id, btn) {
   if (id === 'admin' && !isAdmin()) { toast('Доступ запрещён'); return; }
   // Если уже на главной — анимация + перемешать ленту + scroll to top
+  // Если карточка товара открыта — закрываем её
+  const productOpen = document.getElementById('page-product').classList.contains('open');
+  if (productOpen) closeProduct();
+
   const alreadyHome = id === 'home' && document.getElementById('page-home').classList.contains('active');
-  if (alreadyHome) {
-    const grid = document.getElementById('home-grid');
+  if (alreadyHome && !productOpen) {
+    // Уже на главной — плавный scroll наверх + обновить ленту
     const scroll = document.getElementById('home-scroll');
-    // Fade-out
-    if (grid) { grid.style.transition = 'opacity .18s ease'; grid.style.opacity = '0'; }
-    setTimeout(() => {
-      // Scroll top мгновенно пока невидимо
-      if (scroll) scroll.scrollTop = 0;
-      // Перемешиваем ленту
-      renderHome(true);
-      loadRecommendations(lastViewedProduct);
-      // Fade-in
-      requestAnimationFrame(() => {
-        if (grid) { grid.style.opacity = '1'; }
-        setTimeout(() => { if (grid) grid.style.transition = ''; }, 220);
-      });
-    }, 190);
+    const grid = document.getElementById('home-grid');
+    if (scroll) scroll.scrollTo({ top: 0, behavior: 'smooth' });
+    if (grid) {
+      grid.style.transition = 'opacity .18s ease';
+      grid.style.opacity = '0';
+      setTimeout(() => {
+        renderHome(true);
+        loadRecommendations(lastViewedProduct);
+        grid.style.opacity = '1';
+        setTimeout(() => { grid.style.transition = ''; }, 220);
+      }, 180);
+    }
     return;
   }
-  // close product if open
-  if (document.getElementById('page-product').classList.contains('open')) closeProduct();
   closeCat();
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -2990,23 +2990,28 @@ function closeProduct() {
     return;
   }
 
-  // Открыт из обычной ленты — fade-out → scroll top + рефреш → fade-in
-  const grid = document.getElementById('home-grid');
+  // Открыт из обычной ленты — scroll top + рефреш
   const homeScroll = document.getElementById('home-scroll');
-  if (grid) { grid.style.transition = 'opacity .18s ease'; grid.style.opacity = '0'; }
+  const grid = document.getElementById('home-grid');
+  // Сначала scroll наверх
+  if (homeScroll) homeScroll.scrollTo({ top: 0, behavior: 'smooth' });
+  // Fade + обновление ленты
+  if (grid) {
+    grid.style.transition = 'opacity .18s ease';
+    grid.style.opacity = '0';
+  }
   setTimeout(() => {
-    if (homeScroll) homeScroll.scrollTop = 0;
     if (viewed) {
       lastViewedProduct = viewed;
       loadRecommendations(viewed);
     } else {
       loadRecommendations(lastViewedProduct);
     }
-    requestAnimationFrame(() => {
-      if (grid) { grid.style.opacity = '1'; }
-      setTimeout(() => { if (grid) grid.style.transition = ''; }, 220);
-    });
-  }, 190);
+    if (grid) {
+      grid.style.opacity = '1';
+      setTimeout(() => { grid.style.transition = ''; }, 220);
+    }
+  }, 180);
 }
 
 function searchByTag(type, value) {
