@@ -1293,7 +1293,9 @@ body {
       <div id="d-price" class="detail-price"></div>
       <div id="d-old" class="detail-old"></div>
       <div id="d-disc" class="detail-disc"></div>
+      <div id="d-cargo-tag" style="font-size:11px;font-weight:600;color:#eab308;display:none;white-space:nowrap">+ карго</div>
     </div>
+    <div id="d-cargo-block"></div>
     <div class="detail-divider"></div>
     <div id="color-sec" class="var-sec" style="display:none">
       <div class="var-label">Цвет <span id="sel-color"></span></div>
@@ -1316,7 +1318,6 @@ body {
       </div>
     </div>
     <div class="detail-divider"></div>
-    <div id="d-cargo-block"></div>
     <div class="detail-sec">Описание</div>
     <div id="d-desc" class="detail-desc detail-desc-collapsed"></div>
     <button id="d-desc-toggle" class="desc-toggle" onclick="toggleDesc()" style="display:none">
@@ -2607,15 +2608,7 @@ function cardHTML(p, idx = 0, fromRec = false) {
   if (p.isPreorder) {
     deliveryBadge = `<div class="prod-cargo prod-preorder">${clockSvg} Под заказ</div>`;
   } else if (p.cargoType === 'separate') {
-    // вычисляем примерную стоимость карго
-    let cargoHint = '';
-    if (p.cargoPrice > 0) {
-      cargoHint = ` · +${fmt(p.cargoPrice)}`;
-    } else if (p.cargoWeight > 0) {
-      const est = Math.round((p.cargoWeight / 100) * CARGO_PER_100G);
-      cargoHint = ` · ~${fmt(est)}`;
-    }
-    deliveryBadge = `<div class="prod-cargo cargo-separate">${truckSvg} Карго отдельно${cargoHint}</div>`;
+    deliveryBadge = `<div class="prod-cargo cargo-separate">${truckSvg} Карго отдельно</div>`;
   } else {
     deliveryBadge = `<div class="prod-cargo">${truckSvg} Карго включено</div>`;
   }
@@ -2630,6 +2623,7 @@ function cardHTML(p, idx = 0, fromRec = false) {
       ${imgHtml}
       ${p.isPreorder ? `<div class="prod-preorder-badge">Под заказ</div>` : ''}
       ${(p.isSale && !p.isPreorder && p.old && p.old > p.price) ? `<div class="prod-sale-badge">SALE</div>` : ''}
+      ${(!p.isPreorder && p.cargoType === 'separate') ? `<div class="prod-preorder-badge" style="background:rgba(234,179,8,.92);color:#000;top:${(p.isSale && !p.isPreorder && p.old && p.old > p.price) ? '34px' : '8px'}">📦 Карго</div>` : ''}
       <button class="prod-heart ${wishlist.has(p.id)?'liked':''}" onclick="toggleWish(event,${p.id})">
         <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
       </button>
@@ -2912,6 +2906,8 @@ function openProduct(id, fromRec = false, fromAdmin = false) {
   document.getElementById('d-price').textContent = fmt(p.price);
   document.getElementById('d-old').textContent = p.old ? fmt(p.old) : '';
   document.getElementById('d-disc').textContent = disc > 0 ? `-${disc}%` : '';
+  const cargoTag = document.getElementById('d-cargo-tag');
+  if (cargoTag) cargoTag.style.display = (p.cargoType === 'separate') ? 'block' : 'none';
   document.getElementById('qty-num').textContent = 1;
   document.getElementById('detail-wish').classList.toggle('liked', wishlist.has(id));
 
@@ -3264,13 +3260,21 @@ function openCheckout() {
 
   // Price breakdown
   const total = p.price * detailQty;
+  let cargoRow = '';
+  if (p.cargoType === 'separate') {
+    cargoRow = `<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text2);margin-bottom:8px">
+      <span>Карго</span><span style="color:#eab308">Оплачивается отдельно</span>
+    </div>`;
+  } else if (!p.isPreorder) {
+    cargoRow = `<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text2);margin-bottom:8px">
+      <span>Карго</span><span style="color:var(--green)">Бесплатно</span>
+    </div>`;
+  }
   document.getElementById('checkout-price-rows').innerHTML = `
     <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text2);margin-bottom:8px">
       <span>Цена товара${detailQty>1?' × '+detailQty:''}</span><span>${fmt(total)}</span>
     </div>
-    <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text2);margin-bottom:8px">
-      <span>Карго</span><span style="color:var(--green)">Бесплатно</span>
-    </div>
+    ${cargoRow}
     <div style="display:flex;justify-content:space-between;font-family:'Unbounded',sans-serif;font-size:14px;font-weight:700;padding-top:10px;border-top:1px solid var(--border)">
       <span>Итого</span><span>${fmt(total)}</span>
     </div>`;
@@ -4778,11 +4782,11 @@ function renderCargoBlock(p) {
     let priceHtml = '';
     let subText = '';
     if (p.cargoPrice > 0) {
-      priceHtml = `<div class="cargo-detail-price" style="color:#eab308">+${fmt(p.cargoPrice)}</div>`;
+      priceHtml = `<div style="font-size:18px;font-weight:700;color:#eab308;margin-top:6px">+${fmt(p.cargoPrice)}</div>`;
       subText = 'Фиксированная стоимость карго';
     } else if (p.cargoWeight > 0) {
       const est = Math.round((p.cargoWeight / 100) * CARGO_PER_100G);
-      priceHtml = `<div class="cargo-detail-price" style="color:#eab308">~${fmt(est)}</div>`;
+      priceHtml = `<div style="font-size:18px;font-weight:700;color:#eab308;margin-top:6px">~${fmt(est)}</div>`;
       subText = `Примерно · ${p.cargoWeight}г · 13 000 / 100г`;
     } else {
       subText = 'Стоимость карго уточняется';
@@ -4793,9 +4797,9 @@ function renderCargoBlock(p) {
           <div class="cargo-detail-icon">📦</div>
           <div class="cargo-detail-text">
             <div class="cargo-detail-title" style="color:#eab308">Карго оплачивается отдельно</div>
-            <div class="cargo-detail-sub">${subText}</div>
+            ${priceHtml}
+            <div class="cargo-detail-sub" style="margin-top:4px">${subText}</div>
           </div>
-          ${priceHtml}
         </div>
       </div>`;
   } else {
