@@ -2009,10 +2009,9 @@ body {
       <div class="od-total-val" id="od-total"></div>
     </div>
     <div id="od-payment-section"></div>
+    <div id="od-cargo-section"></div>
   </div>
 </div>
-
-<!-- EDIT PRODUCT SHEET -->
 <div class="overlay" id="edit-overlay" onclick="closeOverlay('edit-overlay',event)">
   <div class="sheet">
     <div class="sheet-handle"></div>
@@ -2623,7 +2622,7 @@ function cardHTML(p, idx = 0, fromRec = false) {
       ${imgHtml}
       ${p.isPreorder ? `<div class="prod-preorder-badge">Под заказ</div>` : ''}
       ${(p.isSale && !p.isPreorder && p.old && p.old > p.price) ? `<div class="prod-sale-badge">SALE</div>` : ''}
-      ${(!p.isPreorder && p.cargoType === 'separate') ? `<div class="prod-preorder-badge" style="background:rgba(234,179,8,.92);color:#000;top:${(p.isSale && !p.isPreorder && p.old && p.old > p.price) ? '34px' : '8px'}">📦 Карго</div>` : ''}
+      ${(!p.isPreorder && p.cargoType === 'separate') ? `<div class="prod-preorder-badge" style="background:rgba(234,179,8,.92);color:#000;top:${(p.isSale && !p.isPreorder && p.old && p.old > p.price) ? '34px' : '8px'}">+ карго</div>` : ''}
       <button class="prod-heart ${wishlist.has(p.id)?'liked':''}" onclick="toggleWish(event,${p.id})">
         <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
       </button>
@@ -3781,6 +3780,85 @@ function openOrderDetail(id) {
     ${cardConfirmHTML}` : '';
 
   document.getElementById('od-info').innerHTML = recipHTML + adminHTML;
+
+  // Cargo fee section
+  const cargoSection = document.getElementById('od-cargo-section');
+  if (cargoSection) {
+    let cargoHTML = '';
+    const hasSeparateCargo = (o.items||[]).some(item => {
+      const pid = item.product_id || item.product?.id;
+      const prod = pid ? PRODUCTS.find(p => p.id === pid) : null;
+      return prod?.cargoType === 'separate';
+    });
+
+    // Статусы при которых карго актуально (товар уже едет или приехал)
+    const cargoActiveStatuses = ['in_transit','customs','warehouse','delivered'];
+    const cargoActive = cargoActiveStatuses.includes(o.status);
+
+    if (hasSeparateCargo || o.cargoFee > 0) {
+      if (isAdmin()) {
+        if (!cargoActive && o.cargoFee === 0) {
+          // Заказ ещё в обработке — подсказка
+          cargoHTML = `
+            <div style="margin-top:16px;padding:12px 14px;background:rgba(234,179,8,.04);border:1px solid rgba(234,179,8,.15);border-radius:12px">
+              <div style="font-size:12px;color:#eab308;font-weight:500">📦 Карго отдельно</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:4px">Установить стоимость карго можно когда товар будет отправлен</div>
+            </div>`;
+        } else {
+          // Товар в пути или уже есть сумма — показываем форму
+          const confirmedHTML = o.cargoPaymentStatus === 'paid'
+            ? `<div style="margin-top:8px;padding:8px 12px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:8px;color:var(--green);font-size:12px;font-weight:600;text-align:center">✅ Карго оплачено</div>` : '';
+          const receiptHTML = o.cargoReceiptUrl
+            ? `<div style="margin-top:8px">
+                <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Чек за карго</div>
+                <img src="${o.cargoReceiptUrl}" style="width:100%;border-radius:10px;object-fit:contain;max-height:220px;cursor:pointer;background:var(--s2)"
+                  onclick="if(tg)tg.openLink('${o.cargoReceiptUrl}');else window.open('${o.cargoReceiptUrl}','_blank')"/>
+                ${o.cargoPaymentStatus === 'receipt_sent' ? `<button onclick="confirmCargoPayment(${o.id})" style="width:100%;margin-top:8px;padding:10px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:8px;color:var(--green);font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif">✅ Подтвердить оплату карго</button>` : ''}
+              </div>` : '';
+          cargoHTML = `
+            <div style="margin-top:16px;padding:14px;background:rgba(234,179,8,.06);border:1px solid rgba(234,179,8,.2);border-radius:12px">
+              <div style="font-size:10px;color:#eab308;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">📦 Карго отдельно</div>
+              ${o.cargoFee > 0 ? `<div style="font-size:13px;color:var(--text2);margin-bottom:8px">Текущая стоимость: <span style="color:#eab308;font-weight:600">${fmt(o.cargoFee)}</span></div>` : ''}
+              <div style="display:flex;gap:8px">
+                <input id="cargo-fee-input" type="number" value="${o.cargoFee||''}" placeholder="Стоимость карго (сум)"
+                  style="flex:1;background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:#fff;font-family:'Inter',sans-serif;font-size:13px;outline:none"/>
+                <button onclick="setCargoFee(${o.id})" style="padding:9px 14px;background:#eab308;color:#000;border:none;border-radius:8px;font-family:'Unbounded',sans-serif;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">Сохранить</button>
+              </div>
+              ${confirmedHTML}
+              ${receiptHTML}
+            </div>`;
+        }
+      } else if (o.cargoFee > 0) {
+        // Клиент: видит сумму и может прикрепить чек
+        let statusBadge = '';
+        if (o.cargoPaymentStatus === 'paid') {
+          statusBadge = `<div style="margin-top:8px;padding:8px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:8px;color:var(--green);font-size:12px;font-weight:600;text-align:center">✅ Карго оплачено</div>`;
+        } else if (o.cargoPaymentStatus === 'receipt_sent') {
+          statusBadge = `<div style="margin-top:8px;padding:8px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:8px;color:var(--orange);font-size:12px;font-weight:600;text-align:center">⏳ Чек на проверке</div>`;
+        } else {
+          statusBadge = `
+            <div style="margin-top:10px">
+              <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Прикрепите чек об оплате карго:</div>
+              <input id="cargo-receipt-input" type="file" accept="image/*" style="display:none" onchange="uploadCargoReceipt(${o.id},this)"/>
+              <button onclick="document.getElementById('cargo-receipt-input').click()"
+                style="width:100%;padding:11px;background:rgba(234,179,8,.12);border:1px solid rgba(234,179,8,.3);border-radius:10px;color:#eab308;font-family:'Inter',sans-serif;font-size:13px;font-weight:600;cursor:pointer">
+                📎 Прикрепить чек карго
+              </button>
+            </div>`;
+        }
+        cargoHTML = `
+          <div style="margin-top:16px;padding:14px;background:rgba(234,179,8,.06);border:1px solid rgba(234,179,8,.2);border-radius:12px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+              <div style="font-size:13px;font-weight:600;color:#eab308">📦 Карго отдельно</div>
+              <div style="font-family:'Unbounded',sans-serif;font-size:14px;font-weight:700;color:#eab308">${fmt(o.cargoFee)}</div>
+            </div>
+            <div style="font-size:11px;color:var(--text3)">Переведите на карту: 5614 6822 1933 9936</div>
+            ${statusBadge}
+          </div>`;
+      }
+    }
+    cargoSection.innerHTML = cargoHTML;
+  }
   // Payment section — всегда показываем "Оплачено" (неоплаченные не отображаются)
   const paySection = document.getElementById('od-payment-section');
   if (paySection) {
@@ -3808,7 +3886,6 @@ function openOrderDetail(id) {
 async function confirmCardPayment(orderId) {
   try {
     await apiPatch(`/orders/${orderId}/status`, { status: 'active', payment_status: 'paid' });
-    // Обновляем локально
     const mi = myOrders.findIndex(o => o.id === orderId);
     if (mi !== -1) myOrders[mi].paymentStatus = 'paid';
     const ai = allOrders.findIndex(o => o.id === orderId);
@@ -3819,6 +3896,65 @@ async function confirmCardPayment(orderId) {
     if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
   } catch(e) { toast('Ошибка ⚠️'); }
 }
+
+async function setCargoFee(orderId) {
+  const input = document.getElementById('cargo-fee-input');
+  const fee = parseInt(input?.value);
+  if (!fee || fee <= 0) { toast('Введите стоимость карго'); return; }
+  try {
+    await apiFetch(`/orders/${orderId}/cargo-fee`, { method: 'POST', body: { cargo_fee: fee } });
+    // Обновляем локально
+    const updateOrder = o => { if (o) { o.cargoFee = fee; o.cargoPaymentStatus = 'pending'; } };
+    updateOrder(myOrders.find(o => o.id === orderId));
+    updateOrder(allOrders.find(o => o.id === orderId));
+    toast(`✅ Стоимость карго установлена: ${fmt(fee)}`);
+    if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+    openOrderDetail(orderId); // перерисовываем
+  } catch(e) { toast('Ошибка ⚠️'); }
+}
+
+async function uploadCargoReceipt(orderId, input) {
+  const file = input.files[0];
+  if (!file) return;
+  toast('Загрузка чека...');
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('upload_preset', CLOUDINARY_PRESET);
+    fd.append('folder', 'PrimeUz');
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method: 'POST', body: fd });
+    if (!res.ok) throw new Error('Upload failed');
+    const data = await res.json();
+    const url = data.secure_url;
+
+    await apiFetch(`/orders/${orderId}/cargo-receipt`, {
+      method: 'POST',
+      body: { receipt: url, username: tgUser() }
+    });
+
+    const updateOrder = o => { if (o) { o.cargoReceiptUrl = url; o.cargoPaymentStatus = 'receipt_sent'; } };
+    updateOrder(myOrders.find(o => o.id === orderId));
+    updateOrder(allOrders.find(o => o.id === orderId));
+    toast('Чек отправлен ✅');
+    if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+    openOrderDetail(orderId);
+  } catch(e) { toast('Ошибка загрузки чека ⚠️'); }
+  input.value = '';
+}
+
+async function confirmCargoPayment(orderId) {
+  try {
+    await apiFetch(`/orders/${orderId}/confirm-cargo`, { method: 'POST' });
+    const updateOrder = o => { if (o) o.cargoPaymentStatus = 'paid'; };
+    updateOrder(myOrders.find(o => o.id === orderId));
+    updateOrder(allOrders.find(o => o.id === orderId));
+    toast('Оплата карго подтверждена ✅');
+    if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+    openOrderDetail(orderId);
+  } catch(e) { toast('Ошибка ⚠️'); }
+}
+
+
 
 async function confirmDeleteOrder(id) {
   // Простое подтверждение через Telegram или нативный confirm
