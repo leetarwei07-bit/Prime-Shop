@@ -218,6 +218,9 @@ def init_db():
         "ALTER TABLE products ADD COLUMN cargo_type TEXT NOT NULL DEFAULT 'included'",
         "ALTER TABLE products ADD COLUMN cargo_weight INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE products ADD COLUMN cargo_price INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE orders ADD COLUMN cargo_fee INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE orders ADD COLUMN cargo_receipt_url TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE orders ADD COLUMN cargo_payment_status TEXT NOT NULL DEFAULT 'pending'",
     ]
     for m in migrations:
         try: conn.execute(m)
@@ -551,7 +554,10 @@ def row_to_order(row) -> dict:
         "statusLabel":   ORDER_STATUS_LABELS.get(row["status"], "В обработке"),
         "paymentStatus": row["payment_status"] if "payment_status" in cols else "pending",
         "paymentMethod": row["payment_method"] if "payment_method" in cols else "",
-        "receiptUrl":    row["receipt_url"] if "receipt_url" in cols else "",
+        "receiptUrl":          row["receipt_url"] if "receipt_url" in cols else "",
+        "cargoFee":            row["cargo_fee"] if "cargo_fee" in cols else 0,
+        "cargoReceiptUrl":     row["cargo_receipt_url"] if "cargo_receipt_url" in cols else "",
+        "cargoPaymentStatus":  row["cargo_payment_status"] if "cargo_payment_status" in cols else "pending",
         "date":          row["date_str"],
         "createdAt":     row["created_at"],
     }
@@ -1332,6 +1338,92 @@ def upload_receipt(oid: int, body: ReceiptUpload, x_init_data: Optional[str] = H
         "UPDATE orders SET payment_method='card', payment_status='receipt_sent', receipt_url=? WHERE id=?",
         (body.receipt, oid)
     )
+    conn.commit(); conn.close()
+
+class CargoFeeBody(BaseModel):
+    cargo_fee: int  # стоимость карго в сумах
+
+@app.post("/orders/{oid}/cargo-fee", status_code=204)
+def set_cargo_fee(oid: int, body: CargoFeeBody, x_init_data: Optional[str] = Header(None)):
+    """Admin sets cargo fee for an order with separate cargo."""
+    require_admin(x_init_data, "orders")
+    conn = get_db()
+    order = conn.execute("SELECT * FROM orders WHERE id=?", (oid,)).fetchone()
+    if not order:
+        conn.close()
+        raise HTTPException(404, "Order not found")
+    conn.execute(
+        "UPDATE orders SET cargo_fee=?, cargo_payment_status='pending' WHERE id=?",
+        (body.cargo_fee, oid)
+    )
+    conn.commit()
+    # Notify user via Telegram
+    if NOTIFY_CHAT_ID and BOT_TOKEN != "YOUR_BOT_TOKEN_HERE":
+        try:
+            text = (
+                f"📦 Карго по заказу #{oid}\n"
+                f"👤 @{order['username'] or ''}\n"
+                f"💰 Стоимость карго: {body.cargo_fee:,} сум\n"
+                "Пожалуйста, оплатите карго и прикрепите чек в приложении."
+            )
+            urllib.request.urlopen(
+                urllib.request.Request(
+                    f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                    json.dumps({"chat_id": NOTIFY_CHAT_ID, "text": text}).encode(),
+                    headers={"Content-Type": "application/json"}
+                ), timeout=8
+            )
+        except Exception:
+            pass
+    conn.close()
+
+class CargoReceiptUpload(BaseModel):
+    receipt: str   # Cloudinary URL
+    username: str = ""
+
+@app.post("/orders/{oid}/cargo-receipt", status_code=204)
+def upload_cargo_receipt(oid: int, body: CargoReceiptUpload, x_init_data: Optional[str] = Header(None)):
+    """User uploads cargo payment receipt."""
+    user = get_user(x_init_data)
+    if not user: raise HTTPException(401, "Auth required")
+    conn = get_db()
+    order = conn.execute("SELECT * FROM orders WHERE id=?", (oid,)).fetchone()
+    conn.close()
+    if not order: raise HTTPException(404, "Order not found")
+    if str(order["user_id"]) != str(user.get("id","")) and not check_admin(x_init_data):
+        raise HTTPException(403, "Forbidden")
+
+    # Notify admin
+    if NOTIFY_CHAT_ID and BOT_TOKEN != "YOUR_BOT_TOKEN_HERE":
+        try:
+            caption = (
+                f"📦 Чек за карго — Заказ #{oid}\n"
+                f"👤 {body.username or order['username']}\n"
+                f"💰 {order['cargo_fee']:,} сум"
+            )
+            urllib.request.urlopen(
+                urllib.request.Request(
+                    f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto",
+                    json.dumps({"chat_id": NOTIFY_CHAT_ID, "photo": body.receipt, "caption": caption}).encode(),
+                    headers={"Content-Type": "application/json"}
+                ), timeout=10
+            )
+        except Exception as e:
+            print(f"Cargo receipt notify error: {e}")
+
+    conn = get_db()
+    conn.execute(
+        "UPDATE orders SET cargo_receipt_url=?, cargo_payment_status='receipt_sent' WHERE id=?",
+        (body.receipt, oid)
+    )
+    conn.commit(); conn.close()
+
+@app.post("/orders/{oid}/confirm-cargo", status_code=204)
+def confirm_cargo_payment(oid: int, x_init_data: Optional[str] = Header(None)):
+    """Admin confirms cargo payment."""
+    require_admin(x_init_data, "orders")
+    conn = get_db()
+    conn.execute("UPDATE orders SET cargo_payment_status='paid' WHERE id=?", (oid,))
     conn.commit(); conn.close()
 
 @app.delete("/orders/{oid}", status_code=204)
